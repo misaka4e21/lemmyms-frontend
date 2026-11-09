@@ -1,9 +1,9 @@
 ## 1. Contract and Backend Prerequisites
 
-- [ ] 1.1 Capture v4 response fixtures for site, account, community, post, comment, search, notification, report, modlog, and image upload; verify each fixture is committed under `tests/` and decodes without field guessing.
+- [x] 1.1 Capture v4 response fixtures for site, account, community, post, comment, search, notification, report, modlog, and image upload; verify each fixture is committed under `tests/` and decodes without field guessing.
 - [ ] 1.2 In `LemmyMultisite`, make successful login set `jwt` as an HttpOnly, `SameSite=Lax`, `Secure`-when-HTTPS, `Path=/` cookie with no `Domain` attribute while retaining the JSON `jwt`; verify with `curl` that the cookie is set and a cookie-only `GET /api/v4/account` succeeds.
 - [ ] 1.3 Verify logout invalidates the login token and removes the `jwt` cookie, and verify two tenant hosts do not receive each other's cookie.
-- [ ] 1.4 Define the v4 error-code catalog and verify known codes, unknown codes, and validation/rate-limit responses decode into the shared problem type.
+- [x] 1.4 Define the v4 error-code catalog and verify known codes, unknown codes, and validation/rate-limit responses decode into the shared problem type.
 
 ## 2. Transport and Session Core
 
@@ -15,16 +15,16 @@
 
 ## 3. Domain Model and Routing
 
-- [ ] 3.1 Replace `Domain` with v4 `SiteView`, `MyUserInfo`, `PostView`, `CommentView`, `CommunityView`, `PersonView`, notification, report, modlog, and image types; verify fixture decoding tests cover optional and missing fields.
-- [ ] 3.2 Implement the `Comment.path` tree builder with `child_count`; verify unit tests for nested replies, orphans, and malformed paths.
-- [ ] 3.3 Implement cursor pagination state for post, comment, search, notification, report, modlog, and account lists; verify next/previous navigation and sort/filter reset tests.
-- [ ] 3.4 Replace the route parser and path builders with Lemmy canonical URLs, including optional comment IDs and query state; verify `RouteTest` covers direct loading and back/forward shapes.
-- [ ] 3.5 Implement permission derivation from `creator_id`, `can_mod`, `local_user.admin`, `my_user.moderates`, community visibility, and posting restrictions; verify role and ownership unit tests.
+- [x] 3.1 Replace `Domain` with v4 `SiteView`, `MyUserInfo`, `PostView`, `CommentView`, `CommunityView`, `PersonView`, notification, report, modlog, and image types; verify fixture decoding tests cover optional and missing fields.
+- [x] 3.2 Implement the `Comment.path` tree builder with `child_count`; verify unit tests for nested replies, orphans, and malformed paths.
+- [x] 3.3 Implement cursor pagination state for post, comment, search, notification, report, modlog, and account lists; verify next/previous navigation and sort/filter reset tests.
+- [x] 3.4 Replace the route parser and path builders with Lemmy canonical URLs, including optional comment IDs and query state; verify `RouteTest` covers direct loading and back/forward shapes.
+- [x] 3.5 Implement permission derivation from `creator_id`, `can_mod`, `local_user.admin`, `my_user.moderates`, community visibility, and posting restrictions; verify role and ownership unit tests.
 
 ## 4. Markdown and Media
 
-- [ ] 4.1 Add the Elm Markdown dependency and pin its version; verify `ELM_HOME=/tmp/commune-elm-home npm run compile` resolves it.
-- [ ] 4.2 Implement sanitized Markdown rendering for post bodies, comments, biographies, community sidebars, and site text; verify tests reject unsafe schemes, raw HTML, and event-handler attributes.
+- [x] 4.1 Add the Elm Markdown dependency and pin its version; verify `ELM_HOME=/tmp/commune-elm-home npm run compile` resolves it.
+- [x] 4.2 Implement sanitized Markdown rendering for post bodies, comments, biographies, community sidebars, and site text; verify tests reject unsafe schemes, raw HTML, and event-handler attributes.
 - [ ] 4.3 Replace the Commune multipart upload with the v4 Pictrs image endpoint; verify a successful upload inserts `image_url` and a malformed response preserves the editor text.
 - [ ] 4.4 Remove `body_html` rendering assumptions and verify no view reads the removed field.
 
