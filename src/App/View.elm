@@ -97,6 +97,9 @@ routeTitle model active =
         Route.Comment _ ->
             Translations.repliesTitle texts
 
+        Route.EditComment _ ->
+            Translations.editComment texts
+
         Route.NewCommunity ->
             Translations.createCommunity texts
 
@@ -181,6 +184,9 @@ pageView model active =
 
         Route.Comment id ->
             pagePost model active id
+
+        Route.EditComment id ->
+            Feature.Editor.View.pageEditor (editorConfig model) { editor = model.editorPage.editor, source = model.editorPage.source } active (EditComment id)
 
         Route.NewCommunity ->
             pageNewCommunity model active

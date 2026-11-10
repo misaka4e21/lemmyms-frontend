@@ -311,3 +311,4 @@ transfer-community = Transfer community
 registration-closed = Registration is closed on this site.
 registration-application-required = Registration requires administrator approval.
 registration-invitation-required = Registration requires an invitation.
+edit-comment = Edit comment

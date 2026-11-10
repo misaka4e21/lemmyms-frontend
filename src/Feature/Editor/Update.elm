@@ -1,4 +1,4 @@
-module Feature.Editor.Update exposing (Msg(..), Outcome, load, update)
+module Feature.Editor.Update exposing (Msg(..), Outcome, load, loadComment, update)
 
 import Api
 import App.Feedback exposing (Flash(..))
@@ -31,6 +31,7 @@ type Msg
     | Reloaded Api.Response
     | Uploaded EditorMode Api.Response
     | SourceLoaded String Api.Response
+    | CommentSourceLoaded String Api.Response
 
 
 type alias Outcome =
@@ -39,7 +40,7 @@ type alias Outcome =
 
 type alias Working =
     { editor : Maybe EditorState
-    , source : Remote Domain.PostView
+    , source : Remote Source
     , flash : Flash
     , sessionProblem : Maybe Api.Problem
     , navigation : Maybe String
@@ -77,6 +78,30 @@ authProblem model problem =
 urlEncode : String -> String
 urlEncode =
     Url.percentEncode
+
+
+postSource : Decode.Decoder Source
+postSource =
+    Decode.field "post_view" Domain.postView
+        |> Decode.map
+            (\view ->
+                { title = view.post.name
+                , body = Maybe.withDefault "" view.post.body
+                , version = Maybe.withDefault "0" view.post.updatedAt
+                }
+            )
+
+
+commentSource : Decode.Decoder Source
+commentSource =
+    Decode.field "comment_view" Domain.commentView
+        |> Decode.map
+            (\view ->
+                { title = ""
+                , body = view.comment.content
+                , version = Maybe.withDefault "0" view.comment.updatedAt
+                }
+            )
 
 
 updateWorking : String -> Msg -> Working -> ( Working, Cmd Msg )
@@ -151,10 +176,10 @@ updateWorking csrf message model =
                         | editor =
                             Just
                                 { editor
-                                    | title = source.post.name
-                                    , authoring = AuthoringState.setValue (Maybe.withDefault "" source.post.body) editor.authoring
+                                    | title = source.title
+                                    , authoring = AuthoringState.setValue source.body editor.authoring
                                     , format = "markdown"
-                                    , version = Just (Maybe.withDefault "0" source.post.updatedAt)
+                                    , version = Just source.version
                                     , attachments = sourceAttachments source
                                     , conflict = Nothing
                                     , problem = Nothing
@@ -174,6 +199,9 @@ updateWorking csrf message model =
                 decoder =
                     case mode of
                         CreateReply _ ->
+                            Decode.map (\comment -> comment.post.id) (Decode.field "comment_view" Domain.commentView)
+
+                        EditComment _ ->
                             Decode.map (\comment -> comment.post.id) (Decode.field "comment_view" Domain.commentView)
 
                         _ ->
@@ -212,7 +240,7 @@ updateWorking csrf message model =
                             ( model, Cmd.none )
 
         Reloaded response ->
-            case Api.decodeResponse Domain.postView response of
+            case Api.decodeResponse postSource response of
                 Ok source ->
                     case model.editor of
                         Just editor ->
@@ -279,18 +307,43 @@ updateWorking csrf message model =
                     )
 
         SourceLoaded id response ->
-            case Api.decodeResponse Domain.postView response of
+            case Api.decodeResponse postSource response of
                 Ok source ->
                     ( { model
                         | source = Ready source
                         , editor =
                             Just
                                 { mode = EditPost id
-                                , title = source.post.name
-                                , authoring = AuthoringState.init "editor-body" (Maybe.withDefault "" source.post.body)
+                                , title = source.title
+                                , authoring = AuthoringState.init "editor-body" source.body
                                 , format = "markdown"
-                                , version = Just (Maybe.withDefault "0" source.post.updatedAt)
+                                , version = Just source.version
                                 , attachments = sourceAttachments source
+                                , uploading = False
+                                , saving = False
+                                , problem = Nothing
+                                , conflict = Nothing
+                                }
+                      }
+                    , Cmd.none
+                    )
+
+                Err problem ->
+                    ( authProblem { model | source = Failed problem } problem, Cmd.none )
+
+        CommentSourceLoaded id response ->
+            case Api.decodeResponse commentSource response of
+                Ok source ->
+                    ( { model
+                        | source = Ready source
+                        , editor =
+                            Just
+                                { mode = EditComment id
+                                , title = ""
+                                , authoring = AuthoringState.init "editor-body" source.body
+                                , format = "markdown"
+                                , version = Just source.version
+                                , attachments = []
                                 , uploading = False
                                 , saving = False
                                 , problem = Nothing
@@ -346,6 +399,17 @@ submitEditor csrf model editor =
                             ]
                         )
                     )
+
+                EditComment commentId ->
+                    ( "PUT"
+                    , "/comment"
+                    , Encode.encode 0
+                        (Encode.object
+                            [ ( "comment_id", Encode.int (String.toInt commentId |> Maybe.withDefault 0) )
+                            , ( "content", Encode.string editorBody )
+                            ]
+                        )
+                    )
     in
     ( { model | editor = Just { editor | saving = True, problem = Nothing } }
     , Api.send csrf method url encodedBody (Saved editor.mode)
@@ -361,4 +425,11 @@ load : String -> Model -> ( Model, Cmd Msg )
 load id model =
     ( { model | source = Loading }
     , Api.get ("/post?id=" ++ urlEncode id) (SourceLoaded id)
+    )
+
+
+loadComment : String -> Model -> ( Model, Cmd Msg )
+loadComment id model =
+    ( { model | source = Loading }
+    , Api.get ("/comment?id=" ++ urlEncode id) (CommentSourceLoaded id)
     )

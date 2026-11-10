@@ -1,11 +1,12 @@
 module Ui.CommentCard exposing (Config, commentCard)
 
 import Generated.I18n as Translations
-import Html exposing (Html, article, bdi, button, div, h2, p, span, text, textarea, time)
+import Html exposing (Html, a, article, bdi, button, div, h2, p, span, text, time)
 import Html.Attributes as A
 import Html.Events as Events
 import Lemmy.Domain as Domain
 import Lemmy.Markdown as Markdown
+import Route
 import Ui.Formatting exposing (Formatting, boolText, formattedCount, repliesLabel)
 import Ui.Icon
 import Ui.VoteControl
@@ -20,11 +21,6 @@ type alias Config msg =
     , onSave : String -> Bool -> msg
     , onReport : String -> msg
     , canReport : Bool
-    , editing : Maybe String
-    , onEditStart : String -> msg
-    , onEditChange : String -> String -> msg
-    , onSaveEdit : String -> msg
-    , onCancelEdit : msg
     , onDelete : String -> msg
     , onToggle : String -> msg
     , nested : String -> Html msg
@@ -71,25 +67,7 @@ commentCard config texts view =
         , p [ A.class "metadata" ]
             [ time [ A.datetime comment.publishedAt, A.attribute "data-commune-time" "" ] [ text comment.publishedAt ]
             ]
-        , case config.editing of
-            Just draft ->
-                div [ A.class "form-stack" ]
-                    [ textarea
-                        [ A.id ("comment-edit-" ++ commentId)
-                        , A.value draft
-                        , Events.onInput (config.onEditChange commentId)
-                        ]
-                        []
-                    , div [ A.class "actions" ]
-                        [ button [ A.type_ "button", A.class "filled-button", Events.onClick (config.onSaveEdit commentId) ]
-                            [ text (Translations.saveChanges texts) ]
-                        , button [ A.type_ "button", A.class "outlined-button", Events.onClick config.onCancelEdit ]
-                            [ text (Translations.cancel texts) ]
-                        ]
-                    ]
-
-            Nothing ->
-                Markdown.render comment.content
+        , Markdown.render comment.content
         , div [ A.class "post-actions" ]
             [ Ui.VoteControl.view
                 { formatted = config.formatted
@@ -152,11 +130,11 @@ commentCard config texts view =
               else
                 text ""
             , if owner || view.canMod then
-                button
+                a
                     [ A.class "icon-button"
-                    , A.attribute "aria-label" (Translations.editPost texts)
-                    , A.attribute "title" (Translations.editPost texts)
-                    , Events.onClick (config.onEditStart commentId)
+                    , A.href (Route.path (Route.EditComment commentId))
+                    , A.attribute "aria-label" (Translations.editComment texts)
+                    , A.attribute "title" (Translations.editComment texts)
                     ]
                     [ Ui.Icon.view Ui.Icon.Edit ]
 

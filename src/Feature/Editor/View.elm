@@ -43,6 +43,9 @@ pageEditor config model active mode =
 
                 EditPost _ ->
                     Translations.editPost active.texts
+
+                EditComment _ ->
+                    Translations.editComment active.texts
     in
     pageHeading title
         (case config.auth of
@@ -69,6 +72,9 @@ viewEditor config active editor =
     form [ Events.onSubmit config.editorSubmit, A.class "card form-stack" ]
         [ case editor.mode of
             CreateReply _ ->
+                text ""
+
+            EditComment _ ->
                 text ""
 
             EditPost _ ->
@@ -140,7 +146,7 @@ viewEditor config active editor =
             Just source ->
                 section [ A.class "conflict-panel" ]
                     [ h3 [] [ text (Translations.latestSource active.texts) ]
-                    , pre [ A.dir "auto" ] [ text (Maybe.withDefault "" source.post.body) ]
+                    , pre [ A.dir "auto" ] [ text source.body ]
                     , div [ A.class "actions" ]
                         [ button [ A.type_ "button", A.class "outlined-button", Events.onClick config.editorKeepDraft ]
                             [ text (Translations.keepDraft active.texts) ]
@@ -161,6 +167,9 @@ viewEditor config active editor =
                         Translations.publishReply active.texts
 
                     EditPost _ ->
+                        Translations.saveChanges active.texts
+
+                    EditComment _ ->
                         Translations.saveChanges active.texts
                 )
             ]

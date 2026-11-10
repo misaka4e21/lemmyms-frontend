@@ -25,10 +25,12 @@ suite =
                     , Route.Community "c1"
                     , Route.Post "p1"
                     , Route.EditPost "p1"
+                    , Route.Comment "20"
+                    , Route.EditComment "20"
                     , Route.Notifications
                     , Route.Manage "c1"
                     ]
-                    (List.map parse [ "/", "/communities", "/communities/c1", "/posts/p1", "/posts/p1/edit", "/notifications", "/communities/c1/manage" ])
+                    (List.map parse [ "/", "/communities", "/communities/c1", "/posts/p1", "/posts/p1/edit", "/comment/20", "/comment/20/edit", "/notifications", "/communities/c1/manage" ])
         , test "keeps search query and pagination" <|
             \_ ->
                 let
@@ -93,6 +95,8 @@ suite =
                         , Route.AdminModlog
                         , Route.AdminBans
                         , Route.AdminSettings
+                        , Route.Comment "20"
+                        , Route.EditComment "20"
                         ]
                 in
                 Expect.equal routes (List.map (Route.path >> parse) routes)

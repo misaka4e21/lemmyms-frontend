@@ -12,6 +12,7 @@ type Route
     | Community String
     | Post String
     | Comment String
+    | EditComment String
     | NewCommunity
     | NewTopic String
     | EditPost String
@@ -47,6 +48,7 @@ parser =
         , Parser.map Communities (s "communities")
         , Parser.map EditPost (s "posts" </> string </> s "edit")
         , Parser.map Post (s "posts" </> string)
+        , Parser.map EditComment (s "comment" </> string </> s "edit")
         , Parser.map Comment (s "comment" </> string)
         , Parser.map Login (s "login")
         , Parser.map Register (s "register")
@@ -93,6 +95,9 @@ path route =
 
         Comment id ->
             Builder.absolute [ "comment", id ] []
+
+        EditComment id ->
+            Builder.absolute [ "comment", id, "edit" ] []
 
         NewCommunity ->
             "/communities/new"

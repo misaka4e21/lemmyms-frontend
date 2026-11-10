@@ -311,3 +311,4 @@ transfer-community = 转移社区
 registration-closed = 本站已关闭注册。
 registration-application-required = 注册需要管理员批准。
 registration-invitation-required = 注册需要邀请。
+edit-comment = 编辑评论

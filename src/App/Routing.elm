@@ -82,6 +82,13 @@ loadRoute model =
             in
             ( { reset | editorPage = state }, Cmd.map (EditorResponse epoch) command )
 
+        Route.EditComment id ->
+            let
+                ( state, command ) =
+                    Editor.loadComment id reset.editorPage
+            in
+            ( { reset | editorPage = state }, Cmd.map (EditorResponse epoch) command )
+
         Route.Search ->
             let
                 ( state, command ) =

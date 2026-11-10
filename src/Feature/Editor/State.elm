@@ -10,6 +10,14 @@ type EditorMode
     = CreateTopic String
     | CreateReply String
     | EditPost String
+    | EditComment String
+
+
+type alias Source =
+    { title : String
+    , body : String
+    , version : String
+    }
 
 
 type alias EditorAttachment =
@@ -26,7 +34,7 @@ type alias EditorState =
     , uploading : Bool
     , saving : Bool
     , problem : Maybe Api.Problem
-    , conflict : Maybe Domain.PostView
+    , conflict : Maybe Source
     }
 
 
@@ -50,13 +58,13 @@ body editor =
     Authoring.value editor.authoring
 
 
-sourceAttachments : Domain.PostView -> List EditorAttachment
+sourceAttachments : Source -> List EditorAttachment
 sourceAttachments _ =
     []
 
 
 type alias Model =
-    { editor : Maybe EditorState, source : Remote Domain.PostView }
+    { editor : Maybe EditorState, source : Remote Source }
 
 
 initial : Model

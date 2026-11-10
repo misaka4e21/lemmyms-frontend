@@ -311,3 +311,4 @@ transfer-community = 轉移社群
 registration-closed = 本站已關閉註冊。
 registration-application-required = 註冊需要管理員批准。
 registration-invitation-required = 註冊需要邀請。
+edit-comment = 編輯留言
