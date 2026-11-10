@@ -22,6 +22,7 @@ type Msg
     | ManageReadChanged String
     | ManagePostPolicyChanged String
     | ManageFollowPolicyChanged String
+    | ManageFieldChanged String String
     | ManageApplyPolicy
     | ManageAddMember
     | ManageRemoveMember String
@@ -155,6 +156,9 @@ updateWorking context message model =
         ManageFollowPolicyChanged value ->
             setManage model (\manage -> { manage | followPolicy = value, problem = Nothing }) Cmd.none
 
+        ManageFieldChanged field value ->
+            setManage model (\manage -> setField field value manage) Cmd.none
+
         ManageApplyPolicy ->
             case model.manage of
                 Just manage ->
@@ -166,8 +170,17 @@ updateWorking context message model =
                         (Encode.encode 0
                             (Encode.object
                                 [ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
-                                , ( "visibility", Encode.string manage.readPolicy )
-                                , ( "posting_restricted_to_mods", Encode.bool (manage.postPolicy == "managers") )
+                                , ( "title", Encode.string manage.title )
+                                , ( "sidebar", Encode.string manage.sidebar )
+                                , ( "summary", Encode.string manage.summary )
+                                , ( "nsfw", Encode.bool manage.nsfw )
+                                , ( "visibility", Encode.string manage.visibility )
+                                , ( "posting_restricted_to_mods", Encode.bool manage.postingRestricted )
+                                , ( "discussion_languages", Encode.list Encode.int (parseIds manage.discussionLanguages) )
+                                , ( "post_upvotes", Encode.string manage.postUpvotes )
+                                , ( "post_downvotes", Encode.string manage.postDownvotes )
+                                , ( "comment_upvotes", Encode.string manage.commentUpvotes )
+                                , ( "comment_downvotes", Encode.string manage.commentDownvotes )
                                 ]
                             )
                         )
@@ -443,6 +456,17 @@ updateWorking context message model =
 
                                             else
                                                 "open"
+                                        , title = Maybe.withDefault "" data.communityView.community.title
+                                        , sidebar = Maybe.withDefault "" data.communityView.community.sidebar
+                                        , summary = Maybe.withDefault "" data.communityView.community.summary
+                                        , nsfw = data.communityView.community.nsfw
+                                        , visibility = visibilityText data.communityView.community.visibility
+                                        , postingRestricted = data.communityView.community.postingRestrictedToMods
+                                        , discussionLanguages = String.join "," (List.map String.fromInt data.discussionLanguages)
+                                        , postUpvotes = voteModeText data.communityView.community.postUpvotes
+                                        , postDownvotes = voteModeText data.communityView.community.postDownvotes
+                                        , commentUpvotes = voteModeText data.communityView.community.commentUpvotes
+                                        , commentDownvotes = voteModeText data.communityView.community.commentDownvotes
                                     }
                                 )
 
@@ -641,6 +665,46 @@ setManage model transform command =
     ( { model | manage = Maybe.map transform model.manage }, command )
 
 
+setField : String -> String -> ManageState -> ManageState
+setField field value manage =
+    case field of
+        "title" ->
+            { manage | title = value, problem = Nothing }
+
+        "sidebar" ->
+            { manage | sidebar = value, problem = Nothing }
+
+        "summary" ->
+            { manage | summary = value, problem = Nothing }
+
+        "nsfw" ->
+            { manage | nsfw = value == "true", problem = Nothing }
+
+        "visibility" ->
+            { manage | visibility = value, problem = Nothing }
+
+        "postingRestricted" ->
+            { manage | postingRestricted = value == "true", problem = Nothing }
+
+        "discussionLanguages" ->
+            { manage | discussionLanguages = value, problem = Nothing }
+
+        "postUpvotes" ->
+            { manage | postUpvotes = value, problem = Nothing }
+
+        "postDownvotes" ->
+            { manage | postDownvotes = value, problem = Nothing }
+
+        "commentUpvotes" ->
+            { manage | commentUpvotes = value, problem = Nothing }
+
+        "commentDownvotes" ->
+            { manage | commentDownvotes = value, problem = Nothing }
+
+        _ ->
+            manage
+
+
 updateManageRecord : Working -> (ManageState -> ManageState) -> Working
 updateManageRecord model transform =
     { model | manage = Maybe.map transform model.manage }
@@ -678,6 +742,29 @@ visibilityText visibility =
 
         Domain.UnknownVisibility value ->
             value
+
+
+voteModeText : Domain.VoteMode -> String
+voteModeText mode =
+    case mode of
+        Domain.AllVotes ->
+            "all"
+
+        Domain.LocalVotes ->
+            "local"
+
+        Domain.SubscribedVotes ->
+            "subscribed"
+
+        Domain.DisabledVotes ->
+            "disable"
+
+
+parseIds : String -> List Int
+parseIds value =
+    value
+        |> String.split ","
+        |> List.filterMap (String.trim >> String.toInt)
 
 
 followerIdFor : String -> ManageState -> Int

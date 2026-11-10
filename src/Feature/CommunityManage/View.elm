@@ -27,6 +27,7 @@ type alias Config msg =
     , manageReadChanged : String -> msg
     , managePostPolicyChanged : String -> msg
     , manageFollowPolicyChanged : String -> msg
+    , manageFieldChanged : String -> String -> msg
     , manageApplyPolicy : msg
     , manageAddMember : msg
     , manageRemoveMember : String -> msg
@@ -123,19 +124,27 @@ managePolicy : Config msg -> Active -> ManageState -> Html msg
 managePolicy config active manage =
     form [ Events.onSubmit config.manageApplyPolicy, A.class "card form-stack" ]
         [ h2 [] [ text (Translations.readPolicy active.texts) ]
-        , policyFields active manage.readPolicy manage.postPolicy config.manageReadChanged config.managePostPolicyChanged
-        , div []
-            [ label [ A.for "manage-follow-policy" ] [ text (Translations.followPolicy active.texts) ]
-            , select
-                [ A.id "manage-follow-policy"
-                , Events.on "change" (Json.Decode.map config.manageFollowPolicyChanged (Json.Decode.at [ "target", "value" ] Json.Decode.string))
-                ]
-                [ option [ A.value "open", A.selected (manage.followPolicy == "open") ] [ text (Translations.followPolicyOpen active.texts) ]
-                , option [ A.value "members", A.selected (manage.followPolicy == "members") ] [ text (Translations.followPolicyMembers active.texts) ]
-                , option [ A.value "approval", A.selected (manage.followPolicy == "approval") ] [ text (Translations.followPolicyApproval active.texts) ]
-                , option [ A.value "disabled", A.selected (manage.followPolicy == "disabled") ] [ text (Translations.followPolicyDisabled active.texts) ]
-                ]
+        , manageText "manage-title" (Translations.communityTitle active.texts) manage.title "title" config
+        , manageText "manage-sidebar" (Translations.communitySidebar active.texts) manage.sidebar "sidebar" config
+        , manageText "manage-summary" (Translations.communitySummary active.texts) manage.summary "summary" config
+        , manageCheckbox "manage-nsfw" (Translations.communityNsfw active.texts) manage.nsfw "nsfw" config
+        , manageSelect "manage-visibility"
+            (Translations.communityVisibility active.texts)
+            manage.visibility
+            "visibility"
+            [ ( "public", Translations.visibilityPublic active.texts )
+            , ( "unlisted", Translations.visibilityUnlisted active.texts )
+            , ( "local_only_public", Translations.visibilityLocalPublic active.texts )
+            , ( "local_only_private", Translations.visibilityLocalPrivate active.texts )
+            , ( "private", Translations.visibilityPrivate active.texts )
             ]
+            config
+        , manageCheckbox "manage-posting-restricted" (Translations.postingRestricted active.texts) manage.postingRestricted "postingRestricted" config
+        , manageText "manage-languages" (Translations.discussionLanguages active.texts) manage.discussionLanguages "discussionLanguages" config
+        , manageVote "manage-post-upvotes" (Translations.postUpvotes active.texts) manage.postUpvotes "postUpvotes" config active
+        , manageVote "manage-post-downvotes" (Translations.postDownvotes active.texts) manage.postDownvotes "postDownvotes" config active
+        , manageVote "manage-comment-upvotes" (Translations.commentUpvotes active.texts) manage.commentUpvotes "commentUpvotes" config active
+        , manageVote "manage-comment-downvotes" (Translations.commentDownvotes active.texts) manage.commentDownvotes "commentDownvotes" config active
         , button [ A.type_ "submit", A.class "filled-button" ] [ text (Translations.saveChanges active.texts) ]
         ]
 
@@ -577,6 +586,63 @@ visibilityText visibility =
 
         Domain.UnknownVisibility value ->
             value
+
+
+manageText : String -> String -> String -> String -> Config msg -> Html msg
+manageText identifier labelText value field config =
+    div []
+        [ label [ A.for identifier ] [ text labelText ]
+        , input [ A.id identifier, A.type_ "text", A.value value, Events.onInput (config.manageFieldChanged field) ] []
+        ]
+
+
+manageCheckbox : String -> String -> Bool -> String -> Config msg -> Html msg
+manageCheckbox identifier labelText checked field config =
+    label [ A.for identifier ]
+        [ input
+            [ A.id identifier
+            , A.type_ "checkbox"
+            , A.checked checked
+            , Events.onCheck (config.manageFieldChanged field << boolText)
+            ]
+            []
+        , text (" " ++ labelText)
+        ]
+
+
+manageSelect : String -> String -> String -> String -> List ( String, String ) -> Config msg -> Html msg
+manageSelect identifier labelText value field options config =
+    div []
+        [ label [ A.for identifier ] [ text labelText ]
+        , select
+            [ A.id identifier
+            , Events.on "change" (Json.Decode.map (config.manageFieldChanged field) (Json.Decode.at [ "target", "value" ] Json.Decode.string))
+            ]
+            (List.map (\( optionValue, optionLabel ) -> option [ A.value optionValue, A.selected (value == optionValue) ] [ text optionLabel ]) options)
+        ]
+
+
+manageVote : String -> String -> String -> String -> Config msg -> Active -> Html msg
+manageVote identifier labelText value field config active =
+    manageSelect identifier
+        labelText
+        value
+        field
+        [ ( "all", Translations.voteAll active.texts )
+        , ( "local", Translations.voteLocal active.texts )
+        , ( "subscribed", Translations.voteSubscribed active.texts )
+        , ( "disable", Translations.voteDisabled active.texts )
+        ]
+        config
+
+
+boolText : Bool -> String
+boolText value =
+    if value then
+        "true"
+
+    else
+        "false"
 
 
 modlogTarget : Domain.ModlogView -> String

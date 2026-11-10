@@ -20,6 +20,17 @@ type alias ManageState =
     , readPolicy : String
     , postPolicy : String
     , followPolicy : String
+    , title : String
+    , sidebar : String
+    , summary : String
+    , nsfw : Bool
+    , visibility : String
+    , postingRestricted : Bool
+    , discussionLanguages : String
+    , postUpvotes : String
+    , postDownvotes : String
+    , commentUpvotes : String
+    , commentDownvotes : String
     , followRequests : Remote (Domain.Page Domain.PendingFollowView)
     , followRequestOffset : Int
     , reports : Remote (Domain.Page Domain.ReportView)
@@ -61,6 +72,17 @@ emptyManage =
     , readPolicy = "eligible_users"
     , postPolicy = "eligible_users"
     , followPolicy = "open"
+    , title = ""
+    , sidebar = ""
+    , summary = ""
+    , nsfw = False
+    , visibility = "public"
+    , postingRestricted = False
+    , discussionLanguages = ""
+    , postUpvotes = "all"
+    , postDownvotes = "all"
+    , commentUpvotes = "all"
+    , commentDownvotes = "all"
     , followRequests = NotAsked
     , followRequestOffset = 0
     , reports = NotAsked

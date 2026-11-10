@@ -227,6 +227,7 @@ type alias CommunityView =
 type alias CommunityResponse =
     { communityView : CommunityView
     , moderators : List CommunityModeratorView
+    , discussionLanguages : List Id
     }
 
 
@@ -855,9 +856,10 @@ communityView =
 
 communityResponse : Decoder CommunityResponse
 communityResponse =
-    D.map2 CommunityResponse
+    D.map3 CommunityResponse
         (D.field "community_view" communityView)
         (defaultField "moderators" [] (D.list communityModeratorView))
+        (defaultField "discussion_languages" [] (D.list identifier))
 
 
 communityFollowerView : Decoder CommunityFollowerView

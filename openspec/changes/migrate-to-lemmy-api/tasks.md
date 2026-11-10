@@ -56,7 +56,7 @@
 
 ## 8. Community Management
 
-- [ ] 8.1 Migrate community creation and settings to `CreateCommunity`/`EditCommunity` fields: name, title, sidebar, summary, NSFW, visibility, posting restriction, languages, and vote modes; verify create and edit browser tests.
+- [x] 8.1 Migrate community creation and settings to `CreateCommunity`/`EditCommunity` fields: name, title, sidebar, summary, NSFW, visibility, posting restriction, languages, and vote modes; verify create and edit browser tests.
 - [x] 8.2 Migrate moderator management to `AddModToCommunity` and `TransferCommunity`; verify add, remove, transfer, and self-action guards.
 - [x] 8.3 Migrate follow approvals to `pending_follows` list and approve; verify pending, accepted, denied, and private-community tests.
 - [x] 8.4 Migrate community bans to person-ID `BanFromCommunity` with reason and epoch expiry; verify ban, unban, expiry, and unresolved-actor tests.

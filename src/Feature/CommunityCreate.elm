@@ -5,7 +5,7 @@ import App.Context exposing (Active)
 import App.Feedback exposing (Flash(..))
 import App.Session exposing (AuthState(..))
 import Generated.I18n as Translations
-import Html exposing (Html, button, div, form, input, label, option, p, select, text)
+import Html exposing (Html, button, div, form, input, label, option, p, select, text, textarea)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
@@ -20,6 +20,15 @@ import Ui.Layout exposing (pageHeading)
 type alias CommunityForm =
     { name : String
     , title : String
+    , sidebar : String
+    , summary : String
+    , nsfw : Bool
+    , postingRestricted : Bool
+    , discussionLanguages : String
+    , postUpvotes : String
+    , postDownvotes : String
+    , commentUpvotes : String
+    , commentDownvotes : String
     , mode : String
     , readPolicy : String
     , postPolicy : String
@@ -30,7 +39,23 @@ type alias CommunityForm =
 
 emptyCommunityForm : CommunityForm
 emptyCommunityForm =
-    { name = "", title = "", mode = "federated", readPolicy = "eligible_users", postPolicy = "eligible_users", busy = False, problem = Nothing }
+    { name = ""
+    , title = ""
+    , sidebar = ""
+    , summary = ""
+    , nsfw = False
+    , postingRestricted = False
+    , discussionLanguages = ""
+    , postUpvotes = "all"
+    , postDownvotes = "all"
+    , commentUpvotes = "all"
+    , commentDownvotes = "all"
+    , mode = "public"
+    , readPolicy = "eligible_users"
+    , postPolicy = "eligible_users"
+    , busy = False
+    , problem = Nothing
+    }
 
 
 normalizePolicies : CommunityForm -> CommunityForm
@@ -40,6 +65,43 @@ normalizePolicies form =
 
     else
         form
+
+
+setField : String -> String -> CommunityForm -> CommunityForm
+setField field value form =
+    case field of
+        "sidebar" ->
+            { form | sidebar = value }
+
+        "summary" ->
+            { form | summary = value }
+
+        "nsfw" ->
+            { form | nsfw = value == "true" }
+
+        "postingRestricted" ->
+            { form | postingRestricted = value == "true" }
+
+        "discussionLanguages" ->
+            { form | discussionLanguages = value }
+
+        "postUpvotes" ->
+            { form | postUpvotes = value }
+
+        "postDownvotes" ->
+            { form | postDownvotes = value }
+
+        "commentUpvotes" ->
+            { form | commentUpvotes = value }
+
+        "commentDownvotes" ->
+            { form | commentDownvotes = value }
+
+        "visibility" ->
+            { form | mode = value }
+
+        _ ->
+            form
 
 
 type alias Model =
@@ -55,6 +117,7 @@ type Msg
     = Created Api.Response
     | CommunityNameChanged String
     | CommunityTitleChanged String
+    | CommunityFieldChanged String String
     | CommunityModeChanged String
     | CommunityReadChanged String
     | CommunityPostChanged String
@@ -86,6 +149,21 @@ updateWorking csrf message model =
 
         CommunityTitleChanged value ->
             ( { model | createCommunity = (\form -> { form | title = value, problem = Nothing }) model.createCommunity }, Cmd.none )
+
+        CommunityFieldChanged field value ->
+            ( { model
+                | createCommunity =
+                    (\form ->
+                        let
+                            updated =
+                                setField field value form
+                        in
+                        { updated | problem = Nothing }
+                    )
+                        model.createCommunity
+              }
+            , Cmd.none
+            )
 
         CommunityModeChanged value ->
             ( { model | createCommunity = (\form -> { form | mode = value, problem = Nothing }) model.createCommunity }, Cmd.none )
@@ -141,8 +219,16 @@ updateWorking csrf message model =
                         (Encode.object
                             [ ( "name", Encode.string model.createCommunity.name )
                             , ( "title", Encode.string model.createCommunity.title )
+                            , ( "sidebar", Encode.string model.createCommunity.sidebar )
+                            , ( "summary", Encode.string model.createCommunity.summary )
+                            , ( "nsfw", Encode.bool model.createCommunity.nsfw )
                             , ( "visibility", Encode.string model.createCommunity.mode )
-                            , ( "posting_restricted_to_mods", Encode.bool (model.createCommunity.postPolicy == "managers") )
+                            , ( "posting_restricted_to_mods", Encode.bool model.createCommunity.postingRestricted )
+                            , ( "discussion_languages", Encode.list Encode.int (parseIds model.createCommunity.discussionLanguages) )
+                            , ( "post_upvotes", Encode.string model.createCommunity.postUpvotes )
+                            , ( "post_downvotes", Encode.string model.createCommunity.postDownvotes )
+                            , ( "comment_upvotes", Encode.string model.createCommunity.commentUpvotes )
+                            , ( "comment_downvotes", Encode.string model.createCommunity.commentDownvotes )
                             ]
                         )
                     )
@@ -158,10 +244,18 @@ updateWorking csrf message model =
                     ( { model | createCommunity = (\form -> { form | busy = False, problem = Just problem }) model.createCommunity }, Cmd.none )
 
 
+parseIds : String -> List Int
+parseIds value =
+    value
+        |> String.split ","
+        |> List.filterMap (String.trim >> String.toInt)
+
+
 type alias Config msg =
     { retry : msg
     , communityNameChanged : String -> msg
     , communityTitleChanged : String -> msg
+    , communityFieldChanged : String -> String -> msg
     , communityModeChanged : String -> msg
     , communityReadChanged : String -> msg
     , communityPostChanged : String -> msg
@@ -192,14 +286,26 @@ pageNewCommunity config model active =
                         , input [ A.id "community-title", A.type_ "text", A.required True, A.value model.createCommunity.title, Events.onInput config.communityTitleChanged ]
                             []
                         ]
-                    , div []
-                        [ label [ A.for "community-mode" ] [ text (Translations.federationMode active.texts) ]
-                        , select [ A.id "community-mode", Events.on "change" (Decode.map config.communityModeChanged (Decode.at [ "target", "value" ] Decode.string)) ]
-                            [ option [ A.value "federated", A.selected (model.createCommunity.mode == "federated") ] [ text (Translations.federated active.texts) ]
-                            , option [ A.value "local_only", A.selected (model.createCommunity.mode == "local_only") ] [ text (Translations.localOnly active.texts) ]
-                            ]
+                    , textAreaField "community-sidebar" (Translations.communitySidebar active.texts) model.createCommunity.sidebar "sidebar" config
+                    , fieldInput "community-summary" (Translations.communitySummary active.texts) model.createCommunity.summary "summary" config
+                    , checkboxField "community-nsfw" (Translations.communityNsfw active.texts) model.createCommunity.nsfw "nsfw" config
+                    , selectField "community-visibility"
+                        (Translations.communityVisibility active.texts)
+                        model.createCommunity.mode
+                        "visibility"
+                        [ ( "public", Translations.visibilityPublic active.texts )
+                        , ( "unlisted", Translations.visibilityUnlisted active.texts )
+                        , ( "local_only_public", Translations.visibilityLocalPublic active.texts )
+                        , ( "local_only_private", Translations.visibilityLocalPrivate active.texts )
+                        , ( "private", Translations.visibilityPrivate active.texts )
                         ]
-                    , policyFields active model.createCommunity.readPolicy model.createCommunity.postPolicy config.communityReadChanged config.communityPostChanged
+                        config
+                    , checkboxField "community-posting-restricted" (Translations.postingRestricted active.texts) model.createCommunity.postingRestricted "postingRestricted" config
+                    , fieldInput "community-languages" (Translations.discussionLanguages active.texts) model.createCommunity.discussionLanguages "discussionLanguages" config
+                    , voteSelect "community-post-upvotes" (Translations.postUpvotes active.texts) model.createCommunity.postUpvotes "postUpvotes" config active
+                    , voteSelect "community-post-downvotes" (Translations.postDownvotes active.texts) model.createCommunity.postDownvotes "postDownvotes" config active
+                    , voteSelect "community-comment-upvotes" (Translations.commentUpvotes active.texts) model.createCommunity.commentUpvotes "commentUpvotes" config active
+                    , voteSelect "community-comment-downvotes" (Translations.commentDownvotes active.texts) model.createCommunity.commentDownvotes "commentDownvotes" config active
                     , viewFormProblem active.texts model.createCommunity.problem
                     , button [ A.type_ "submit", A.class "filled-button", A.disabled model.createCommunity.busy ]
                         [ text (Translations.create active.texts) ]
@@ -208,3 +314,68 @@ pageNewCommunity config model active =
             _ ->
                 loginRequired active.texts
         )
+
+
+fieldInput : String -> String -> String -> String -> Config msg -> Html msg
+fieldInput identifier labelText value field config =
+    div []
+        [ label [ A.for identifier ] [ text labelText ]
+        , input [ A.id identifier, A.type_ "text", A.value value, Events.onInput (config.communityFieldChanged field) ] []
+        ]
+
+
+textAreaField : String -> String -> String -> String -> Config msg -> Html msg
+textAreaField identifier labelText value field config =
+    div []
+        [ label [ A.for identifier ] [ text labelText ]
+        , textarea [ A.id identifier, A.value value, Events.onInput (config.communityFieldChanged field) ] []
+        ]
+
+
+checkboxField : String -> String -> Bool -> String -> Config msg -> Html msg
+checkboxField identifier labelText checked field config =
+    label [ A.for identifier ]
+        [ input
+            [ A.id identifier
+            , A.type_ "checkbox"
+            , A.checked checked
+            , Events.onCheck (config.communityFieldChanged field << boolText)
+            ]
+            []
+        , text (" " ++ labelText)
+        ]
+
+
+selectField : String -> String -> String -> String -> List ( String, String ) -> Config msg -> Html msg
+selectField identifier labelText value field options config =
+    div []
+        [ label [ A.for identifier ] [ text labelText ]
+        , select
+            [ A.id identifier
+            , Events.on "change" (Decode.map (config.communityFieldChanged field) (Decode.at [ "target", "value" ] Decode.string))
+            ]
+            (List.map (\( optionValue, optionLabel ) -> option [ A.value optionValue, A.selected (value == optionValue) ] [ text optionLabel ]) options)
+        ]
+
+
+voteSelect : String -> String -> String -> String -> Config msg -> Active -> Html msg
+voteSelect identifier labelText value field config active =
+    selectField identifier
+        labelText
+        value
+        field
+        [ ( "all", Translations.voteAll active.texts )
+        , ( "local", Translations.voteLocal active.texts )
+        , ( "subscribed", Translations.voteSubscribed active.texts )
+        , ( "disable", Translations.voteDisabled active.texts )
+        ]
+        config
+
+
+boolText : Bool -> String
+boolText value =
+    if value then
+        "true"
+
+    else
+        "false"
