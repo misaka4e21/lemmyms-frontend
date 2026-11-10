@@ -112,5 +112,8 @@ test.describe('real Lemmy backend', () => {
     await page.goto(base + '/posts/' + postId);
     const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(axe.violations).toEqual([]);
+
+    await page.getByRole('button', { name: 'Log out' }).click();
+    await expect(page).toHaveURL(/\/login$/);
   });
 });
