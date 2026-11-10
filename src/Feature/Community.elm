@@ -160,7 +160,7 @@ load : Route.Route -> Url -> Model -> ( Model, Cmd Msg )
 load route url model =
     case route of
         Route.Communities ->
-            ( { model | communities = Loading }, Api.get ("/community/list?type=local&sort=top&limit=20" ++ cursorQuery url) CommunitiesLoaded )
+            ( { model | communities = Loading }, Api.get ("/community/list?type=local&sort=active_monthly&limit=20" ++ cursorQuery url) CommunitiesLoaded )
 
         Route.Community id ->
             ( { model | community = Loading, communityTopics = Loading }

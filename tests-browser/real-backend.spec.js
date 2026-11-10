@@ -41,6 +41,10 @@ test.describe('real Lemmy backend', () => {
     const communityId = page.url().split('/').pop();
     await expect(page.getByRole('heading', { level: 1, name: communityTitle })).toBeVisible();
 
+    await page.goto(base + '/communities');
+    await expect(page.getByRole('link', { name: communityTitle })).toBeVisible();
+    await page.goto(base + '/communities/' + communityId);
+
     await page.getByRole('link', { name: 'Publish topic' }).click();
     await page.getByLabel('Topic title').fill(topicTitle);
     await page.getByLabel('Message').fill('Real backend body');

@@ -431,6 +431,12 @@ test('browses latest, community, post and search', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Hello world' })).toBeVisible();
   await expect(page.getByText('A reply')).toBeVisible();
   await page.goto('/communities');
+  await expect(page.getByRole('link', { name: 'News' })).toBeVisible();
+  const communityListCall = state.calls.find(call => call.path === '/api/v4/community/list');
+  expect(communityListCall).toBeTruthy();
+  const communitySort = new URLSearchParams(communityListCall.search).get('sort');
+  expect(['active_six_months', 'active_monthly', 'active_weekly', 'active_daily', 'hot', 'new', 'old', 'name_asc', 'name_desc', 'comments', 'posts', 'subscribers', 'subscribers_local']).toContain(communitySort);
+  expect(communitySort).not.toBe('top');
   await page.getByRole('link', { name: 'News' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'News' })).toBeVisible();
   await page.goto('/search?kind=posts&q=Hello');
