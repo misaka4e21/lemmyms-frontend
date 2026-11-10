@@ -6,72 +6,80 @@ Provide a role-gated management workspace for the site resolved by the current b
 
 ## Requirements
 
-### Requirement: Current-site management access
-The application SHALL expose a current-site management destination only when the authenticated identity has site-administrator or deployment-superadministrator authority. Direct access without authentication SHALL request login, and direct access without either role SHALL show a localized forbidden state without issuing unauthorized management reads. Every management request SHALL remain scoped to the site resolved from the current browser authority.
+### Requirement: Lemmy site-administration access
+The application SHALL expose site-administration destinations only when the authenticated account has `local_user.admin` set to true. Direct access without authentication SHALL request login, and direct access without the admin flag SHALL show a localized forbidden state without issuing unauthorized administration reads. Every request SHALL remain scoped to the tenant resolved from the current browser authority.
 
-#### Scenario: Ordinary account opens management
-- **WHEN** an authenticated account without administrative roles opens the current-site management route
-- **THEN** the application denies access and does not load vote settings, reports, moderation history, or bans
+#### Scenario: Ordinary account opens administration
+- **WHEN** an authenticated non-admin account opens `/admin`
+- **THEN** the application denies access and does not load site settings, reports, modlog, or admin user lists
 
-#### Scenario: Deployment administrator opens another site
-- **WHEN** a deployment administrator account is authenticated only for its own site and opens another site's management route
-- **THEN** the other site does not inherit that session or present deployment-wide data
+#### Scenario: Anonymous reader opens administration
+- **WHEN** an anonymous reader opens a protected administration route
+- **THEN** the application requests login and issues no administration request
 
-### Requirement: Site vote settings
-The management workspace SHALL display the resolved site's current upvote and downvote availability and allow an authorized administrator to update either setting. The application SHALL show the returned full settings after a successful partial update and SHALL explain that disabled directions affect aggregates, viewer vote state, ranking, and new mutations.
+#### Scenario: Another tenant host
+- **WHEN** an administrator for one host opens another host served by the same installation
+- **THEN** the application uses that host's tenant session and does not present the first tenant's administration data
 
-#### Scenario: Disable downvotes
-- **WHEN** a site administrator disables downvotes
-- **THEN** the management view shows downvotes disabled and ordinary post views stop offering new downvotes while retaining permission to clear an existing downvote
+### Requirement: Site default vote modes
+The application SHALL display and update the current site's default post and comment upvote/downvote modes for newly created communities. It SHALL explain that these values are creation defaults and that existing communities keep their own vote modes. A successful update SHALL render the full returned site view; a rejected update SHALL preserve the submitted values and report a localized failure.
 
-#### Scenario: Vote settings update fails
-- **WHEN** a vote-settings request is rejected or unavailable
-- **THEN** the form retains the current submitted values for correction, reports the localized failure, and does not present the update as saved
+#### Scenario: Disable default downvotes
+- **WHEN** an administrator disables the default post downvote mode
+- **THEN** newly created communities default to that mode and existing communities are not described as changed
 
-### Requirement: Report review
-The management workspace SHALL list paginated reports by optional state and community scope. It SHALL display target kind, target ID, reason, state, resolution note, and creation time without inventing target content that the reviewer cannot read. An authorized reviewer SHALL resolve or reject an open report with an optional note and SHALL refresh the list after success or conflict.
+#### Scenario: Site update fails
+- **WHEN** the site update request is rejected
+- **THEN** the form retains the submitted values and does not present the update as saved
 
-#### Scenario: Filter open reports
-- **WHEN** an administrator selects the open state
-- **THEN** the report request includes that state and the rendered page contains only returned rows
+### Requirement: Report queue and resolution
+The administration workspace SHALL list report rows from the unified v4 report endpoint with `unresolved_only`, optional `type_`, optional `community_id`, and cursor navigation. It SHALL display the returned report type, target, reporter, reason, creation time, and resolution state. Resolving or rejecting a report SHALL use the endpoint matching its type and SHALL refresh the queue after success or conflict.
 
-#### Scenario: Resolve a report
-- **WHEN** an administrator resolves an open report with a note
-- **THEN** the application refreshes the report queue and moderation history and reports success
+#### Scenario: Filter unresolved post reports
+- **WHEN** an administrator selects unresolved post reports
+- **THEN** the request includes the unresolved and post-type filters and renders only returned rows
 
-#### Scenario: No report detail route
-- **WHEN** an administrator opens a report row
-- **THEN** the application uses the inline list presentation unless the backend exposes a supported detail route
+#### Scenario: Resolve a comment report
+- **WHEN** an administrator resolves a comment report with a conclusion
+- **THEN** the application calls the comment-report resolve endpoint and refreshes the queue
 
-### Requirement: Moderation history
-The management workspace SHALL provide a paginated, newest-first moderation log with optional community filtering. It SHALL display returned action, acting Actor URI, target kind, target ID, reason, and creation time, and SHALL provide no edit or delete controls. Community IDs that the API does not return SHALL not be inferred from unrelated content.
+#### Scenario: Conflicting resolution
+- **WHEN** a report was already resolved by another reviewer
+- **THEN** the interface reports a localized conflict and refreshes the report state instead of claiming success
+
+### Requirement: Moderation log
+The administration workspace SHALL display paginated v4 modlog entries in the backend's order with optional community, person, and action filters supported by the endpoint. It SHALL display the returned action, moderator, target, reason, and creation time, and SHALL provide no edit or delete controls.
 
 #### Scenario: Filter community history
-- **WHEN** an administrator supplies a community ID filter
-- **THEN** the request includes that filter and the interface does not imply a total count
+- **WHEN** an administrator supplies a community filter
+- **THEN** the request includes that filter and the interface does not infer a total count from the cursor response
 
-#### Scenario: Missing community field
-- **WHEN** a moderation row does not include a community ID
-- **THEN** the interface omits the community label rather than deriving one from another record
+#### Scenario: Modlog entry lacks optional detail
+- **WHEN** a modlog row omits an optional target or reason
+- **THEN** the interface omits that detail rather than deriving it from another record
 
-### Requirement: Site ban actions
-The management workspace SHALL provide forms to create and remove a site ban using an Actor URI, non-empty reason, and optional RFC 3339 expiry. It SHALL distinguish creation from unbanning, preserve input on validation failure, refresh moderation history after success, and explain that ban removal of an absent active ban may return not found.
+### Requirement: Person bans
+The administration workspace SHALL resolve an actor to a Lemmy person before creating or removing a site ban. It SHALL require a non-empty reason and an optional expiry expressed in the interface's date/time control and sent as Unix epoch seconds. It SHALL distinguish banning from unbanning, preserve input on validation failure, and refresh the relevant views after success.
 
-#### Scenario: Create a temporary ban
-- **WHEN** an administrator submits a valid Actor URI, reason, and future expiry
-- **THEN** the application reports success and refreshes moderation history
+#### Scenario: Ban a resolved person
+- **WHEN** an administrator selects a resolved person, supplies a reason, and submits a ban
+- **THEN** the application sends the person's integer ID and the reason to the v4 site-ban endpoint
 
-#### Scenario: Unban missing active ban
-- **WHEN** an unban request returns not found
-- **THEN** the interface explains that no active ban matched and does not claim that a ban was removed
+#### Scenario: Actor cannot be resolved
+- **WHEN** the supplied actor does not resolve to a person
+- **THEN** the interface reports a localized unresolved-actor failure and does not invent an ID
 
-### Requirement: Deferred deployment management
-The application SHALL NOT present a deployment-wide site, account, role, cross-site report, cross-site moderation, or site-switching workspace until the backend exposes supported contracts for those workflows. The current-site management workspace SHALL identify itself as current-site scoped and SHALL not aggregate data from multiple hosts.
+#### Scenario: Unban a person
+- **WHEN** an administrator removes a ban
+- **THEN** the application sends the unban form for the same person and reports the returned outcome
+
+### Requirement: Current-tenant management scope
+The application SHALL NOT present a deployment-wide site directory, cross-tenant account directory, cross-tenant reports, or site-switching workspace. The management interface SHALL identify itself as scoped to the current host and SHALL not aggregate data from other tenants.
 
 #### Scenario: No deployment directory
-- **WHEN** a deployment superadministrator uses the implemented management workspace
-- **THEN** only current-site capabilities are offered and no unavailable global site or account directory is shown
+- **WHEN** a tenant administrator uses the management workspace
+- **THEN** only current-host capabilities are offered and no other tenant's site or account directory is shown
 
-#### Scenario: Backend prerequisite remains missing
-- **WHEN** implementation requires a deployment-wide capability without a documented endpoint or cross-site session model
-- **THEN** the deployment workflow remains out of scope and is reported as a backend dependency
+#### Scenario: Unsupported cross-tenant request
+- **WHEN** implementation requires a deployment-wide capability without a documented endpoint
+- **THEN** that workflow remains out of scope and is reported as a backend dependency
