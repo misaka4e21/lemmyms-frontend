@@ -4,13 +4,13 @@ import Api
 import App.Context exposing (Active)
 import App.Feedback exposing (Flash(..))
 import App.Session exposing (AuthState(..))
-import Domain
 import Generated.I18n as Translations
 import Html exposing (Html, a, bdi, button, div, li, p, section, span, strong, text, time, ul)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Lemmy.Domain as Domain
 import List
 import Remote exposing (Remote(..))
 import Route
@@ -22,7 +22,7 @@ import Url exposing (Url)
 
 
 type alias Model =
-    { notifications : Remote Domain.NotificationPage, unreadCount : Maybe String }
+    { notifications : Remote (Domain.Page Domain.NotificationView), unreadCount : Maybe String }
 
 
 initial : Model
@@ -48,7 +48,7 @@ type alias Outcome =
 
 
 type alias Working =
-    { notifications : Remote Domain.NotificationPage, unreadCount : Maybe String, flash : Flash, sessionProblem : Maybe Api.Problem }
+    { notifications : Remote (Domain.Page Domain.NotificationView), unreadCount : Maybe String, flash : Flash, sessionProblem : Maybe Api.Problem }
 
 
 update : String -> Url -> Msg -> Model -> ( Model, Cmd Msg, Outcome )
@@ -62,12 +62,12 @@ update csrf url message state =
 
 load : Url -> Cmd Msg
 load url =
-    Cmd.batch [ Api.get ("/api/v1/notifications?limit=20&offset=" ++ String.fromInt (Route.offset url)) Loaded, unread ]
+    Cmd.batch [ Api.get ("/account/notification/list?limit=20" ++ cursorQuery url) Loaded, unread ]
 
 
 unread : Cmd Msg
 unread =
-    Api.get "/api/v1/notifications/unread-count" UnreadLoaded
+    Api.get "/account/unread_counts" UnreadLoaded
 
 
 problemState : Working -> Api.Problem -> Working
@@ -92,7 +92,13 @@ updateWorking : String -> Url -> Msg -> Working -> ( Working, Cmd Msg )
 updateWorking csrf url message model =
     case message of
         MarkNoticeRead id ->
-            ( model, Api.send csrf "POST" ("/api/v1/notifications/" ++ urlEncode id ++ "/read") "" (ActionDone (ReadNoticeAction id)) )
+            ( model
+            , Api.send csrf
+                "POST"
+                "/account/notification/mark_as_read"
+                (Encode.encode 0 (Encode.object [ ( "notification_id", Encode.int (String.toInt id |> Maybe.withDefault 0) ), ( "read", Encode.bool True ) ]))
+                (ActionDone (ReadNoticeAction id))
+            )
 
         MarkAllNoticesRead ->
             case model.notifications of
@@ -100,8 +106,8 @@ updateWorking csrf url message model =
                     ( model
                     , Api.send csrf
                         "POST"
-                        "/api/v1/notifications/read-all"
-                        (Encode.encode 0 (Encode.object [ ( "through_cursor", Encode.string page.cursor ) ]))
+                        "/account/notification/mark_as_read/all"
+                        ""
                         (ActionDone ReadAllAction)
                     )
 
@@ -127,7 +133,7 @@ updateWorking csrf url message model =
                             ( problemState model problem, Cmd.none )
 
         Loaded response ->
-            case Api.decodeResponse Domain.notificationPage response of
+            case Api.decodeResponse (Domain.page Domain.notificationView) response of
                 Ok page ->
                     ( { model | notifications = Ready page }, Cmd.none )
 
@@ -145,12 +151,22 @@ updateWorking csrf url message model =
                     )
 
         UnreadLoaded response ->
-            case Api.decodeResponse (Decode.field "count" Decode.int) response of
+            case Api.decodeResponse (Decode.field "notification_count" Decode.int) response of
                 Ok count ->
                     ( { model | unreadCount = Just (String.fromInt count) }, Cmd.none )
 
                 Err _ ->
                     ( model, Cmd.none )
+
+
+cursorQuery : Url -> String
+cursorQuery url =
+    case Route.cursor url of
+        Just cursor ->
+            "&page_cursor=" ++ Url.percentEncode cursor
+
+        Nothing ->
+            ""
 
 
 type alias Config msg =
@@ -162,7 +178,7 @@ type alias Config msg =
 
 type alias ViewModel =
     { unreadCount : Maybe String
-    , notifications : Remote Domain.NotificationPage
+    , notifications : Remote (Domain.Page Domain.NotificationView)
     , auth : AuthState
     , formatted : Maybe Formatting
     , url : Url
@@ -195,80 +211,96 @@ pageNotifications config model active =
                     if List.isEmpty page.items then
                         div [ A.class "stack" ]
                             [ p [ A.class "muted" ] [ text (Translations.noNotifications active.texts) ]
-                            , viewPagination active.texts model.url page.offset page.limit 0
+                            , viewPagination active.texts model.url page.prevPage page.nextPage
                             ]
 
                     else
                         div [ A.class "stack" ]
                             [ ul [ A.class "notification-list" ] (List.map (notificationItem config model active) page.items)
-                            , viewPagination active.texts model.url page.offset page.limit (List.length page.items)
+                            , viewPagination active.texts model.url page.prevPage page.nextPage
                             ]
                 )
             ]
         )
 
 
-notificationItem : Config msg -> ViewModel -> Active -> Domain.Notice -> Html msg
+notificationItem : Config msg -> ViewModel -> Active -> Domain.NotificationView -> Html msg
 notificationItem config model active notice =
+    let
+        value =
+            notice.notification
+
+        noticeId =
+            String.fromInt value.id
+    in
     li [ A.class "card" ]
-        [ p [] [ strong [] [ bdi [] [ text notice.actor ] ], text " ", text (notificationKind active.texts notice.kind) ]
-        , p [ A.class "metadata" ] [ time [ A.datetime notice.date, A.attribute "data-commune-time" "" ] [ text notice.date ] ]
+        [ p [] [ strong [] [ bdi [] [ text (noticeActor notice) ] ], text " ", text (notificationKind active.texts value.kind) ]
+        , p [ A.class "metadata" ] [ time [ A.datetime value.publishedAt, A.attribute "data-commune-time" "" ] [ text value.publishedAt ] ]
         , div [ A.class "actions" ]
             [ notificationTargetLink active notice
-            , if notice.read then
+            , if value.read then
                 text ""
 
               else
-                button [ A.class "text-button", Events.onClick (config.markNoticeRead notice.id) ]
+                button [ A.class "text-button", Events.onClick (config.markNoticeRead noticeId) ]
                     [ text (Translations.markRead active.texts) ]
             ]
         ]
 
 
-notificationTargetLink : Active -> Domain.Notice -> Html msg
+notificationTargetLink : Active -> Domain.NotificationView -> Html msg
 notificationTargetLink active notice =
-    case notice.targetKind of
-        "post" ->
+    case notice.data of
+        Domain.NotificationComment comment ->
             a
-                [ A.href
-                    (Route.path
-                        (Route.Post
-                            (if String.isEmpty notice.targetId then
-                                notice.post
-
-                             else
-                                notice.targetId
-                            )
-                        )
-                    )
-                ]
+                [ A.href (Route.path (Route.Post (String.fromInt comment.post.id))) ]
                 [ text (Translations.repliesTitle active.texts) ]
 
-        "community" ->
-            a [ A.href (Route.path (Route.Community notice.targetId)) ]
-                [ text (Translations.communitiesTitle active.texts) ]
+        Domain.NotificationPost post ->
+            a [ A.href (Route.path (Route.Post (String.fromInt post.post.id))) ]
+                [ text (Translations.repliesTitle active.texts) ]
 
-        _ ->
+        Domain.NotificationModAction modlog ->
+            a [ A.href (Route.path Route.AdminModlog) ]
+                [ text (Translations.notificationModeration active.texts) ]
+
+        Domain.NotificationPrivateMessage _ ->
             span [ A.class "muted" ] [ text (Translations.notificationOther active.texts) ]
 
 
-notificationKind : Translations.I18n -> String -> String
+noticeActor : Domain.NotificationView -> String
+noticeActor notice =
+    case notice.data of
+        Domain.NotificationComment comment ->
+            comment.creator.apId
+
+        Domain.NotificationPost post ->
+            post.creator.apId
+
+        Domain.NotificationModAction modlog ->
+            Maybe.withDefault "" (Maybe.map .apId modlog.moderator)
+
+        Domain.NotificationPrivateMessage _ ->
+            ""
+
+
+notificationKind : Translations.I18n -> Domain.NotificationKind -> String
 notificationKind texts kind =
     case kind of
-        "reply" ->
+        Domain.ReplyNotification ->
             Translations.notificationReply texts
 
-        "like" ->
-            Translations.notificationLike texts
-
-        "mention" ->
+        Domain.MentionNotification ->
             Translations.notificationMention texts
 
-        "report" ->
-            Translations.notificationReport texts
-
-        "moderation" ->
+        Domain.ModActionNotification ->
             Translations.notificationModeration texts
 
-        _ ->
+        Domain.PrivateMessageNotification ->
+            Translations.notificationOther texts
+
+        Domain.SubscribedNotification ->
+            Translations.notificationOther texts
+
+        Domain.UnknownNotificationKind _ ->
             Translations.notificationOther texts

@@ -7,6 +7,7 @@ import Generated.I18n as Translations
 import Html exposing (Html, a, button, div, form, input, label, p, section, text)
 import Html.Attributes as A
 import Html.Events as Events
+import Lemmy.Domain as Domain
 import Route
 import Ui.Feedback exposing (loginRequired, problemText, viewFormProblemWithId)
 import Ui.Formatting exposing (boolText)
@@ -21,6 +22,8 @@ type alias Config msg =
     , logout : msg
     , registerUsernameChanged : String -> msg
     , registerEmailChanged : String -> msg
+    , registerPasswordChanged : String -> msg
+    , registerPasswordVerifyChanged : String -> msg
     , registerSubmitted : msg
     , resendSubmitted : msg
     , verifyPasswordChanged : String -> msg
@@ -41,7 +44,7 @@ pageLogin config auth model active =
         (section [ A.class "primary-column" ]
             [ case auth of
                 Authenticated identity ->
-                    p [] [ text (Translations.signedInAs identity.username active.texts) ]
+                    p [] [ text (Translations.signedInAs (Domain.personName identity) active.texts) ]
 
                 _ ->
                     form [ Events.onSubmit config.loginSubmitted, A.class "card form-stack" ]
@@ -130,6 +133,34 @@ pageRegister config auth model active =
                     , A.attribute "aria-invalid" (boolText (model.registerProblem /= Nothing))
                     , A.value model.registerEmail
                     , Events.onInput config.registerEmailChanged
+                    ]
+                    []
+                ]
+            , div []
+                [ label [ A.for "register-password" ] [ text (Translations.password active.texts) ]
+                , input
+                    [ A.id "register-password"
+                    , A.type_ "password"
+                    , A.attribute "autocomplete" "new-password"
+                    , A.required True
+                    , A.attribute "aria-describedby" "register-error"
+                    , A.attribute "aria-invalid" (boolText (model.registerProblem /= Nothing))
+                    , A.value model.registerPassword
+                    , Events.onInput config.registerPasswordChanged
+                    ]
+                    []
+                ]
+            , div []
+                [ label [ A.for "register-password-verify" ] [ text (Translations.newPassword active.texts) ]
+                , input
+                    [ A.id "register-password-verify"
+                    , A.type_ "password"
+                    , A.attribute "autocomplete" "new-password"
+                    , A.required True
+                    , A.attribute "aria-describedby" "register-error"
+                    , A.attribute "aria-invalid" (boolText (model.registerProblem /= Nothing))
+                    , A.value model.registerPasswordVerify
+                    , Events.onInput config.registerPasswordVerifyChanged
                     ]
                     []
                 ]

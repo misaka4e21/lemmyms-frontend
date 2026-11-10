@@ -1,20 +1,20 @@
-module Ui.PostCard exposing (Config, deleteTriggerId, postCard, viewAttachments)
+module Ui.PostCard exposing (Config, deleteTriggerId, postCard)
 
-import Domain
 import Generated.I18n as Translations
-import Html exposing (Html, a, article, bdi, button, div, h2, h3, li, p, section, span, text, time, ul)
+import Html exposing (Html, a, article, bdi, button, div, h2, h3, p, section, span, text, time)
 import Html.Attributes as A
 import Html.Events as Events
-import List
+import Lemmy.Domain as Domain
+import Lemmy.Markdown as Markdown
 import Route
 import Ui.Formatting exposing (Formatting, boolText, formattedCount, repliesLabel)
 import Ui.Icon
-import Ui.Rich
 import Ui.VoteControl
 
 
 type alias Config msg =
     { formatted : Maybe Formatting
+    , viewerActor : Maybe String
     , isBusy : String -> Bool
     , isExpanded : String -> Bool
     , onVote : String -> Int -> msg
@@ -29,114 +29,122 @@ type alias Config msg =
     }
 
 
-postCard : Config msg -> Translations.I18n -> Domain.Post -> Html msg
-postCard config texts post =
+postCard : Config msg -> Translations.I18n -> Domain.PostView -> Html msg
+postCard config texts view =
     let
+        post =
+            view.post
+
+        postId =
+            String.fromInt post.id
+
         authorText =
-            if not (String.isEmpty post.author.displayName) && not (String.isEmpty post.author.acct) then
-                post.author.displayName ++ " (@" ++ post.author.acct ++ ")"
-
-            else if not (String.isEmpty post.author.displayName) then
-                post.author.displayName
-
-            else if not (String.isEmpty post.author.acct) then
-                "@" ++ post.author.acct
-
-            else
-                post.authorActor
+            Domain.displayNameOf view.creator ++ " (" ++ Domain.acctOf view.creator ++ ")"
 
         replyName =
-            repliesLabel config.formatted texts post.replies
+            repliesLabel config.formatted texts post.comments
 
         saveName =
-            if post.saved then
+            if saved view then
                 Translations.unsavePost texts
 
             else
                 Translations.savePost texts
 
         hideName =
-            if post.hiddenByMe then
+            if hidden view then
                 Translations.unhideForMe texts
 
             else
                 Translations.hideForMe texts
-    in
-    article [ A.class "card post-card", A.attribute "aria-labelledby" ("post-" ++ post.id) ]
-        [ h2 [ A.id ("post-" ++ post.id), A.dir "auto" ]
-            [ a [ A.href (Route.path (Route.Post post.id)) ]
-                [ text
-                    (if String.isEmpty post.title then
-                        Translations.repliesTitle texts
 
-                     else
-                        post.title
-                    )
-                ]
-            ]
+        vote =
+            Maybe.andThen .voteIsUpvote view.postActions
+
+        votedByMe =
+            case vote of
+                Just True ->
+                    1
+
+                Just False ->
+                    -1
+
+                Nothing ->
+                    0
+
+        owner =
+            config.viewerActor == Just view.creator.apId
+    in
+    article [ A.class "card post-card", A.attribute "aria-labelledby" ("post-" ++ postId) ]
+        [ h2 [ A.id ("post-" ++ postId), A.dir "auto" ]
+            [ a [ A.href (Route.path (Route.Post postId)) ] [ text post.name ] ]
         , p [ A.class "metadata" ]
             [ bdi [] [ text (Translations.authorLabel authorText texts) ]
             , text " · "
-            , time [ A.datetime post.date, A.attribute "data-commune-time" "" ] [ text post.date ]
+            , time [ A.datetime post.publishedAt, A.attribute "data-commune-time" "" ] [ text post.publishedAt ]
             ]
-        , Ui.Rich.view post.html
-        , viewAttachments texts post.attachments
+        , Maybe.withDefault "" post.body |> Markdown.render
+        , linkSection texts post.url
         , div [ A.class "post-actions" ]
             [ Ui.VoteControl.view
                 { formatted = config.formatted
                 , score = post.score
                 , upvotes = post.upvotes
                 , downvotes = post.downvotes
-                , votedByMe = post.votedByMe
-                , canUpvote = post.canUpvote
-                , canDownvote = post.canDownvote
-                , canLike = post.canLike
-                , busy = config.isBusy post.id
-                , onVote = config.onVote post.id
-                , onLike = config.onLike post.id
+                , votedByMe = votedByMe
+                , canUpvote = view.community.postUpvotes /= Domain.DisabledVotes
+                , canDownvote = view.community.postDownvotes /= Domain.DisabledVotes
+                , canLike = True
+                , busy = config.isBusy postId
+                , onVote = config.onVote postId
+                , onLike = config.onLike postId
                 }
                 texts
-            , if post.canSave || post.saved then
+            , if saved view then
                 button
                     [ A.class "icon-button"
                     , A.attribute "aria-label" saveName
                     , A.attribute "title" saveName
-                    , A.attribute "aria-pressed" (boolText post.saved)
-                    , A.disabled (config.isBusy post.id)
-                    , Events.onClick (config.onSave post.id post.saved)
+                    , A.attribute "aria-pressed" "true"
+                    , A.disabled (config.isBusy postId)
+                    , Events.onClick (config.onSave postId True)
                     ]
-                    [ Ui.Icon.view (Ui.Icon.Bookmark post.saved) ]
+                    [ Ui.Icon.view (Ui.Icon.Bookmark True) ]
 
               else
-                text ""
-            , if post.canHideForMe || post.hiddenByMe then
                 button
                     [ A.class "icon-button"
-                    , A.attribute "aria-label" hideName
-                    , A.attribute "title" hideName
-                    , A.attribute "aria-pressed" (boolText post.hiddenByMe)
-                    , A.disabled (config.isBusy post.id)
-                    , Events.onClick (config.onHideForMe post.id post.hiddenByMe)
+                    , A.attribute "aria-label" saveName
+                    , A.attribute "title" saveName
+                    , A.attribute "aria-pressed" "false"
+                    , A.disabled (config.isBusy postId)
+                    , Events.onClick (config.onSave postId False)
                     ]
-                    [ Ui.Icon.view (Ui.Icon.Hide post.hiddenByMe) ]
-
-              else
-                text ""
+                    [ Ui.Icon.view (Ui.Icon.Bookmark False) ]
+            , button
+                [ A.class "icon-button"
+                , A.attribute "aria-label" hideName
+                , A.attribute "title" hideName
+                , A.attribute "aria-pressed" (boolText (hidden view))
+                , A.disabled (config.isBusy postId)
+                , Events.onClick (config.onHideForMe postId (hidden view))
+                ]
+                [ Ui.Icon.view (Ui.Icon.Hide (hidden view)) ]
             , if config.canReport && not post.deleted then
                 button
                     [ A.class "icon-button"
                     , A.attribute "aria-label" (Translations.reportPost texts)
                     , A.attribute "title" (Translations.reportPost texts)
-                    , Events.onClick (config.onReport post.id post.community)
+                    , Events.onClick (config.onReport postId (String.fromInt post.communityId))
                     ]
                     [ Ui.Icon.view Ui.Icon.Report ]
 
               else
                 text ""
-            , if post.canEdit then
+            , if owner || view.canMod then
                 a
                     [ A.class "icon-button"
-                    , A.href (Route.path (Route.EditPost post.id))
+                    , A.href (Route.path (Route.EditPost postId))
                     , A.attribute "aria-label" (Translations.editPost texts)
                     , A.attribute "title" (Translations.editPost texts)
                     ]
@@ -144,67 +152,62 @@ postCard config texts post =
 
               else
                 text ""
-            , if post.canDelete then
+            , if owner then
                 button
-                    [ A.id (deleteTriggerId post.id)
+                    [ A.id (deleteTriggerId postId)
                     , A.class "icon-button danger-text"
                     , A.attribute "aria-label" (Translations.deletePost texts)
                     , A.attribute "title" (Translations.deletePost texts)
-                    , Events.onClick (config.onDelete post.id)
+                    , Events.onClick (config.onDelete postId)
                     ]
                     [ Ui.Icon.view Ui.Icon.Delete ]
 
               else
                 text ""
-            , if post.replies > 0 then
+            , if post.comments > 0 then
                 button
                     [ A.class "icon-button"
                     , A.attribute "aria-label" replyName
                     , A.attribute "title" replyName
-                    , A.attribute "aria-expanded" (boolText (config.isExpanded post.id))
-                    , Events.onClick (config.onReplies post.id)
+                    , A.attribute "aria-expanded" (boolText (config.isExpanded postId))
+                    , Events.onClick (config.onReplies postId)
                     ]
                     [ Ui.Icon.view Ui.Icon.Reply
-                    , span [ A.class "action-count" ] [ text (formattedCount config.formatted post.replies) ]
+                    , span [ A.class "action-count" ] [ text (formattedCount config.formatted post.comments) ]
                     ]
 
               else
                 text ""
             ]
-        , if config.isExpanded post.id then
-            config.nested post.id
+        , if config.isExpanded postId then
+            config.nested postId
 
           else
             text ""
         ]
 
 
-viewAttachments : Translations.I18n -> List Domain.Attachment -> Html msg
-viewAttachments texts attachments =
-    if List.isEmpty attachments then
-        text ""
+saved : Domain.PostView -> Bool
+saved view =
+    Maybe.andThen .savedAt view.postActions /= Nothing
 
-    else
-        section [ A.class "attachments" ]
-            [ h3 [] [ text (Translations.attachments texts) ]
-            , ul []
-                (List.map
-                    (\attachment ->
-                        li []
-                            [ a [ A.href attachment.url, A.rel "noopener noreferrer" ]
-                                [ text
-                                    (if String.isEmpty attachment.name then
-                                        attachment.mediaType
 
-                                     else
-                                        attachment.name
-                                    )
-                                ]
-                            ]
-                    )
-                    attachments
-                )
-            ]
+hidden : Domain.PostView -> Bool
+hidden view =
+    Maybe.andThen .hiddenAt view.postActions /= Nothing
+
+
+linkSection : Translations.I18n -> Maybe String -> Html msg
+linkSection texts url =
+    case url of
+        Just value ->
+            section [ A.class "attachments" ]
+                [ h3 [] [ text (Translations.attachments texts) ]
+                , a [ A.href value, A.rel "noopener noreferrer" ] [ text value ]
+                ]
+
+        Nothing ->
+            text ""
 
 
 deleteTriggerId : String -> String

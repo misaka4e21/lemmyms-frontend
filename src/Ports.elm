@@ -13,8 +13,7 @@ port incoming : (Decode.Value -> msg) -> Sub msg
 
 
 type IncomingData
-    = IncomingCsrf String
-    | IncomingFormatting Formatting
+    = IncomingFormatting Formatting
     | IncomingLayout Bool
     | IncomingIgnored
 
@@ -25,9 +24,6 @@ incomingDecoder =
         |> Decode.andThen
             (\kind ->
                 case kind of
-                    "csrf" ->
-                        Decode.map IncomingCsrf (Decode.field "value" Decode.string)
-
                     "formatted" ->
                         Decode.map IncomingFormatting formattingDecoder
 
@@ -53,11 +49,6 @@ pairedIntString =
         [ Decode.map2 Tuple.pair (Decode.field "source" Decode.int) (Decode.field "text" Decode.string)
         , Decode.map2 Tuple.pair (Decode.field "source" Decode.int) (Decode.field "category" Decode.string)
         ]
-
-
-requestCsrf : Cmd msg
-requestCsrf =
-    outgoing (Encode.object [ ( "action", Encode.string "csrf" ) ])
 
 
 setLocale : Locale -> Cmd msg

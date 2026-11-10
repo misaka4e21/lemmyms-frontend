@@ -4,7 +4,6 @@ import Api
 import App.Session exposing (AuthState(..))
 import App.State exposing (Model, Msg(..))
 import Browser.Navigation as Navigation
-import Domain
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
 import Feature.Auth.State as AuthState
@@ -22,6 +21,7 @@ import Feature.Report as Report
 import Feature.Search as Search
 import Feature.SiteAdmin.State as SiteAdminState
 import Feature.SiteAdmin.Update as SiteAdmin
+import Lemmy.Domain as Domain
 import Remote exposing (Remote(..))
 import Route
 import Url exposing (Url)
@@ -200,8 +200,8 @@ loadRoute model =
                             in
                             { empty
                                 | community = Loading
-                                , members = Loading
-                                , managers = Loading
+                                , members = Ready { items = [], nextPage = Nothing, prevPage = Nothing }
+                                , managers = Ready { items = [], nextPage = Nothing, prevPage = Nothing }
                                 , followRequests = Loading
                                 , reports = Loading
                                 , modlog = Loading
@@ -223,7 +223,7 @@ adminRoute : Model -> Model -> Route.Route -> ( Model, Cmd Msg )
 adminRoute original reset route =
     case original.auth of
         Authenticated identity ->
-            if identity.siteAdmin || identity.deploymentAdmin then
+            if Domain.isAdmin identity then
                 let
                     ( state, command ) =
                         case route of
@@ -272,5 +272,8 @@ unreadCommand model =
 
 loadSession : Model -> Cmd Msg
 loadSession model =
-    Api.get "/api/v1/auth/session"
-        (SessionLoaded model.authGeneration << Api.decodeResponse Domain.identity)
+    Cmd.batch
+        [ Api.get "/account"
+            (SessionLoaded model.authGeneration << Api.decodeResponse Domain.myUserInfo)
+        , Api.get "/site" (SiteLoaded << Api.decodeResponse Domain.siteView)
+        ]

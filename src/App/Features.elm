@@ -7,7 +7,6 @@ import App.Interaction exposing (applyPost)
 import App.Session exposing (AuthState(..))
 import App.State exposing (Model, Msg(..))
 import Browser.Navigation as Navigation
-import Domain
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
 import Feature.Auth.Update as Auth
@@ -22,7 +21,8 @@ import Feature.Profile as Profile
 import Feature.Report as Report
 import Feature.Search as Search
 import Feature.SiteAdmin.Update as SiteAdmin
-import Ports exposing (closeDialog, focus, openDialog, requestCsrf)
+import Lemmy.Domain as Domain
+import Ports exposing (closeDialog, focus, openDialog)
 import Remote exposing (Remote(..))
 import Url
 
@@ -31,7 +31,7 @@ updateEditor : Editor.Msg -> Model -> ( Model, Cmd Msg )
 updateEditor message model =
     let
         ( state, command, outcome ) =
-            Editor.update model.csrf message model.editorPage
+            Editor.update "" message model.editorPage
 
         base =
             case outcome.sessionProblem of
@@ -67,7 +67,7 @@ updateManage : Manage.Msg -> Model -> ( Model, Cmd Msg )
 updateManage message model =
     let
         ( state, command, outcome ) =
-            Manage.update { csrf = model.csrf, route = model.route } message model.management
+            Manage.update { csrf = "", route = model.route } message model.management
 
         base =
             case outcome.sessionProblem of
@@ -123,7 +123,7 @@ updateAccountBlocks : AccountBlocks.Msg -> Model -> ( Model, Cmd Msg )
 updateAccountBlocks message model =
     let
         ( state, command, outcome ) =
-            AccountBlocks.update model.csrf message model.accountBlocks
+            AccountBlocks.update "" message model.accountBlocks
 
         base =
             case outcome.sessionProblem of
@@ -150,7 +150,7 @@ updateReport : Report.Msg -> Model -> ( Model, Cmd Msg )
 updateReport message model =
     let
         ( state, command, outcome ) =
-            Report.update model.csrf message model.report
+            Report.update "" message model.report
 
         base =
             case outcome.sessionProblem of
@@ -188,7 +188,7 @@ updateSiteAdmin : SiteAdmin.Msg -> Model -> ( Model, Cmd Msg )
 updateSiteAdmin message model =
     let
         ( state, command, outcome ) =
-            SiteAdmin.update { csrf = model.csrf, url = model.url } message model.siteAdmin
+            SiteAdmin.update { csrf = "", url = model.url } message model.siteAdmin
 
         base =
             case outcome.sessionProblem of
@@ -236,7 +236,7 @@ updateAuth : Auth.Msg -> Model -> ( Model, Cmd Msg )
 updateAuth message model =
     let
         ( state, command, outcome ) =
-            Auth.update model.csrf message model.account
+            Auth.update "" message model.account
 
         changed =
             { model
@@ -261,15 +261,14 @@ updateAuth message model =
                       }
                     , Cmd.batch
                         [ Navigation.pushUrl model.key "/"
-                        , requestCsrf
-                        , Api.get "/api/v1/profile" (DrawerProfileLoaded << Api.decodeResponse Domain.profile)
+                        , Api.get "/account" (DrawerProfileLoaded << Api.decodeResponse Domain.ownPersonView)
                         ]
                     )
 
                 Nothing ->
                     if outcome.loggedOut then
-                        ( clearPrivate { changed | auth = Anonymous, authGeneration = changed.authGeneration + 1, routeEpoch = changed.routeEpoch + 1, csrf = "" }
-                        , Cmd.batch [ Navigation.pushUrl model.key "/login", requestCsrf ]
+                        ( clearPrivate { changed | auth = Anonymous, authGeneration = changed.authGeneration + 1, routeEpoch = changed.routeEpoch + 1 }
+                        , Navigation.pushUrl model.key "/login"
                         )
 
                     else
@@ -289,7 +288,7 @@ updateProfile : Profile.Msg -> Model -> ( Model, Cmd Msg )
 updateProfile message model =
     let
         ( state, command, outcome ) =
-            Profile.update model.csrf message model.profile
+            Profile.update "" message model.profile
 
         base =
             case outcome.sessionProblem of
@@ -354,7 +353,7 @@ updateNotifications : Notifications.Msg -> Model -> ( Model, Cmd Msg )
 updateNotifications message model =
     let
         ( state, command, outcome ) =
-            Notifications.update model.csrf model.url message model.notificationsPage
+            Notifications.update "" model.url message model.notificationsPage
 
         base =
             case outcome.sessionProblem of
@@ -403,7 +402,7 @@ updateCommunityCreate : CommunityCreate.Msg -> Model -> ( Model, Cmd Msg )
 updateCommunityCreate message model =
     let
         ( state, command, outcome ) =
-            CommunityCreate.update model.csrf message model.communityCreate
+            CommunityCreate.update "" message model.communityCreate
 
         navigation =
             case outcome.navigation of
@@ -430,7 +429,7 @@ updatePost : Post.Msg -> Model -> ( Model, Cmd Msg )
 updatePost message model =
     let
         ( state, command, outcome ) =
-            Post.update model.csrf model.url message model.posts
+            Post.update "" model.url message model.posts
 
         base =
             case outcome.sessionProblem of
@@ -512,7 +511,7 @@ updateCommunity : Community.Msg -> Model -> ( Model, Cmd Msg )
 updateCommunity message model =
     let
         ( state, command, outcome ) =
-            Community.update model.csrf message model.communityPage
+            Community.update "" message model.communityPage
 
         base =
             case outcome.sessionProblem of

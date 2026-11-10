@@ -1,6 +1,6 @@
-module Route exposing (Route(..), offset, pageUrl, parse, path, query, replyPageUrl)
+module Route exposing (Route(..), cursor, cursorUrl, offset, pageUrl, parse, path, query, replyPageUrl)
 
-import Domain
+import AccountSource exposing (AccountContentSource(..))
 import Url exposing (Url)
 import Url.Builder as Builder
 import Url.Parser as Parser exposing ((</>), Parser, s, string, top)
@@ -11,6 +11,7 @@ type Route
     | Communities
     | Community String
     | Post String
+    | Comment String
     | NewCommunity
     | NewTopic String
     | EditPost String
@@ -24,7 +25,7 @@ type Route
     | PasswordReset
     | PasswordResetConfirm
     | PasswordSettings
-    | AccountContent Domain.AccountContentSource
+    | AccountContent AccountContentSource
     | AccountBlocks
     | AdminOverview
     | AdminReports
@@ -46,6 +47,7 @@ parser =
         , Parser.map Communities (s "communities")
         , Parser.map EditPost (s "posts" </> string </> s "edit")
         , Parser.map Post (s "posts" </> string)
+        , Parser.map Comment (s "comment" </> string)
         , Parser.map Login (s "login")
         , Parser.map Register (s "register")
         , Parser.map Verify (s "verify-email")
@@ -54,10 +56,10 @@ parser =
         , Parser.map PasswordReset (s "reset-password")
         , Parser.map PasswordResetConfirm (s "reset-password" </> s "confirm")
         , Parser.map PasswordSettings (s "settings" </> s "password")
-        , Parser.map (AccountContent Domain.SavedContent) (s "account" </> s "saved")
-        , Parser.map (AccountContent Domain.ReadContent) (s "account" </> s "read")
-        , Parser.map (AccountContent Domain.HiddenContent) (s "account" </> s "hidden")
-        , Parser.map (AccountContent Domain.LikedContent) (s "account" </> s "liked")
+        , Parser.map (AccountContent SavedContent) (s "account" </> s "saved")
+        , Parser.map (AccountContent ReadContent) (s "account" </> s "read")
+        , Parser.map (AccountContent HiddenContent) (s "account" </> s "hidden")
+        , Parser.map (AccountContent LikedContent) (s "account" </> s "liked")
         , Parser.map AccountBlocks (s "account" </> s "blocks")
         , Parser.map AdminReports (s "admin" </> s "reports")
         , Parser.map AdminModlog (s "admin" </> s "modlog")
@@ -88,6 +90,9 @@ path route =
 
         Post id ->
             Builder.absolute [ "posts", id ] []
+
+        Comment id ->
+            Builder.absolute [ "comment", id ] []
 
         NewCommunity ->
             "/communities/new"
@@ -131,16 +136,16 @@ path route =
         AccountContent source ->
             "/account/"
                 ++ (case source of
-                        Domain.SavedContent ->
+                        SavedContent ->
                             "saved"
 
-                        Domain.ReadContent ->
+                        ReadContent ->
                             "read"
 
-                        Domain.HiddenContent ->
+                        HiddenContent ->
                             "hidden"
 
-                        Domain.LikedContent ->
+                        LikedContent ->
                             "liked"
                    )
 
@@ -196,6 +201,16 @@ offset url =
     query "offset" url |> String.toInt |> Maybe.withDefault 0 |> max 0
 
 
+cursor : Url -> Maybe String
+cursor url =
+    case query "page_cursor" url of
+        "" ->
+            Nothing
+
+        value ->
+            Just value
+
+
 pageUrl : Url -> Int -> String
 pageUrl url value =
     url.path
@@ -206,6 +221,41 @@ pageUrl url value =
 
                     else
                         []
+                   )
+            )
+
+
+cursorUrl : Url -> String -> String
+cursorUrl url cursorValue =
+    url.path
+        ++ Builder.toQuery
+            ([ Builder.string "page_cursor" cursorValue ]
+                ++ (if parse url == Search then
+                        [ Builder.string "q" (query "q" url), Builder.string "kind" (query "kind" url) ]
+
+                    else
+                        []
+                   )
+                ++ (case query "sort" url of
+                        "" ->
+                            []
+
+                        value ->
+                            [ Builder.string "sort" value ]
+                   )
+                ++ (case query "max_depth" url of
+                        "" ->
+                            []
+
+                        value ->
+                            [ Builder.string "max_depth" value ]
+                   )
+                ++ (case query "type" url of
+                        "" ->
+                            []
+
+                        value ->
+                            [ Builder.string "type" value ]
                    )
             )
 

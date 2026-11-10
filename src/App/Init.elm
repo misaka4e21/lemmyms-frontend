@@ -25,7 +25,6 @@ import Feature.SiteAdmin.State as SiteAdminState
 import Json.Decode as Decode
 import Locale exposing (Locale(..))
 import Localization exposing (LoadKind(..))
-import Ports exposing (requestCsrf)
 import Remote exposing (Remote(..))
 import Route
 import Url exposing (Url)
@@ -34,7 +33,6 @@ import Url exposing (Url)
 type alias Flags =
     { languages : List String
     , savedLocale : Maybe String
-    , csrf : String
     , verificationToken : String
     , wideLayout : Bool
     }
@@ -59,7 +57,7 @@ init rawFlags url key =
             , routeEpoch = 0
             , authGeneration = 0
             , auth = CheckingSession
-            , csrf = flags.csrf
+            , site = Nothing
             , active = Nothing
             , requested = requested
             , bootFailed = False
@@ -86,15 +84,14 @@ init rawFlags url key =
             , siteAdmin = SiteAdminState.initial
             }
     in
-    ( model, Cmd.batch [ loadCatalog request, loadSession model, requestCsrf ] )
+    ( model, Cmd.batch [ loadCatalog request, loadSession model ] )
 
 
 flagsDecoder : Decode.Decoder Flags
 flagsDecoder =
-    Decode.map5 Flags
+    Decode.map4 Flags
         (Decode.field "languages" (Decode.list Decode.string))
         (Decode.field "savedLocale" (Decode.nullable Decode.string))
-        (Decode.field "csrf" Decode.string)
         (Decode.field "verificationToken" Decode.string)
         (Decode.field "wideLayout" Decode.bool)
 
@@ -103,7 +100,6 @@ defaultFlags : Flags
 defaultFlags =
     { languages = [ "en-US" ]
     , savedLocale = Nothing
-    , csrf = ""
     , verificationToken = ""
     , wideLayout = False
     }

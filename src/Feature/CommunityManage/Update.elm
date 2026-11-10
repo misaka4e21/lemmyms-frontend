@@ -3,9 +3,10 @@ module Feature.CommunityManage.Update exposing (Action(..), LoadKind(..), Msg(..
 import Api
 import App.Feedback exposing (Flash(..))
 import Dict
-import Domain
 import Feature.CommunityManage.State exposing (..)
+import Json.Decode as Decode
 import Json.Encode as Encode
+import Lemmy.Domain as Domain
 import Remote exposing (Remote(..))
 import Route
 import Set exposing (Set)
@@ -86,12 +87,10 @@ load : String -> ManageState -> Model -> ( Model, Cmd Msg )
 load id manage state =
     ( { state | manage = Just manage }
     , Cmd.batch
-        [ Api.get ("/api/v1/communities/" ++ urlEncode id) (Loaded (LoadManageCommunity id))
-        , Api.get ("/api/v1/communities/" ++ urlEncode id ++ "/members?limit=20&offset=" ++ String.fromInt manage.memberOffset) (Loaded (LoadMembers id manage.memberOffset))
-        , Api.get ("/api/v1/communities/" ++ urlEncode id ++ "/managers?limit=20&offset=" ++ String.fromInt manage.managerOffset) (Loaded (LoadManagers id manage.managerOffset))
-        , Api.get ("/api/v1/communities/" ++ urlEncode id ++ "/follow-requests?limit=20&offset=" ++ String.fromInt manage.followRequestOffset) (Loaded (LoadFollowRequests id manage.followRequestOffset))
-        , Api.get ("/api/v1/reports?state=open&community_id=" ++ urlEncode id ++ "&limit=20&offset=" ++ String.fromInt manage.reportOffset) (Loaded (LoadReports id))
-        , Api.get ("/api/v1/modlog?community_id=" ++ urlEncode id ++ "&limit=20&offset=" ++ String.fromInt manage.modlogOffset) (Loaded (LoadModlog id manage.modlogOffset))
+        [ Api.get ("/community?id=" ++ urlEncode id) (Loaded (LoadManageCommunity id))
+        , Api.get ("/community/pending_follows/list?community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadFollowRequests id manage.followRequestOffset))
+        , Api.get ("/report/list?unresolved_only=true&community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadReports id))
+        , Api.get ("/modlog?community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadModlog id manage.modlogOffset))
         ]
     )
 
@@ -162,12 +161,12 @@ updateWorking context message model =
                         model
                         "policy"
                         "PUT"
-                        ("/api/v1/communities/" ++ urlEncode (communityId context.route) ++ "/policy")
+                        "/community"
                         (Encode.encode 0
                             (Encode.object
-                                [ ( "read_policy", Encode.string manage.readPolicy )
-                                , ( "post_policy", Encode.string manage.postPolicy )
-                                , ( "follow_policy", Encode.string manage.followPolicy )
+                                [ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
+                                , ( "visibility", Encode.string manage.readPolicy )
+                                , ( "posting_restricted_to_mods", Encode.bool (manage.postPolicy == "managers") )
                                 ]
                             )
                         )
@@ -221,12 +220,25 @@ updateWorking context message model =
             managePostRequest context model id action
 
         ManageFollowDecision actor stateValue ->
+            let
+                personId =
+                    model.manage
+                        |> Maybe.map (followerIdFor actor)
+                        |> Maybe.withDefault 0
+            in
             manageRequest context
                 model
                 ("follow-" ++ actor ++ "-" ++ stateValue)
                 "POST"
-                ("/api/v1/communities/" ++ urlEncode (communityId context.route) ++ "/follow-requests/" ++ urlEncode actor)
-                (Encode.encode 0 (Encode.object [ ( "state", Encode.string stateValue ) ]))
+                "/community/pending_follows/approve"
+                (Encode.encode 0
+                    (Encode.object
+                        [ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
+                        , ( "follower_id", Encode.int personId )
+                        , ( "approve", Encode.bool (stateValue == "accepted") )
+                        ]
+                    )
+                )
 
         ManageReportNoteChanged id value ->
             setManage model
@@ -237,12 +249,13 @@ updateWorking context message model =
             manageRequest context
                 model
                 ("resolve-report-" ++ id ++ "-" ++ resolution)
-                "POST"
-                ("/api/v1/reports/" ++ urlEncode id ++ "/resolve")
+                "PUT"
+                (resolvePath id model)
                 (Encode.encode 0
                     (Encode.object
-                        [ ( "state", Encode.string resolution )
-                        , ( "note"
+                        [ ( "report_id", Encode.int (String.toInt id |> Maybe.withDefault 0) )
+                        , ( "resolved", Encode.bool (resolution == "resolved") )
+                        , ( "conclusion"
                           , Encode.string
                                 (model.manage
                                     |> Maybe.map (\manage -> Dict.get id manage.reportNotes |> Maybe.withDefault "")
@@ -331,7 +344,25 @@ updateWorking context message model =
                 setCommunity result =
                     case result of
                         Ok community ->
-                            updateManageRecord model (\manage -> { manage | community = Ready community, readPolicy = community.readPolicy, postPolicy = community.postPolicy, followPolicy = community.followPolicy })
+                            updateManageRecord model
+                                (\manage ->
+                                    { manage
+                                        | community = Ready community
+                                        , readPolicy = visibilityText community.community.visibility
+                                        , postPolicy =
+                                            if community.community.postingRestrictedToMods then
+                                                "managers"
+
+                                            else
+                                                "eligible_users"
+                                        , followPolicy =
+                                            if community.community.visibility == Domain.PrivateCommunity then
+                                                "approval"
+
+                                            else
+                                                "open"
+                                    }
+                                )
 
                         Err problem ->
                             updateManageRecord model (\manage -> { manage | community = Failed problem, problem = Just problem })
@@ -368,31 +399,31 @@ updateWorking context message model =
             in
             ( case kind of
                 LoadManageCommunity _ ->
-                    setCommunity (Api.decodeResponse Domain.community response)
+                    setCommunity (Api.decodeResponse (Decode.field "community_view" Domain.communityView) response)
 
                 LoadMembers _ _ ->
-                    setRoster True (Api.decodeResponse (Domain.page Domain.roster) response)
+                    setRoster True (Api.decodeResponse (Domain.page Domain.communityModeratorView) response)
 
                 LoadManagers _ _ ->
-                    setRoster False (Api.decodeResponse (Domain.page Domain.roster) response)
+                    setRoster False (Api.decodeResponse (Domain.page Domain.communityModeratorView) response)
 
                 LoadFollowRequests _ _ ->
                     setPage
                         (\page -> \manage -> { manage | followRequests = Ready page })
                         (\problem -> \manage -> { manage | followRequests = Failed problem, problem = Just problem })
-                        (Api.decodeResponse (Domain.page Domain.followRequest) response)
+                        (Api.decodeResponse (Domain.page Domain.pendingFollow) response)
 
                 LoadReports _ ->
                     setPage
                         (\page -> \manage -> { manage | reports = Ready page })
                         (\problem -> \manage -> { manage | reports = Failed problem, problem = Just problem })
-                        (Api.decodeResponse (Domain.page Domain.report) response)
+                        (Api.decodeResponse (Domain.page Domain.reportView) response)
 
                 LoadModlog _ _ ->
                     setPage
                         (\page -> \manage -> { manage | modlog = Ready page })
                         (\problem -> \manage -> { manage | modlog = Failed problem, problem = Just problem })
-                        (Api.decodeResponse (Domain.page Domain.moderationLogEntry) response)
+                        (Api.decodeResponse (Domain.page Domain.modlogView) response)
             , Cmd.none
             )
 
@@ -425,12 +456,23 @@ manageActorRequestFor context model key method section actor =
 
 manageActorRequestWith : Context -> Working -> String -> String -> String -> String -> ( Working, Cmd Msg )
 manageActorRequestWith context model key method section actor =
-    manageRequest context
-        model
-        key
-        method
-        ("/api/v1/communities/" ++ urlEncode (communityId context.route) ++ "/" ++ section)
-        (Encode.encode 0 (Encode.object [ ( "actor", Encode.string actor ) ]))
+    if section == "managers" then
+        manageRequest context
+            model
+            key
+            "POST"
+            "/community/mod"
+            (Encode.encode 0
+                (Encode.object
+                    [ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
+                    , ( "person_id", Encode.int (String.toInt actor |> Maybe.withDefault 0) )
+                    , ( "added", Encode.bool (method == "POST") )
+                    ]
+                )
+            )
+
+    else
+        ( model, Cmd.none )
 
 
 communityBanRequest : Context -> Working -> String -> ( Working, Cmd Msg )
@@ -444,18 +486,20 @@ communityBanRequest context model method =
                 manageRequest context
                     model
                     ("community-ban-" ++ method)
-                    method
-                    ("/api/v1/communities/" ++ urlEncode (communityId context.route) ++ "/bans")
+                    "POST"
+                    "/community/ban_user"
                     (Encode.encode 0
                         (Encode.object
-                            ([ ( "actor", Encode.string (String.trim manage.banActor) )
+                            ([ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
+                             , ( "person_id", Encode.int (String.toInt (String.trim manage.banActor) |> Maybe.withDefault 0) )
+                             , ( "ban", Encode.bool (method == "POST") )
                              , ( "reason", Encode.string (String.trim manage.banReason) )
                              ]
                                 ++ (if String.isEmpty (String.trim manage.banExpires) then
                                         []
 
                                     else
-                                        [ ( "expires_at", Encode.string (String.trim manage.banExpires) ) ]
+                                        [ ( "expires_at", Encode.int (String.toInt (String.trim manage.banExpires) |> Maybe.withDefault 0) ) ]
                                    )
                             )
                         )
@@ -517,43 +561,28 @@ manageSectionPage context model section delta =
 managePostRequest : Context -> Working -> String -> ManagePostAction -> ( Working, Cmd Msg )
 managePostRequest context model postId action =
     let
-        id =
-            communityId context.route
-
         key =
             "manage-post-" ++ postId ++ "-" ++ manageActionKey action
-
-        ( method, url, body ) =
-            case action of
-                RemoveCommunityPost ->
-                    ( "POST", "/api/v1/communities/" ++ urlEncode id ++ "/removals", Encode.object [ ( "post_id", Encode.string postId ) ] )
-
-                RestoreCommunityPost ->
-                    ( "DELETE", "/api/v1/communities/" ++ urlEncode id ++ "/removals", Encode.object [ ( "post_id", Encode.string postId ) ] )
-
-                HideSitePost ->
-                    ( "POST", "/api/v1/posts/" ++ urlEncode postId ++ "/hide", Encode.object [] )
-
-                UnhideSitePost ->
-                    ( "DELETE", "/api/v1/posts/" ++ urlEncode postId ++ "/hide", Encode.object [] )
-
-                ImportSitePost ->
-                    ( "POST", "/api/v1/posts/" ++ urlEncode postId ++ "/import", Encode.object [] )
-
-                AcceptSubmission ->
-                    ( "POST", "/api/v1/communities/" ++ urlEncode id ++ "/submissions", Encode.object [ ( "post_id", Encode.string postId ), ( "state", Encode.string "accepted" ) ] )
-
-                RejectSubmission ->
-                    ( "POST", "/api/v1/communities/" ++ urlEncode id ++ "/submissions", Encode.object [ ( "post_id", Encode.string postId ), ( "state", Encode.string "rejected" ) ] )
-
-                BackfillDiscussion ->
-                    let
-                        contextId =
-                            model.manage |> Maybe.map .contextId |> Maybe.withDefault ""
-                    in
-                    ( "POST", "/api/v1/contexts/" ++ urlEncode contextId ++ "/backfill", Encode.object [] )
     in
-    manageRequest context model key method url (Encode.encode 0 body)
+    case action of
+        RemoveCommunityPost ->
+            manageRequest context
+                model
+                key
+                "POST"
+                "/post/remove"
+                (Encode.encode 0 (Encode.object [ ( "post_id", Encode.int (String.toInt postId |> Maybe.withDefault 0) ), ( "removed", Encode.bool True ), ( "reason", Encode.string "" ) ]))
+
+        RestoreCommunityPost ->
+            manageRequest context
+                model
+                key
+                "POST"
+                "/post/remove"
+                (Encode.encode 0 (Encode.object [ ( "post_id", Encode.int (String.toInt postId |> Maybe.withDefault 0) ), ( "removed", Encode.bool False ), ( "reason", Encode.string "" ) ]))
+
+        _ ->
+            ( model, Cmd.none )
 
 
 setManage : Working -> (ManageState -> ManageState) -> Cmd Msg -> ( Working, Cmd Msg )
@@ -570,11 +599,112 @@ loadManageState : Int -> String -> ManageState -> Working -> ( Working, Cmd Msg 
 loadManageState epoch id manage model =
     ( { model | manage = Just manage }
     , Cmd.batch
-        [ Api.get ("/api/v1/communities/" ++ urlEncode id) (Loaded (LoadManageCommunity id))
-        , Api.get ("/api/v1/communities/" ++ urlEncode id ++ "/members?limit=20&offset=" ++ String.fromInt manage.memberOffset) (Loaded (LoadMembers id manage.memberOffset))
-        , Api.get ("/api/v1/communities/" ++ urlEncode id ++ "/managers?limit=20&offset=" ++ String.fromInt manage.managerOffset) (Loaded (LoadManagers id manage.managerOffset))
-        , Api.get ("/api/v1/communities/" ++ urlEncode id ++ "/follow-requests?limit=20&offset=" ++ String.fromInt manage.followRequestOffset) (Loaded (LoadFollowRequests id manage.followRequestOffset))
-        , Api.get ("/api/v1/reports?state=open&community_id=" ++ urlEncode id ++ "&limit=20&offset=" ++ String.fromInt manage.reportOffset) (Loaded (LoadReports id))
-        , Api.get ("/api/v1/modlog?community_id=" ++ urlEncode id ++ "&limit=20&offset=" ++ String.fromInt manage.modlogOffset) (Loaded (LoadModlog id manage.modlogOffset))
+        [ Api.get ("/community?id=" ++ urlEncode id) (Loaded (LoadManageCommunity id))
+        , Api.get ("/community/pending_follows/list?community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadFollowRequests id manage.followRequestOffset))
+        , Api.get ("/report/list?unresolved_only=true&community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadReports id))
+        , Api.get ("/modlog?community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadModlog id manage.modlogOffset))
         ]
     )
+
+
+visibilityText : Domain.CommunityVisibility -> String
+visibilityText visibility =
+    case visibility of
+        Domain.PublicCommunity ->
+            "public"
+
+        Domain.UnlistedCommunity ->
+            "unlisted"
+
+        Domain.LocalOnlyPublicCommunity ->
+            "local_only_public"
+
+        Domain.LocalOnlyPrivateCommunity ->
+            "local_only_private"
+
+        Domain.PrivateCommunity ->
+            "private"
+
+        Domain.UnknownVisibility value ->
+            value
+
+
+followerIdFor : String -> ManageState -> Int
+followerIdFor actor manage =
+    case manage.followRequests of
+        Ready page ->
+            page.items
+                |> List.filterMap
+                    (\request ->
+                        if request.person.apId == actor then
+                            Just request.person.id
+
+                        else
+                            Nothing
+                    )
+                |> List.head
+                |> Maybe.withDefault 0
+
+        _ ->
+            0
+
+
+resolvePath : String -> Working -> String
+resolvePath id model =
+    let
+        kind =
+            case model.manage of
+                Just manage ->
+                    case manage.reports of
+                        Ready page ->
+                            page.items
+                                |> List.filterMap
+                                    (\reportValue ->
+                                        if String.fromInt (reportId reportValue) == id then
+                                            Just (reportKind reportValue)
+
+                                        else
+                                            Nothing
+                                    )
+                                |> List.head
+                                |> Maybe.withDefault "post"
+
+                        _ ->
+                            "post"
+
+                Nothing ->
+                    "post"
+    in
+    "/" ++ kind ++ "/report/resolve"
+
+
+reportId : Domain.ReportView -> Int
+reportId reportValue =
+    case reportValue of
+        Domain.PostReportView report _ _ _ _ ->
+            report.id
+
+        Domain.CommentReportView report _ _ _ _ _ ->
+            report.id
+
+        Domain.CommunityReportView report _ _ _ ->
+            report.id
+
+        Domain.PrivateMessageReportView value _ _ _ _ _ _ ->
+            value
+
+
+reportKind : Domain.ReportView -> String
+reportKind reportValue =
+    case reportValue of
+        Domain.PostReportView _ _ _ _ _ ->
+            "post"
+
+        Domain.CommentReportView _ _ _ _ _ _ ->
+            "comment"
+
+        Domain.CommunityReportView _ _ _ _ ->
+            "community"
+
+        Domain.PrivateMessageReportView _ _ _ _ _ _ _ ->
+            "private_message"

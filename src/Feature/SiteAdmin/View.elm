@@ -3,13 +3,13 @@ module Feature.SiteAdmin.View exposing (Config, ViewModel, pageBans, pageModlog,
 import App.Context exposing (Active)
 import App.Session exposing (AuthState(..))
 import Dict
-import Domain
 import Feature.SiteAdmin.State exposing (Model)
 import Generated.I18n as Translations
 import Html exposing (Html, a, button, div, form, h2, input, label, li, option, p, section, select, span, text, textarea, time, ul)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
+import Lemmy.Domain as Domain
 import List
 import Remote exposing (Remote(..))
 import Route
@@ -53,7 +53,7 @@ authorized : AuthState -> Bool
 authorized auth =
     case auth of
         Authenticated identity ->
-            identity.siteAdmin || identity.deploymentAdmin
+            Domain.isAdmin identity
 
         _ ->
             False
@@ -63,7 +63,7 @@ pageWrapper : ViewModel -> Active -> String -> Html msg -> Html msg
 pageWrapper model active title content =
     case model.auth of
         Authenticated identity ->
-            if identity.siteAdmin || identity.deploymentAdmin then
+            if Domain.isAdmin identity then
                 pageHeading title
                     (section [ A.class "primary-column" ]
                         [ p [ A.class "muted" ] [ text (Translations.adminCurrentSiteHelp active.texts) ]
@@ -193,7 +193,7 @@ pageReports config model active =
         )
 
 
-reportsList : Config msg -> ViewModel -> Active -> Domain.Page Domain.Report -> Html msg
+reportsList : Config msg -> ViewModel -> Active -> Domain.Page Domain.ReportView -> Html msg
 reportsList config model active page =
     if List.isEmpty page.items then
         p [ A.class "empty-state" ] [ text (Translations.noReports active.texts) ]
@@ -205,47 +205,47 @@ reportsList config model active page =
                     (\report ->
                         li [ A.class "card" ]
                             [ p [ A.class "chips" ]
-                                [ span [ A.class "chip" ] [ text report.targetKind ]
-                                , span [ A.class "chip" ] [ text (stateLabel active.texts report.state) ]
-                                , time [ A.class "chip", A.datetime report.createdAt, A.attribute "data-commune-time" "" ] [ text report.createdAt ]
+                                [ span [ A.class "chip" ] [ text (reportTargetKind report) ]
+                                , span [ A.class "chip" ] [ text (stateLabel active.texts (reportState report)) ]
+                                , time [ A.class "chip", A.datetime (reportCreatedAt report), A.attribute "data-commune-time" "" ] [ text (reportCreatedAt report) ]
                                 ]
-                            , p [ A.class "metadata" ] [ text (Translations.targetId active.texts ++ ": "), text report.targetId ]
-                            , p [ A.dir "auto" ] [ text report.reason ]
-                            , if report.state == "open" then
+                            , p [ A.class "metadata" ] [ text (Translations.targetId active.texts ++ ": "), text (reportTargetId report) ]
+                            , p [ A.dir "auto" ] [ text (reportReason report) ]
+                            , if reportState report == "open" then
                                 div [ A.class "form-stack" ]
-                                    [ label [ A.for ("report-note-" ++ report.id) ] [ text (Translations.resolutionNote active.texts) ]
+                                    [ label [ A.for ("report-note-" ++ reportId report) ] [ text (Translations.resolutionNote active.texts) ]
                                     , textarea
-                                        [ A.id ("report-note-" ++ report.id)
-                                        , A.value (Dict.get report.id model.admin.reportNotes |> Maybe.withDefault "")
-                                        , Events.onInput (config.reportNoteChanged report.id)
+                                        [ A.id ("report-note-" ++ reportId report)
+                                        , A.value (Dict.get (reportId report) model.admin.reportNotes |> Maybe.withDefault "")
+                                        , Events.onInput (config.reportNoteChanged (reportId report))
                                         ]
                                         []
                                     , div [ A.class "actions" ]
                                         [ button
-                                            [ A.id ("resolve-report-" ++ report.id)
+                                            [ A.id ("resolve-report-" ++ reportId report)
                                             , A.type_ "button"
                                             , A.class "filled-button"
-                                            , A.disabled (Set.member report.id model.admin.reportBusy)
-                                            , Events.onClick (config.confirmResolveReport report.id "resolved")
+                                            , A.disabled (Set.member (reportId report) model.admin.reportBusy)
+                                            , Events.onClick (config.confirmResolveReport (reportId report) "resolved")
                                             ]
                                             [ text (Translations.resolveReport active.texts) ]
                                         , button
                                             [ A.type_ "button"
                                             , A.class "outlined-button danger-text"
-                                            , A.disabled (Set.member report.id model.admin.reportBusy)
-                                            , Events.onClick (config.confirmResolveReport report.id "rejected")
+                                            , A.disabled (Set.member (reportId report) model.admin.reportBusy)
+                                            , Events.onClick (config.confirmResolveReport (reportId report) "rejected")
                                             ]
                                             [ text (Translations.rejectReport active.texts) ]
                                         ]
                                     ]
 
                               else
-                                p [ A.class "muted" ] [ text report.resolutionNote ]
+                                p [ A.class "muted" ] [ text (reportResolution report) ]
                             ]
                     )
                     page.items
                 )
-            , viewPagination active.texts model.url page.offset page.limit (List.length page.items)
+            , viewPagination active.texts model.url page.prevPage page.nextPage
             ]
 
 
@@ -271,7 +271,7 @@ pageModlog config model active =
         )
 
 
-modlogList : ViewModel -> Active -> Domain.Page Domain.ModerationLogEntry -> Html msg
+modlogList : ViewModel -> Active -> Domain.Page Domain.ModlogView -> Html msg
 modlogList model active page =
     if List.isEmpty page.items then
         p [ A.class "empty-state" ] [ text (Translations.noModlog active.texts) ]
@@ -283,30 +283,30 @@ modlogList model active page =
                     (\entry ->
                         li [ A.class "card" ]
                             [ p [ A.class "chips" ]
-                                [ span [ A.class "chip" ] [ text entry.action ]
-                                , time [ A.class "chip", A.datetime entry.createdAt, A.attribute "data-commune-time" "" ] [ text entry.createdAt ]
+                                [ span [ A.class "chip" ] [ text entry.modlog.kind ]
+                                , time [ A.class "chip", A.datetime entry.modlog.publishedAt, A.attribute "data-commune-time" "" ] [ text entry.modlog.publishedAt ]
                                 ]
                             , p [ A.class "metadata" ]
                                 [ text (Translations.actingActor active.texts ++ ": ")
-                                , text entry.actorActorUri
+                                , text (Maybe.withDefault "" (Maybe.map .apId entry.moderator))
                                 ]
                             , p [ A.class "metadata" ]
                                 [ text (Translations.targetKind active.texts ++ ": ")
-                                , text entry.targetKind
+                                , text (modlogTargetKind entry)
                                 , text " · "
                                 , text (Translations.targetId active.texts ++ ": ")
-                                , text entry.targetId
+                                , text (modlogTargetId entry)
                                 ]
-                            , if String.isEmpty entry.reason then
+                            , if String.isEmpty (Maybe.withDefault "" entry.modlog.reason) then
                                 text ""
 
                               else
-                                p [ A.dir "auto" ] [ text entry.reason ]
+                                p [ A.dir "auto" ] [ text (Maybe.withDefault "" entry.modlog.reason) ]
                             ]
                     )
                     page.items
                 )
-            , viewPagination active.texts model.url page.offset page.limit (List.length page.items)
+            , viewPagination active.texts model.url page.prevPage page.nextPage
             ]
 
 
@@ -387,3 +387,183 @@ stateLabel texts state =
 
         _ ->
             state
+
+
+reportId : Domain.ReportView -> String
+reportId reportValue =
+    String.fromInt
+        (case reportValue of
+            Domain.PostReportView report _ _ _ _ ->
+                report.id
+
+            Domain.CommentReportView report _ _ _ _ _ ->
+                report.id
+
+            Domain.CommunityReportView report _ _ _ ->
+                report.id
+
+            Domain.PrivateMessageReportView id _ _ _ _ _ _ ->
+                id
+        )
+
+
+reportState : Domain.ReportView -> String
+reportState reportValue =
+    if
+        case reportValue of
+            Domain.PostReportView report _ _ _ _ ->
+                report.resolved
+
+            Domain.CommentReportView report _ _ _ _ _ ->
+                report.resolved
+
+            Domain.CommunityReportView report _ _ _ ->
+                report.resolved
+
+            Domain.PrivateMessageReportView _ _ resolved _ _ _ _ ->
+                resolved
+    then
+        "resolved"
+
+    else
+        "open"
+
+
+reportReason : Domain.ReportView -> String
+reportReason reportValue =
+    case reportValue of
+        Domain.PostReportView report _ _ _ _ ->
+            report.reason
+
+        Domain.CommentReportView report _ _ _ _ _ ->
+            report.reason
+
+        Domain.CommunityReportView report _ _ _ ->
+            report.reason
+
+        Domain.PrivateMessageReportView _ reason _ _ _ _ _ ->
+            reason
+
+
+reportTargetKind : Domain.ReportView -> String
+reportTargetKind reportValue =
+    case reportValue of
+        Domain.PostReportView _ _ _ _ _ ->
+            "post"
+
+        Domain.CommentReportView _ _ _ _ _ _ ->
+            "comment"
+
+        Domain.CommunityReportView _ _ _ _ ->
+            "community"
+
+        Domain.PrivateMessageReportView _ _ _ _ _ _ _ ->
+            "message"
+
+
+reportTargetId : Domain.ReportView -> String
+reportTargetId reportValue =
+    case reportValue of
+        Domain.PostReportView report _ _ _ _ ->
+            String.fromInt report.postId
+
+        Domain.CommentReportView report _ _ _ _ _ ->
+            String.fromInt report.commentId
+
+        Domain.CommunityReportView report _ _ _ ->
+            String.fromInt report.communityId
+
+        Domain.PrivateMessageReportView _ _ _ _ _ _ _ ->
+            ""
+
+
+reportCreatedAt : Domain.ReportView -> String
+reportCreatedAt reportValue =
+    case reportValue of
+        Domain.PostReportView report _ _ _ _ ->
+            report.publishedAt
+
+        Domain.CommentReportView report _ _ _ _ _ ->
+            report.publishedAt
+
+        Domain.CommunityReportView report _ _ _ ->
+            report.publishedAt
+
+        Domain.PrivateMessageReportView _ _ _ _ publishedAt _ _ ->
+            publishedAt
+
+
+reportResolution : Domain.ReportView -> String
+reportResolution reportValue =
+    case reportValue of
+        Domain.PostReportView report _ _ _ _ ->
+            Maybe.withDefault "" report.conclusion
+
+        Domain.CommentReportView report _ _ _ _ _ ->
+            Maybe.withDefault "" report.conclusion
+
+        Domain.CommunityReportView report _ _ _ ->
+            Maybe.withDefault "" report.conclusion
+
+        Domain.PrivateMessageReportView _ _ _ conclusion _ _ _ ->
+            Maybe.withDefault "" conclusion
+
+
+modlogTargetKind : Domain.ModlogView -> String
+modlogTargetKind entry =
+    case entry.targetPost of
+        Just _ ->
+            "post"
+
+        Nothing ->
+            case entry.targetComment of
+                Just _ ->
+                    "comment"
+
+                Nothing ->
+                    case entry.targetCommunity of
+                        Just _ ->
+                            "community"
+
+                        Nothing ->
+                            case entry.targetPerson of
+                                Just _ ->
+                                    "person"
+
+                                Nothing ->
+                                    case entry.targetInstance of
+                                        Just _ ->
+                                            "instance"
+
+                                        Nothing ->
+                                            ""
+
+
+modlogTargetId : Domain.ModlogView -> String
+modlogTargetId entry =
+    case entry.targetPost of
+        Just value ->
+            String.fromInt value.id
+
+        Nothing ->
+            case entry.targetComment of
+                Just value ->
+                    String.fromInt value.id
+
+                Nothing ->
+                    case entry.targetCommunity of
+                        Just value ->
+                            String.fromInt value.id
+
+                        Nothing ->
+                            case entry.targetPerson of
+                                Just value ->
+                                    value.apId
+
+                                Nothing ->
+                                    case entry.targetInstance of
+                                        Just value ->
+                                            value.domain
+
+                                        Nothing ->
+                                            ""

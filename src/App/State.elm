@@ -6,7 +6,6 @@ import App.Feedback exposing (Flash(..))
 import App.Session exposing (AuthState(..))
 import Browser
 import Browser.Navigation as Navigation
-import Domain
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
 import Feature.Auth.State
@@ -28,6 +27,7 @@ import Feature.SiteAdmin.Update as SiteAdmin
 import Generated.I18n as Translations
 import Http
 import Json.Decode as Decode
+import Lemmy.Domain as Domain
 import Locale exposing (Locale(..))
 import Localization
 import Remote exposing (Remote)
@@ -43,14 +43,14 @@ type alias Model =
     , routeEpoch : Int
     , authGeneration : Int
     , auth : AuthState
-    , csrf : String
+    , site : Maybe Domain.SiteView
     , active : Maybe Active
     , requested : Locale
     , bootFailed : Bool
     , loading : Localization.State
     , drawerOpen : Bool
     , wideLayout : Bool
-    , drawerProfile : Remote Domain.Profile
+    , drawerProfile : Remote Domain.PersonView
     , dialog : Maybe ConfirmationAction
     , flash : Flash
     , formatted : Maybe Formatting
@@ -88,8 +88,9 @@ type Msg
     | RetryPage
     | CatalogResult Localization.Pending (Result Http.Error (Translations.I18n -> Translations.I18n))
     | Incoming Decode.Value
-    | SessionLoaded Int (Result Api.Problem Domain.Identity)
-    | DrawerProfileLoaded (Result Api.Problem Domain.Profile)
+    | SessionLoaded Int (Result Api.Problem Domain.MyUserInfo)
+    | SiteLoaded (Result Api.Problem Domain.SiteView)
+    | DrawerProfileLoaded (Result Api.Problem Domain.PersonView)
     | OpenDrawer
     | CloseDrawer
     | DrawerClosed

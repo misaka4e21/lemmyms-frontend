@@ -14,20 +14,17 @@ try {
 } catch {
   storage = null;
 }
-const verificationToken =
-  location.pathname === "/verify-email"
-    ? new URLSearchParams(location.hash.slice(1)).get("token") || ""
-    : "";
-if (verificationToken)
-  history.replaceState(null, "", location.pathname + location.search);
-const csrf = () =>
-  document.cookie
-    .split(";")
-    .map((v) => v.trim())
-    .find((v) => v.startsWith("__Host-commune_csrf="))
-    ?.split("=")
-    .slice(1)
-    .join("=") || "";
+let verificationToken = "";
+if (location.pathname.startsWith("/verify_email/")) {
+  verificationToken = decodeURIComponent(location.pathname.slice("/verify_email/".length));
+  history.replaceState(null, "", "/verify-email" + location.search);
+} else if (location.pathname === "/verify-email") {
+  verificationToken = new URLSearchParams(location.hash.slice(1)).get("token") || "";
+  if (verificationToken) history.replaceState(null, "", location.pathname + location.search);
+} else if (location.pathname.startsWith("/password_change/")) {
+  const token = decodeURIComponent(location.pathname.slice("/password_change/".length));
+  history.replaceState(null, "", "/reset-password/confirm#token=" + encodeURIComponent(token));
+}
 const formatTimes = () => {
   const locale = document.documentElement.lang || "en-US";
   for (const element of document.querySelectorAll("time[data-commune-time]")) {
@@ -42,7 +39,6 @@ const app = window.Elm.Main.init({
   flags: {
     languages: navigator.languages || ["en-US"],
     savedLocale: readPreference(storage),
-    csrf: csrf(),
     verificationToken,
     wideLayout: wideMedia.matches,
   },
@@ -108,9 +104,6 @@ app.ports.outgoing.subscribe((message) => {
           : "ltr";
       savePreference(storage, message.locale);
       formatTimes();
-      break;
-    case "csrf":
-      app.ports.incoming.send({ kind: "csrf", value: csrf() });
       break;
     case "format": {
       let numbers = [];

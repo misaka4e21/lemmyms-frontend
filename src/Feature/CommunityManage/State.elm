@@ -2,16 +2,16 @@ module Feature.CommunityManage.State exposing (..)
 
 import Api
 import Dict exposing (Dict)
-import Domain
+import Lemmy.Domain as Domain
 import Remote exposing (Remote(..))
 import Route
 import Set exposing (Set)
 
 
 type alias ManageState =
-    { community : Remote Domain.Community
-    , members : Remote (Domain.Page Domain.Roster)
-    , managers : Remote (Domain.Page Domain.Roster)
+    { community : Remote Domain.CommunityView
+    , members : Remote (Domain.Page Domain.CommunityModeratorView)
+    , managers : Remote (Domain.Page Domain.CommunityModeratorView)
     , memberOffset : Int
     , managerOffset : Int
     , actor : String
@@ -20,13 +20,13 @@ type alias ManageState =
     , readPolicy : String
     , postPolicy : String
     , followPolicy : String
-    , followRequests : Remote (Domain.Page Domain.FollowRequest)
+    , followRequests : Remote (Domain.Page Domain.PendingFollowView)
     , followRequestOffset : Int
-    , reports : Remote (Domain.Page Domain.Report)
+    , reports : Remote (Domain.Page Domain.ReportView)
     , reportOffset : Int
     , reportNotes : Dict String String
     , reportBusy : Set String
-    , modlog : Remote (Domain.Page Domain.ModerationLogEntry)
+    , modlog : Remote (Domain.Page Domain.ModlogView)
     , modlogOffset : Int
     , banActor : String
     , banReason : String

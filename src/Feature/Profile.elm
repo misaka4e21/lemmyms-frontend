@@ -4,7 +4,6 @@ import Api
 import App.Context exposing (Active)
 import App.Feedback exposing (Flash(..))
 import App.Session exposing (AuthState(..))
-import Domain
 import Feature.Authoring.State as AuthoringState
 import Feature.Authoring.Update as Authoring
 import Feature.Authoring.View as AuthoringView
@@ -15,6 +14,8 @@ import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Lemmy.Domain as Domain
+import Lemmy.Markdown as Markdown
 import Remote exposing (Remote(..))
 import Route
 import Ui.Feedback exposing (loginRequired, viewFormProblem, viewRemote)
@@ -45,12 +46,12 @@ emptyProfileForm =
     { displayName = "", authoring = AuthoringState.init "profile-bio" "", avatar = KeepAvatar, avatarUrl = "", uploading = False, saving = False, problem = Nothing }
 
 
-profileFormFrom : Domain.Profile -> ProfileForm
+profileFormFrom : Domain.PersonView -> ProfileForm
 profileFormFrom profile =
-    { displayName = profile.name
-    , authoring = AuthoringState.init "profile-bio" profile.biography
+    { displayName = Domain.displayNameOf profile.person
+    , authoring = AuthoringState.init "profile-bio" (Maybe.withDefault "" profile.person.bio)
     , avatar = KeepAvatar
-    , avatarUrl = profile.avatar
+    , avatarUrl = Domain.avatarOf profile.person
     , uploading = False
     , saving = False
     , problem = Nothing
@@ -58,7 +59,7 @@ profileFormFrom profile =
 
 
 type alias Model =
-    { publicProfile : Remote Domain.Profile, ownProfile : Remote Domain.Profile, profileForm : ProfileForm }
+    { publicProfile : Remote Domain.PersonView, ownProfile : Remote Domain.PersonView, profileForm : ProfileForm }
 
 
 initial : Model
@@ -87,7 +88,7 @@ type alias Outcome =
 
 
 type alias Working =
-    { publicProfile : Remote Domain.Profile, ownProfile : Remote Domain.Profile, profileForm : ProfileForm, flash : Flash, sessionProblem : Maybe Api.Problem }
+    { publicProfile : Remote Domain.PersonView, ownProfile : Remote Domain.PersonView, profileForm : ProfileForm, flash : Flash, sessionProblem : Maybe Api.Problem }
 
 
 update : String -> Msg -> Model -> ( Model, Cmd Msg, Outcome )
@@ -139,19 +140,19 @@ updateWorking csrf message model =
                             []
 
                         ClearAvatar ->
-                            [ ( "avatar_upload_id", Encode.null ) ]
+                            [ ( "avatar", Encode.null ) ]
 
                         ReplaceAvatar id ->
-                            [ ( "avatar_upload_id", Encode.string id ) ]
+                            [ ( "avatar", Encode.string model.profileForm.avatarUrl ) ]
             in
             ( { model | profileForm = (\form -> { form | saving = True, problem = Nothing }) model.profileForm }
             , Api.send csrf
-                "PATCH"
-                "/api/v1/profile"
+                "PUT"
+                "/account/settings/save"
                 (Encode.encode 0
                     (Encode.object
                         ([ ( "display_name", Encode.string model.profileForm.displayName )
-                         , ( "biography", Encode.string (AuthoringState.value model.profileForm.authoring) )
+                         , ( "bio", Encode.string (AuthoringState.value model.profileForm.authoring) )
                          ]
                             ++ avatar
                         )
@@ -173,29 +174,25 @@ updateWorking csrf message model =
         ActionDone action response ->
             case action of
                 ProfileSaveAction ->
-                    case Api.decodeResponse Domain.profile response of
-                        Ok profile ->
-                            ( { model
-                                | ownProfile = Ready profile
-                                , profileForm = profileFormFrom profile
-                                , flash = FlashSaved
-                              }
-                            , Cmd.none
+                    case Api.decodeUnit response of
+                        Ok () ->
+                            ( { model | profileForm = (\form -> { form | saving = False, problem = Nothing }) model.profileForm, flash = FlashSaved }
+                            , Api.get "/account" OwnLoaded
                             )
 
                         Err problem ->
                             ( { model | profileForm = (\form -> { form | saving = False, problem = Just problem }) model.profileForm }, Cmd.none )
 
                 UploadAvatarAction ->
-                    case Api.decodeResponse Domain.media response of
+                    case Api.decodeResponse Domain.imageUpload response of
                         Ok uploaded ->
                             ( { model
                                 | profileForm =
                                     (\form ->
                                         { form
                                             | uploading = False
-                                            , avatar = ReplaceAvatar uploaded.id
-                                            , avatarUrl = uploaded.preview
+                                            , avatar = ReplaceAvatar uploaded.filename
+                                            , avatarUrl = uploaded.imageUrl
                                         }
                                     )
                                         model.profileForm
@@ -208,7 +205,7 @@ updateWorking csrf message model =
                             ( { model | profileForm = (\form -> { form | uploading = False, problem = Just problem }) model.profileForm }, Cmd.none )
 
         PublicLoaded response ->
-            case Api.decodeResponse Domain.profile response of
+            case Api.decodeResponse (Decode.field "person_view" Domain.personView) response of
                 Ok profile ->
                     ( { model | publicProfile = Ready profile }, Cmd.none )
 
@@ -226,7 +223,7 @@ updateWorking csrf message model =
                     )
 
         OwnLoaded response ->
-            case Api.decodeResponse Domain.profile response of
+            case Api.decodeResponse Domain.ownPersonView response of
                 Ok profile ->
                     ( { model | ownProfile = Ready profile, profileForm = profileFormFrom profile }, Cmd.none )
 
@@ -256,8 +253,8 @@ type alias Config msg =
 
 
 type alias ViewModel =
-    { publicProfile : Remote Domain.Profile
-    , ownProfile : Remote Domain.Profile
+    { publicProfile : Remote Domain.PersonView
+    , ownProfile : Remote Domain.PersonView
     , profileForm : ProfileForm
     , auth : AuthState
     }
@@ -277,7 +274,7 @@ pagePublicProfile config model active username =
                             button
                                 [ A.type_ "button"
                                 , A.class "outlined-button"
-                                , Events.onClick (config.reportPerson profile.actor)
+                                , Events.onClick (config.reportPerson profile.person.apId)
                                 ]
                                 [ text (Translations.reportPerson active.texts) ]
 
@@ -288,25 +285,25 @@ pagePublicProfile config model active username =
         )
 
 
-profileCard : Active -> Domain.Profile -> Html msg
+profileCard : Active -> Domain.PersonView -> Html msg
 profileCard active profile =
+    let
+        displayName =
+            Domain.displayNameOf profile.person
+
+        avatar =
+            Domain.avatarOf profile.person
+    in
     section [ A.class "card profile-card" ]
-        [ if String.isEmpty profile.avatar then
+        [ if String.isEmpty avatar then
             text ""
 
           else
-            img [ A.src profile.avatar, A.alt profile.name, A.class "avatar", A.attribute "referrerpolicy" "no-referrer" ] []
+            img [ A.src avatar, A.alt displayName, A.class "avatar", A.attribute "referrerpolicy" "no-referrer" ] []
         , h2 []
-            [ text
-                (if String.isEmpty profile.name then
-                    profile.username
-
-                 else
-                    profile.name
-                )
-            ]
-        , p [ A.class "metadata" ] [ bdi [] [ text profile.actor ] ]
-        , Ui.Rich.view profile.html
+            [ text displayName ]
+        , p [ A.class "metadata" ] [ bdi [] [ text profile.person.apId ] ]
+        , Markdown.render (Maybe.withDefault "" profile.person.bio)
         , p [ A.class "muted" ] [ text (Translations.publicProfileNote active.texts) ]
         ]
 
@@ -374,10 +371,10 @@ clearPrivate model =
 loadPublic : String -> Model -> ( Model, Cmd Msg )
 loadPublic username model =
     ( { model | publicProfile = Loading }
-    , Api.get ("/api/v1/profiles/" ++ Url.percentEncode username) PublicLoaded
+    , Api.get ("/person?username=" ++ Url.percentEncode username) PublicLoaded
     )
 
 
 loadOwn : Model -> ( Model, Cmd Msg )
 loadOwn model =
-    ( { model | ownProfile = Loading }, Api.get "/api/v1/profile" OwnLoaded )
+    ( { model | ownProfile = Loading }, Api.get "/account" OwnLoaded )

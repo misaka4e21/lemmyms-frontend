@@ -38,3 +38,7 @@ The v4 API has no endpoint for a community member roster, submission review, rem
 - Deployment: `vite.config.js`, `deploy/nginx.conf`, and browser tests move from `/api/v1` to `/api/v4`, with Pictrs and media routed on the same origin.
 - Dependencies: add an Elm Markdown parser/renderer compatible with Elm 0.19.1; keep `hecrj/html-parser` for sanitized allowlist rendering of any embedded HTML.
 - Tests and docs: domain decoders, route tests, browser tests, the real-backend acceptance fixture, `docs/backend-integration.md`, `docs/architecture.md`, and the forum-application/site-administration specs change with the new contract.
+
+## Backend-dependent follow-ups
+
+The v4 API has no endpoint for a community member roster, submission review, removal queue, context backfill, or person reporting. These controls are removed from this migration instead of being simulated. A future change can restore them when `LemmyMultisite` exposes stable contracts.

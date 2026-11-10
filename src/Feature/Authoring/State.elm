@@ -1,6 +1,6 @@
 module Feature.Authoring.State exposing (..)
 
-import Domain
+import Lemmy.Domain as Domain
 import List
 
 
@@ -25,7 +25,7 @@ type MentionStatus
     | Typing
     | Pending
     | Loading
-    | Ready (List Domain.MentionCandidate)
+    | Ready (List Domain.PersonView)
     | Empty
     | Unavailable
 
@@ -122,7 +122,7 @@ isOpen model =
             False
 
 
-candidates : Model -> List Domain.MentionCandidate
+candidates : Model -> List Domain.PersonView
 candidates model =
     case model.status of
         Ready items ->
@@ -132,7 +132,7 @@ candidates model =
             []
 
 
-activeCandidate : Model -> Maybe Domain.MentionCandidate
+activeCandidate : Model -> Maybe Domain.PersonView
 activeCandidate model =
     candidates model
         |> List.drop model.activeIndex
@@ -319,7 +319,7 @@ applyReplacement replacement model =
     }
 
 
-candidateReplacement : Domain.MentionCandidate -> Model -> Maybe Replacement
+candidateReplacement : Domain.PersonView -> Model -> Maybe Replacement
 candidateReplacement candidate model =
     let
         token =
@@ -332,13 +332,13 @@ candidateReplacement candidate model =
     in
     case token of
         Just currentToken ->
-            if String.isEmpty candidate.acct then
+            if String.isEmpty (Domain.acctOf candidate.person) then
                 Nothing
 
             else
                 let
                     text =
-                        "@" ++ candidate.acct ++ " "
+                        "@" ++ Domain.acctOf candidate.person ++ " "
                 in
                 Just
                     { start = currentToken.start

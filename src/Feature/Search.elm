@@ -2,12 +2,12 @@ module Feature.Search exposing (Config, Model, Msg(..), Outcome, SearchResult(..
 
 import Api
 import App.Context exposing (Active)
-import Domain
 import Generated.I18n as Translations
 import Html exposing (Html, button, div, form, input, label, option, p, section, select, text)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
+import Lemmy.Domain as Domain
 import List
 import Remote exposing (Remote(..))
 import Route
@@ -20,8 +20,8 @@ import Url.Builder as Builder
 
 
 type SearchResult
-    = PostSearch (Domain.Page Domain.Post)
-    | CommunitySearch (Domain.Page Domain.Community)
+    = PostSearch (Domain.Page Domain.PostView)
+    | CommunitySearch (Domain.Page Domain.CommunityView)
 
 
 type alias SearchState =
@@ -81,17 +81,17 @@ update message model =
                 keep model (Just ("/search" ++ Builder.toQuery [ Builder.string "kind" model.search.kind, Builder.string "q" query ])) Nothing
 
         Loaded kind response ->
-            let
-                decoder =
-                    if kind == "communities" then
-                        Decode.map CommunitySearch (Domain.page Domain.community)
-
-                    else
-                        Decode.map PostSearch (Domain.page Domain.post)
-            in
-            case Api.decodeResponse decoder response of
+            case Api.decodeResponse Domain.searchResponse response of
                 Ok results ->
-                    keep { search = (\search -> { search | results = Ready results }) model.search } Nothing Nothing
+                    let
+                        page =
+                            if kind == "communities" then
+                                CommunitySearch { items = results.communities, nextPage = results.nextPage, prevPage = results.prevPage }
+
+                            else
+                                PostSearch { items = results.posts, nextPage = results.nextPage, prevPage = results.prevPage }
+                    in
+                    keep { search = (\search -> { search | results = Ready page }) model.search } Nothing Nothing
 
                 Err problem ->
                     keep { search = (\search -> { search | results = Failed problem }) model.search }
@@ -135,7 +135,23 @@ load url =
         Cmd.none
 
       else
-        Api.get ("/api/v1/search" ++ Builder.toQuery [ Builder.string "kind" kind, Builder.string "q" query, Builder.int "offset" (Route.offset url) ]) (Loaded kind)
+        Api.get
+            ("/search"
+                ++ Builder.toQuery
+                    ([ Builder.string "type_" kind
+                     , Builder.string "search_term" query
+                     , Builder.string "limit" "20"
+                     ]
+                        ++ (case Route.cursor url of
+                                Just cursor ->
+                                    [ Builder.string "page_cursor" cursor ]
+
+                                Nothing ->
+                                    []
+                           )
+                    )
+            )
+            (Loaded kind)
     )
 
 
@@ -144,7 +160,7 @@ type alias Config msg =
     , searchKindChanged : String -> msg
     , searchQueryChanged : String -> msg
     , searchSubmitted : msg
-    , postCard : Domain.Post -> Html msg
+    , postCard : Domain.PostView -> Html msg
     }
 
 
@@ -186,7 +202,7 @@ pageSearch config model active =
                             else
                                 div [ A.class "stack" ]
                                     [ div [ A.class "stack" ] (List.map config.postCard page.items)
-                                    , viewPagination active.texts model.url page.offset page.limit (List.length page.items)
+                                    , viewPagination active.texts model.url page.prevPage page.nextPage
                                     ]
 
                         CommunitySearch page ->
@@ -196,7 +212,7 @@ pageSearch config model active =
                             else
                                 div [ A.class "stack" ]
                                     [ div [ A.class "stack" ] (List.map (communityCard active.texts) page.items)
-                                    , viewPagination active.texts model.url page.offset page.limit (List.length page.items)
+                                    , viewPagination active.texts model.url page.prevPage page.nextPage
                                     ]
                 )
             ]

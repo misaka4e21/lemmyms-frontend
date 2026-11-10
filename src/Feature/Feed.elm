@@ -2,10 +2,10 @@ module Feature.Feed exposing (Config, Model, Msg(..), initial, load, pageLatest,
 
 import Api
 import App.Context exposing (Active)
-import Domain
 import Generated.I18n as Translations
 import Html exposing (Html, div)
 import Html.Attributes as A
+import Lemmy.Domain as Domain
 import List
 import Remote exposing (Remote(..))
 import Route
@@ -16,7 +16,7 @@ import Url exposing (Url)
 
 
 type alias Model =
-    { topics : Remote (Domain.Page Domain.Post)
+    { topics : Remote (Domain.Page Domain.PostView)
     }
 
 
@@ -42,7 +42,7 @@ update : Msg -> Model -> ( Model, Maybe Api.Problem )
 update message model =
     case message of
         Loaded response ->
-            case Api.decodeResponse (Domain.page Domain.post) response of
+            case Api.decodeResponse (Domain.page Domain.postView) response of
                 Ok page ->
                     ( { topics = Ready page }, Nothing )
 
@@ -52,17 +52,29 @@ update message model =
 
 load : Url -> ( Model, Cmd Msg )
 load url =
-    ( { topics = Loading }, Api.get ("/api/v1/topics?limit=20&offset=" ++ String.fromInt (Route.offset url)) Loaded )
+    ( { topics = Loading }
+    , Api.get ("/post/list?type=local&sort=active&limit=20" ++ cursorQuery url) Loaded
+    )
+
+
+cursorQuery : Url -> String
+cursorQuery url =
+    case Route.cursor url of
+        Just cursor ->
+            "&page_cursor=" ++ Url.percentEncode cursor
+
+        Nothing ->
+            ""
 
 
 type alias Config msg =
     { retry : msg
-    , postCard : Domain.Post -> Html msg
+    , postCard : Domain.PostView -> Html msg
     }
 
 
 type alias ViewModel =
-    { topics : Remote (Domain.Page Domain.Post)
+    { topics : Remote (Domain.Page Domain.PostView)
     , url : Url
     }
 
@@ -80,7 +92,7 @@ pageLatest config model active =
                 else
                     div [ A.class "stack" ]
                         [ div [ A.class "stack" ] (List.map config.postCard page.items)
-                        , viewPagination active.texts model.url page.offset page.limit (List.length page.items)
+                        , viewPagination active.texts model.url page.prevPage page.nextPage
                         ]
             )
         )

@@ -3,13 +3,13 @@ module Feature.CommunityManage.View exposing (Config, pageManage)
 import App.Context exposing (Active)
 import App.Session exposing (AuthState(..))
 import Dict
-import Domain
 import Feature.CommunityManage.State exposing (..)
 import Generated.I18n as Translations
 import Html exposing (Html, a, bdi, button, div, form, h2, input, label, li, option, p, section, select, span, text, textarea, ul)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode
+import Lemmy.Domain as Domain
 import List
 import Remote exposing (Remote(..))
 import Route
@@ -67,7 +67,7 @@ pageManage config model active communityIdValue =
                     [ viewRemote config.retry active.texts manage.community (communitySection active)
                     , case model.auth of
                         Authenticated identity ->
-                            if identity.siteAdmin || identity.deploymentAdmin then
+                            if Domain.isAdmin identity then
                                 a [ A.class "outlined-button", A.href (Route.path Route.AdminOverview) ]
                                     [ text (Translations.adminTitle active.texts) ]
 
@@ -94,20 +94,27 @@ pageManage config model active communityIdValue =
         )
 
 
-communitySection : Active -> Domain.Community -> Html msg
+communitySection : Active -> Domain.CommunityView -> Html msg
 communitySection active community =
     section [ A.class "card" ]
-        [ h2 [] [ text community.title ]
+        [ h2 [] [ text (Maybe.withDefault community.community.name community.community.title) ]
         , p [ A.class "metadata" ]
             [ text
                 (Translations.policySummary
-                    { read = policyLabel active.texts community.readPolicy
-                    , post = policyLabel active.texts community.postPolicy
+                    { read = policyLabel active.texts (visibilityText community.community.visibility)
+                    , post =
+                        policyLabel active.texts
+                            (if community.community.postingRestrictedToMods then
+                                "managers"
+
+                             else
+                                "eligible_users"
+                            )
                     }
                     active.texts
                 )
             ]
-        , p [ A.class "chips" ] [ span [ A.class "chip" ] [ text (modeLabel active.texts community.mode) ] ]
+        , p [ A.class "chips" ] [ span [ A.class "chip" ] [ text (modeLabel active.texts (visibilityText community.community.visibility)) ] ]
         ]
 
 
@@ -135,26 +142,17 @@ managePolicy config active manage =
 manageRosters : Config msg -> Active -> ManageState -> Html msg
 manageRosters config active manage =
     let
-        canMembers =
-            canManageMembers manage
-
         canManagers =
             canManageManagers manage
     in
     section [ A.class "stack" ]
-        [ if canMembers || canManagers then
+        [ if canManagers then
             div [ A.class "card form-stack" ]
                 [ label [ A.for "manage-actor" ] [ text (Translations.actorUri active.texts) ]
                 , input [ A.id "manage-actor", A.type_ "text", A.value manage.actor, Events.onInput config.manageActorChanged ]
                     []
                 , div [ A.class "actions" ]
-                    [ if canMembers then
-                        button [ A.type_ "button", A.class "outlined-button", Events.onClick config.manageAddMember ]
-                            [ text (Translations.addMember active.texts) ]
-
-                      else
-                        text ""
-                    , if canManagers then
+                    [ if canManagers then
                         button [ A.type_ "button", A.class "outlined-button", Events.onClick config.manageAddManager ]
                             [ text (Translations.addManager active.texts) ]
 
@@ -165,7 +163,6 @@ manageRosters config active manage =
 
           else
             text ""
-        , rosterPanel config active (Translations.memberRoster active.texts) manage.members True canMembers manage.memberOffset config.managePreviousMembers config.manageNextMembers
         , rosterPanel config active (Translations.managerRoster active.texts) manage.managers False canManagers manage.managerOffset config.managePreviousManagers config.manageNextManagers
         ]
 
@@ -174,7 +171,7 @@ rosterPanel :
     Config msg
     -> Active
     -> String
-    -> Remote (Domain.Page Domain.Roster)
+    -> Remote (Domain.Page Domain.CommunityModeratorView)
     -> Bool
     -> Bool
     -> Int
@@ -196,23 +193,18 @@ rosterPanel config active title remote members canRemove offset onPrevious onNex
                         (List.map
                             (\entry ->
                                 li []
-                                    [ bdi [] [ text entry.actor ]
+                                    [ bdi [] [ text entry.moderator.apId ]
                                     , span [ A.class "chips" ]
-                                        [ if entry.creator then
-                                            span [ A.class "chip" ] [ text (Translations.createCommunity active.texts) ]
-
-                                          else
-                                            text ""
-                                        , if canRemove && not entry.creator then
+                                        [ if canRemove then
                                             button
                                                 [ A.type_ "button"
                                                 , A.class "text-button danger-text"
                                                 , Events.onClick
                                                     (if members then
-                                                        config.manageRemoveMember entry.actor
+                                                        config.manageRemoveMember entry.moderator.apId
 
                                                      else
-                                                        config.manageRemoveManager entry.actor
+                                                        config.manageRemoveManager entry.moderator.apId
                                                     )
                                                 ]
                                                 [ text
@@ -237,7 +229,7 @@ rosterPanel config active title remote members canRemove offset onPrevious onNex
                                     , div [ A.class "pagination" ]
                                         [ button [ A.type_ "button", A.class "outlined-button", A.disabled (offset <= 0), Events.onClick onPrevious ]
                                             [ text (Translations.previousPage active.texts) ]
-                                        , if List.length page.items >= page.limit then
+                                        , if page.nextPage /= Nothing then
                                             button [ A.type_ "button", A.class "outlined-button", Events.onClick onNext ]
                                                 [ text (Translations.nextPage active.texts) ]
 
@@ -271,18 +263,18 @@ manageFollowRequests config active manage =
                                 (List.map
                                     (\request ->
                                         li []
-                                            [ bdi [] [ text request.actor ]
+                                            [ bdi [] [ text request.person.apId ]
                                             , span [ A.class "actions" ]
                                                 [ button
                                                     [ A.type_ "button"
                                                     , A.class "text-button"
-                                                    , Events.onClick (config.manageFollowDecision request.actor "accepted")
+                                                    , Events.onClick (config.manageFollowDecision request.person.apId "accepted")
                                                     ]
                                                     [ text (Translations.accept active.texts) ]
                                                 , button
                                                     [ A.type_ "button"
                                                     , A.class "text-button danger-text"
-                                                    , Events.onClick (config.manageFollowDecision request.actor "rejected")
+                                                    , Events.onClick (config.manageFollowDecision request.person.apId "rejected")
                                                     ]
                                                     [ text (Translations.reject active.texts) ]
                                                 ]
@@ -318,38 +310,38 @@ manageReports config active manage =
                                     (\report ->
                                         li []
                                             [ p [ A.class "chips" ]
-                                                [ span [ A.class "chip" ] [ text report.targetKind ]
-                                                , span [ A.class "chip" ] [ text report.state ]
+                                                [ span [ A.class "chip" ] [ text (reportTargetKind report) ]
+                                                , span [ A.class "chip" ] [ text (reportState report) ]
                                                 ]
-                                            , p [ A.dir "auto" ] [ text report.reason ]
-                                            , if report.state == "open" then
+                                            , p [ A.dir "auto" ] [ text (reportReason report) ]
+                                            , if reportState report == "open" then
                                                 div [ A.class "form-stack" ]
-                                                    [ label [ A.for ("community-report-note-" ++ report.id) ] [ text (Translations.resolutionNote active.texts) ]
+                                                    [ label [ A.for ("community-report-note-" ++ reportId report) ] [ text (Translations.resolutionNote active.texts) ]
                                                     , textarea
-                                                        [ A.id ("community-report-note-" ++ report.id)
-                                                        , A.value (Dict.get report.id manage.reportNotes |> Maybe.withDefault "")
-                                                        , Events.onInput (config.manageReportNoteChanged report.id)
+                                                        [ A.id ("community-report-note-" ++ reportId report)
+                                                        , A.value (Dict.get (reportId report) manage.reportNotes |> Maybe.withDefault "")
+                                                        , Events.onInput (config.manageReportNoteChanged (reportId report))
                                                         ]
                                                         []
                                                     , div [ A.class "actions" ]
                                                         [ button
-                                                            [ A.id ("resolve-report-" ++ report.id)
+                                                            [ A.id ("resolve-report-" ++ reportId report)
                                                             , A.type_ "button"
                                                             , A.class "filled-button"
-                                                            , Events.onClick (config.manageConfirmResolveReport report.id "resolved")
+                                                            , Events.onClick (config.manageConfirmResolveReport (reportId report) "resolved")
                                                             ]
                                                             [ text (Translations.resolveReport active.texts) ]
                                                         , button
                                                             [ A.type_ "button"
                                                             , A.class "outlined-button danger-text"
-                                                            , Events.onClick (config.manageConfirmResolveReport report.id "rejected")
+                                                            , Events.onClick (config.manageConfirmResolveReport (reportId report) "rejected")
                                                             ]
                                                             [ text (Translations.rejectReport active.texts) ]
                                                         ]
                                                     ]
 
                                               else
-                                                p [ A.class "muted" ] [ text report.resolutionNote ]
+                                                p [ A.class "muted" ] [ text (reportResolution report) ]
                                             ]
                                     )
                                     page.items
@@ -382,15 +374,15 @@ manageModlog config active manage =
                                     (\entry ->
                                         li []
                                             [ p [ A.class "chips" ]
-                                                [ span [ A.class "chip" ] [ text entry.action ]
+                                                [ span [ A.class "chip" ] [ text entry.modlog.kind ]
                                                 ]
-                                            , p [ A.class "metadata" ] [ bdi [] [ text entry.actorActorUri ] ]
-                                            , p [ A.class "metadata" ] [ text (entry.targetKind ++ ": " ++ entry.targetId) ]
-                                            , if String.isEmpty entry.reason then
+                                            , p [ A.class "metadata" ] [ bdi [] [ text (Maybe.withDefault "" (Maybe.map .apId entry.moderator)) ] ]
+                                            , p [ A.class "metadata" ] [ text (modlogTarget entry) ]
+                                            , if String.isEmpty (Maybe.withDefault "" entry.modlog.reason) then
                                                 text ""
 
                                               else
-                                                p [ A.dir "auto" ] [ text entry.reason ]
+                                                p [ A.dir "auto" ] [ text (Maybe.withDefault "" entry.modlog.reason) ]
                                             ]
                                     )
                                     page.items
@@ -404,9 +396,9 @@ manageModlog config active manage =
 pager : Active -> Domain.Page a -> Int -> msg -> msg -> Html msg
 pager active page offset onPrevious onNext =
     div [ A.class "pagination" ]
-        [ button [ A.type_ "button", A.class "outlined-button", A.disabled (offset <= 0), Events.onClick onPrevious ]
+        [ button [ A.type_ "button", A.class "outlined-button", A.disabled (page.prevPage == Nothing), Events.onClick onPrevious ]
             [ text (Translations.previousPage active.texts) ]
-        , if List.length page.items >= page.limit then
+        , if page.nextPage /= Nothing then
             button [ A.type_ "button", A.class "outlined-button", Events.onClick onNext ]
                 [ text (Translations.nextPage active.texts) ]
 
@@ -468,22 +460,6 @@ managePostActions config model active manage =
     let
         moderate =
             canManageCommunity manage
-
-        siteAdmin =
-            case model.auth of
-                Authenticated identity ->
-                    identity.siteAdmin || identity.deploymentAdmin
-
-                _ ->
-                    False
-
-        canBackfill =
-            case manage.community of
-                Ready community ->
-                    community.canPost
-
-                _ ->
-                    False
     in
     section [ A.class "card form-stack" ]
         [ h2 [] [ text (Translations.postId active.texts) ]
@@ -500,37 +476,7 @@ managePostActions config model active manage =
 
               else
                 text ""
-            , if siteAdmin then
-                managePostButton config active "hide" HideSitePost manage.postId
-
-              else
-                text ""
-            , if siteAdmin then
-                managePostButton config active "unhide" UnhideSitePost manage.postId
-
-              else
-                text ""
-            , managePostButton config active "import" ImportSitePost manage.postId
-            , if moderate then
-                managePostButton config active "accept" AcceptSubmission manage.postId
-
-              else
-                text ""
-            , if moderate then
-                managePostButton config active "reject" RejectSubmission manage.postId
-
-              else
-                text ""
             ]
-        , if canBackfill then
-            div [ A.class "form-stack" ]
-                [ label [ A.for "manage-context-id" ] [ text (Translations.contextId active.texts) ]
-                , input [ A.id "manage-context-id", A.type_ "text", A.value manage.contextId, Events.onInput config.manageContextChanged ] []
-                , managePostButton config active "backfill" BackfillDiscussion manage.contextId
-                ]
-
-          else
-            text ""
         , viewFormProblem active.texts manage.problem
         ]
 
@@ -578,7 +524,7 @@ canManageCommunity : ManageState -> Bool
 canManageCommunity manage =
     case manage.community of
         Ready community ->
-            community.canManage
+            community.canMod
 
         _ ->
             False
@@ -588,7 +534,7 @@ canManageMembers : ManageState -> Bool
 canManageMembers manage =
     case manage.community of
         Ready community ->
-            community.canMembers
+            community.canMod
 
         _ ->
             False
@@ -598,7 +544,147 @@ canManageManagers : ManageState -> Bool
 canManageManagers manage =
     case manage.community of
         Ready community ->
-            community.canManagers
+            community.canMod
 
         _ ->
             False
+
+
+visibilityText : Domain.CommunityVisibility -> String
+visibilityText visibility =
+    case visibility of
+        Domain.PublicCommunity ->
+            "public"
+
+        Domain.UnlistedCommunity ->
+            "unlisted"
+
+        Domain.LocalOnlyPublicCommunity ->
+            "local_only_public"
+
+        Domain.LocalOnlyPrivateCommunity ->
+            "local_only_private"
+
+        Domain.PrivateCommunity ->
+            "private"
+
+        Domain.UnknownVisibility value ->
+            value
+
+
+modlogTarget : Domain.ModlogView -> String
+modlogTarget entry =
+    case entry.targetPost of
+        Just postValue ->
+            "post: " ++ String.fromInt postValue.id
+
+        Nothing ->
+            case entry.targetComment of
+                Just commentValue ->
+                    "comment: " ++ String.fromInt commentValue.id
+
+                Nothing ->
+                    case entry.targetCommunity of
+                        Just communityValue ->
+                            "community: " ++ String.fromInt communityValue.id
+
+                        Nothing ->
+                            case entry.targetPerson of
+                                Just personValue ->
+                                    "person: " ++ personValue.apId
+
+                                Nothing ->
+                                    case entry.targetInstance of
+                                        Just instanceValue ->
+                                            "instance: " ++ instanceValue.domain
+
+                                        Nothing ->
+                                            ""
+
+
+reportId : Domain.ReportView -> String
+reportId reportValue =
+    String.fromInt
+        (case reportValue of
+            Domain.PostReportView report _ _ _ _ ->
+                report.id
+
+            Domain.CommentReportView report _ _ _ _ _ ->
+                report.id
+
+            Domain.CommunityReportView report _ _ _ ->
+                report.id
+
+            Domain.PrivateMessageReportView id _ _ _ _ _ _ ->
+                id
+        )
+
+
+reportState : Domain.ReportView -> String
+reportState reportValue =
+    if
+        case reportValue of
+            Domain.PostReportView report _ _ _ _ ->
+                report.resolved
+
+            Domain.CommentReportView report _ _ _ _ _ ->
+                report.resolved
+
+            Domain.CommunityReportView report _ _ _ ->
+                report.resolved
+
+            Domain.PrivateMessageReportView _ _ resolved _ _ _ _ ->
+                resolved
+    then
+        "resolved"
+
+    else
+        "open"
+
+
+reportReason : Domain.ReportView -> String
+reportReason reportValue =
+    case reportValue of
+        Domain.PostReportView report _ _ _ _ ->
+            report.reason
+
+        Domain.CommentReportView report _ _ _ _ _ ->
+            report.reason
+
+        Domain.CommunityReportView report _ _ _ ->
+            report.reason
+
+        Domain.PrivateMessageReportView _ reason _ _ _ _ _ ->
+            reason
+
+
+reportTargetKind : Domain.ReportView -> String
+reportTargetKind reportValue =
+    case reportValue of
+        Domain.PostReportView _ _ _ _ _ ->
+            "post"
+
+        Domain.CommentReportView _ _ _ _ _ _ ->
+            "comment"
+
+        Domain.CommunityReportView _ _ _ _ ->
+            "community"
+
+        Domain.PrivateMessageReportView _ _ _ _ _ _ _ ->
+            "message"
+
+
+reportResolution : Domain.ReportView -> String
+reportResolution reportValue =
+    case reportValue of
+        Domain.PostReportView report _ _ _ _ ->
+            Maybe.withDefault "" report.conclusion
+
+        Domain.CommentReportView report _ _ _ _ _ ->
+            Maybe.withDefault "" report.conclusion
+
+        Domain.CommunityReportView report _ _ _ ->
+            Maybe.withDefault "" report.conclusion
+
+        Domain.PrivateMessageReportView _ _ _ conclusion _ _ _ ->
+            Maybe.withDefault "" conclusion

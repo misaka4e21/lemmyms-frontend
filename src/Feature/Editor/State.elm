@@ -1,8 +1,8 @@
 module Feature.Editor.State exposing (..)
 
 import Api
-import Domain
 import Feature.Authoring.State as Authoring
+import Lemmy.Domain as Domain
 import Remote exposing (Remote(..))
 
 
@@ -26,7 +26,7 @@ type alias EditorState =
     , uploading : Bool
     , saving : Bool
     , problem : Maybe Api.Problem
-    , conflict : Maybe Domain.Source
+    , conflict : Maybe Domain.PostView
     }
 
 
@@ -50,13 +50,13 @@ body editor =
     Authoring.value editor.authoring
 
 
-sourceAttachments : Domain.Source -> List EditorAttachment
-sourceAttachments source =
-    List.map (\id -> { id = id, name = id, reference = "/api/v1/media/" ++ id }) source.attachments
+sourceAttachments : Domain.PostView -> List EditorAttachment
+sourceAttachments _ =
+    []
 
 
 type alias Model =
-    { editor : Maybe EditorState, source : Remote Domain.Source }
+    { editor : Maybe EditorState, source : Remote Domain.PostView }
 
 
 initial : Model

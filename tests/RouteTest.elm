@@ -1,6 +1,6 @@
 module RouteTest exposing (suite)
 
-import Domain
+import AccountSource exposing (AccountContentSource(..))
 import Expect
 import Route
 import Test exposing (Test, describe, test)
@@ -46,10 +46,10 @@ suite =
         , test "parses account, password, and administration routes" <|
             \_ ->
                 Expect.equal
-                    [ Route.AccountContent Domain.SavedContent
-                    , Route.AccountContent Domain.ReadContent
-                    , Route.AccountContent Domain.HiddenContent
-                    , Route.AccountContent Domain.LikedContent
+                    [ Route.AccountContent SavedContent
+                    , Route.AccountContent ReadContent
+                    , Route.AccountContent HiddenContent
+                    , Route.AccountContent LikedContent
                     , Route.AccountBlocks
                     , Route.PasswordReset
                     , Route.PasswordResetConfirm
@@ -80,10 +80,10 @@ suite =
             \_ ->
                 let
                     routes =
-                        [ Route.AccountContent Domain.SavedContent
-                        , Route.AccountContent Domain.ReadContent
-                        , Route.AccountContent Domain.HiddenContent
-                        , Route.AccountContent Domain.LikedContent
+                        [ Route.AccountContent SavedContent
+                        , Route.AccountContent ReadContent
+                        , Route.AccountContent HiddenContent
+                        , Route.AccountContent LikedContent
                         , Route.AccountBlocks
                         , Route.PasswordReset
                         , Route.PasswordResetConfirm

@@ -1,6 +1,7 @@
 module Lemmy.Domain exposing (..)
 
 import Json.Decode as D exposing (Decoder)
+import Lemmy.CommentTree as CommentTree
 
 
 type alias Id =
@@ -229,6 +230,14 @@ type alias CommunityFollowerView =
 
 type alias CommunityModeratorView =
     { community : Community, moderator : Person }
+
+
+type alias PendingFollowView =
+    { person : Person
+    , community : Community
+    , isNewInstance : Bool
+    , followState : Maybe FollowState
+    }
 
 
 type alias Post =
@@ -768,6 +777,20 @@ personView =
         |> and (maybeField "ban_expires_at" D.string)
 
 
+ownPersonView : Decoder PersonView
+ownPersonView =
+    myUserInfo
+        |> D.map
+            (\user ->
+                { person = user.localUserView.person
+                , isAdmin = user.localUserView.localUser.admin
+                , personActions = Nothing
+                , banned = user.localUserView.banned
+                , banExpiresAt = user.localUserView.banExpiresAt
+                }
+            )
+
+
 community : Decoder Community
 community =
     D.succeed Community
@@ -836,6 +859,15 @@ communityModeratorView =
     D.map2 CommunityModeratorView
         (D.field "community" community)
         (D.field "moderator" person)
+
+
+pendingFollow : Decoder PendingFollowView
+pendingFollow =
+    D.map4 PendingFollowView
+        (D.field "person" person)
+        (D.field "community" community)
+        (defaultField "is_new_instance" False D.bool)
+        (maybeField "follow_state" followState)
 
 
 post : Decoder Post
@@ -940,6 +972,23 @@ commentView =
         |> and (maybeField "comment_actions" commentActions)
         |> and (defaultField "creator_is_admin" False D.bool)
         |> and (defaultField "can_mod" False D.bool)
+
+
+threadedPage : Decoder (Page (CommentTree.Threaded CommentView))
+threadedPage =
+    page commentView
+        |> D.map
+            (\pageValue ->
+                { items =
+                    CommentTree.build
+                        (\view -> view.comment.id)
+                        (\view -> view.comment.path)
+                        (\view -> view.comment.childCount)
+                        pageValue.items
+                , nextPage = pageValue.nextPage
+                , prevPage = pageValue.prevPage
+                }
+            )
 
 
 localUser : Decoder LocalUser
@@ -1217,3 +1266,43 @@ imageUpload =
     D.map2 ImageUpload
         (D.field "image_url" D.string)
         (D.field "filename" D.string)
+
+
+acctOf : Person -> String
+acctOf value =
+    value.name ++ "@" ++ hostOf value.apId
+
+
+displayNameOf : Person -> String
+displayNameOf value =
+    Maybe.withDefault value.name value.displayName
+
+
+avatarOf : Person -> String
+avatarOf value =
+    Maybe.withDefault "" value.avatar
+
+
+personName : MyUserInfo -> String
+personName user =
+    user.localUserView.person.name
+
+
+personApId : MyUserInfo -> String
+personApId user =
+    user.localUserView.person.apId
+
+
+isAdmin : MyUserInfo -> Bool
+isAdmin user =
+    user.localUserView.localUser.admin
+
+
+hostOf : String -> String
+hostOf value =
+    value
+        |> String.split "/"
+        |> List.filter (not << String.isEmpty)
+        |> List.drop 1
+        |> List.head
+        |> Maybe.withDefault value

@@ -1,9 +1,9 @@
 module AuthoringTest exposing (suite)
 
-import Domain
 import Expect
 import Feature.Authoring.State as Authoring
 import Feature.Authoring.Update as Update
+import Lemmy.Domain as Domain
 import Test exposing (Test, describe, test)
 
 
@@ -50,10 +50,27 @@ suite =
                             |> Authoring.setSelection 9 9
 
                     candidate =
-                        { actor = "https://forum.test/users/alice"
-                        , acct = "alice@forum.test"
-                        , displayName = "Alice"
-                        , avatar = ""
+                        { person =
+                            { id = 1
+                            , name = "alice"
+                            , displayName = Just "Alice"
+                            , avatar = Nothing
+                            , banner = Nothing
+                            , bio = Nothing
+                            , local = True
+                            , deleted = False
+                            , botAccount = False
+                            , apId = "https://forum.test/users/alice"
+                            , instanceId = 1
+                            , postCount = 0
+                            , commentCount = 0
+                            , publishedAt = "2026-11-10T00:00:00Z"
+                            , updatedAt = Nothing
+                            }
+                        , isAdmin = False
+                        , personActions = Nothing
+                        , banned = False
+                        , banExpiresAt = Nothing
                         }
                 in
                 Expect.equal (Just ( "@alice@forum.test ", 6, 24 ))

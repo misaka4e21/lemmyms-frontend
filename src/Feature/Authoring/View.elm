@@ -1,7 +1,6 @@
 module Feature.Authoring.View exposing (Config, view)
 
 import App.Context exposing (Active)
-import Domain
 import Feature.Authoring.State as State exposing (Model, ToolbarAction(..))
 import Feature.Authoring.Update as Update
 import Generated.I18n as Translations
@@ -9,6 +8,7 @@ import Html exposing (Html, button, div, img, label, p, span, text, textarea)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
+import Lemmy.Domain as Domain
 import Ui.Icon
 
 
@@ -122,7 +122,7 @@ viewPopup config active model listId =
             )
 
 
-viewOption : Config msg -> Model -> Int -> Domain.MentionCandidate -> Html msg
+viewOption : Config msg -> Model -> Int -> Domain.PersonView -> Html msg
 viewOption config model index candidate =
     let
         selected =
@@ -135,25 +135,25 @@ viewOption config model index candidate =
         , A.class "mention-option"
         , Events.preventDefaultOn "mousedown" (Decode.succeed ( config.toMsg (Update.MentionSelected index), True ))
         ]
-        [ if String.isEmpty candidate.avatar then
+        [ if String.isEmpty (Domain.avatarOf candidate.person) then
             text ""
 
           else
-            img [ A.src candidate.avatar, A.alt "", A.attribute "referrerpolicy" "no-referrer", A.class "mention-avatar" ] []
+            img [ A.src (Domain.avatarOf candidate.person), A.alt "", A.attribute "referrerpolicy" "no-referrer", A.class "mention-avatar" ] []
         , div [ A.class "mention-copy" ]
             [ span [ A.class "mention-name" ] [ text (candidateName candidate) ]
-            , span [ A.class "mention-handle" ] [ text ("@" ++ candidate.acct) ]
+            , span [ A.class "mention-handle" ] [ text ("@" ++ Domain.acctOf candidate.person) ]
             ]
         ]
 
 
-candidateName : Domain.MentionCandidate -> String
+candidateName : Domain.PersonView -> String
 candidateName candidate =
-    if String.isEmpty candidate.displayName then
-        candidate.acct
+    if String.isEmpty (Domain.displayNameOf candidate.person) then
+        Domain.acctOf candidate.person
 
     else
-        candidate.displayName
+        Domain.displayNameOf candidate.person
 
 
 popupStatus : String -> Html msg

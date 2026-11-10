@@ -3,13 +3,14 @@ module Feature.Post exposing (Config, Model, Msg(..), Outcome, initial, isBusy, 
 import Api
 import App.Context exposing (Active)
 import App.Feedback exposing (Flash(..))
-import Domain
 import Generated.I18n as Translations
 import Html exposing (Html, button, div, h2, label, option, p, section, select, text)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Lemmy.CommentTree as CommentTree
+import Lemmy.Domain as Domain
 import List
 import Remote exposing (Remote(..))
 import Route
@@ -21,8 +22,8 @@ import Url exposing (Url)
 
 
 type alias Model =
-    { post : Remote Domain.Post
-    , replies : Remote (Domain.Page Domain.ThreadedPost)
+    { post : Remote Domain.PostView
+    , replies : Remote (Domain.Page (CommentTree.Threaded Domain.CommentView))
     , expandedReplies : Set String
     , busy : Set String
     }
@@ -66,6 +67,9 @@ type Msg
     | ToggleSave String Bool
     | MarkRead String
     | ToggleHideForMe String Bool
+    | CommentVote String Int
+    | CommentSave String Bool
+    | CommentMutationDone Api.Response
     | SortChanged String
     | DepthChanged Int
     | ConfirmDelete String
@@ -80,20 +84,20 @@ type alias Outcome =
     { flash : Flash
     , sessionProblem : Maybe Api.Problem
     , navigation : Maybe String
-    , refreshed : Maybe Domain.Post
+    , refreshed : Maybe Domain.PostView
     , reloadRoute : Bool
     }
 
 
 type alias Working =
-    { post : Remote Domain.Post
-    , replies : Remote (Domain.Page Domain.ThreadedPost)
+    { post : Remote Domain.PostView
+    , replies : Remote (Domain.Page (CommentTree.Threaded Domain.CommentView))
     , expandedReplies : Set String
     , busy : Set String
     , flash : Flash
     , sessionProblem : Maybe Api.Problem
     , navigation : Maybe String
-    , refreshed : Maybe Domain.Post
+    , refreshed : Maybe Domain.PostView
     , reloadRoute : Bool
     }
 
@@ -161,6 +165,64 @@ updateWorking csrf url message model =
         ToggleHideForMe id hidden ->
             postMutation csrf model (HideMutation id hidden)
 
+        CommentVote id score ->
+            ( model
+            , Api.send csrf
+                "POST"
+                "/comment/like"
+                (Encode.encode 0 (Encode.object [ ( "comment_id", Encode.int (idValue id) ), ( "is_upvote", scoreValue score ) ]))
+                CommentMutationDone
+            )
+
+        CommentSave id saved ->
+            ( model
+            , Api.send csrf
+                "PUT"
+                "/comment/save"
+                (Encode.encode 0 (Encode.object [ ( "comment_id", Encode.int (idValue id) ), ( "save", Encode.bool (not saved) ) ]))
+                CommentMutationDone
+            )
+
+        CommentMutationDone response ->
+            case Api.decodeUnit response of
+                Ok () ->
+                    case Route.parse url of
+                        Route.Post id ->
+                            let
+                                sort =
+                                    Route.query "sort" url
+                                        |> (\value ->
+                                                if List.member value [ "new", "old", "top", "controversial" ] then
+                                                    value
+
+                                                else
+                                                    "old"
+                                           )
+
+                                maxDepth =
+                                    Route.query "max_depth" url
+                                        |> String.toInt
+                                        |> Maybe.withDefault 6
+                                        |> clamp 1 8
+                            in
+                            ( { model | replies = Loading }
+                            , Api.get
+                                ("/comment/list?post_id="
+                                    ++ urlEncode id
+                                    ++ "&limit=20&sort="
+                                    ++ sort
+                                    ++ "&max_depth="
+                                    ++ String.fromInt maxDepth
+                                )
+                                RepliesLoaded
+                            )
+
+                        _ ->
+                            ( model, Cmd.none )
+
+                Err problem ->
+                    ( problemState model problem, Cmd.none )
+
         SortChanged sort ->
             let
                 depth =
@@ -184,7 +246,7 @@ updateWorking csrf url message model =
 
         ConfirmDelete id ->
             ( { model | busy = Set.insert ("delete-" ++ id) model.busy }
-            , Api.send csrf "DELETE" ("/api/v1/posts/" ++ urlEncode id) "" Deleted
+            , Api.send csrf "DELETE" "/post" (Encode.encode 0 (Encode.object [ ( "post_id", Encode.int (idValue id) ), ( "deleted", Encode.bool True ) ])) Deleted
             )
 
         MutationDone mutation response ->
@@ -208,20 +270,20 @@ updateWorking csrf url message model =
                             }
                     in
                     ( cleaned
-                    , Api.get ("/api/v1/posts/" ++ urlEncode id) (Refreshed mutation)
+                    , Api.get ("/post?id=" ++ urlEncode id) (Refreshed mutation)
                     )
 
                 Err problem ->
                     ( problemState { model | busy = Set.remove (mutationKey mutation) model.busy } problem, Cmd.none )
 
         Refreshed _ response ->
-            case Api.decodeResponse Domain.post response of
+            case Api.decodeResponse Domain.postView response of
                 Ok post ->
                     ( { model
                         | post =
                             case model.post of
                                 Ready current ->
-                                    if current.id == post.id then
+                                    if current.post.id == post.post.id then
                                         Ready post
 
                                     else
@@ -246,7 +308,7 @@ updateWorking csrf url message model =
                     ( problemState model problem, Cmd.none )
 
         PostLoaded response ->
-            case Api.decodeResponse Domain.post response of
+            case Api.decodeResponse Domain.postView response of
                 Ok post ->
                     ( { model | post = Ready post }, Cmd.none )
 
@@ -254,7 +316,7 @@ updateWorking csrf url message model =
                     ( problemState { model | post = Failed problem } problem, Cmd.none )
 
         RepliesLoaded response ->
-            case Api.decodeResponse (Domain.page Domain.threadedPost) response of
+            case Api.decodeResponse Domain.threadedPage response of
                 Ok page ->
                     ( { model | replies = Ready page }, Cmd.none )
 
@@ -279,42 +341,41 @@ postMutation csrf model mutation =
             ( method, url, body ) =
                 case mutation of
                     LikeMutation _ liked ->
-                        ( if liked then
-                            "DELETE"
+                        ( "POST"
+                        , "/post/like"
+                        , Encode.encode 0
+                            (Encode.object
+                                [ ( "post_id", Encode.int (idValue id) )
+                                , ( "is_upvote"
+                                  , if liked then
+                                        Encode.null
 
-                          else
-                            "POST"
-                        , "/api/v1/posts/" ++ urlEncode id ++ "/likes"
-                        , ""
+                                    else
+                                        Encode.bool True
+                                  )
+                                ]
+                            )
                         )
 
                     VoteMutation _ score ->
                         ( "POST"
-                        , "/api/v1/posts/" ++ urlEncode id ++ "/vote"
-                        , Encode.encode 0 (Encode.object [ ( "score", Encode.int score ) ])
+                        , "/post/like"
+                        , Encode.encode 0 (Encode.object [ ( "post_id", Encode.int (idValue id) ), ( "is_upvote", scoreValue score ) ])
                         )
 
                     SaveMutation _ saved ->
-                        ( if saved then
-                            "DELETE"
-
-                          else
-                            "POST"
-                        , "/api/v1/posts/" ++ urlEncode id ++ "/save"
-                        , ""
+                        ( "PUT"
+                        , "/post/save"
+                        , Encode.encode 0 (Encode.object [ ( "post_id", Encode.int (idValue id) ), ( "save", Encode.bool (not saved) ) ])
                         )
 
                     ReadMutation _ ->
-                        ( "POST", "/api/v1/posts/" ++ urlEncode id ++ "/read", "" )
+                        ( "POST", "/post/mark_as_read", Encode.encode 0 (Encode.object [ ( "post_id", Encode.int (idValue id) ), ( "read", Encode.bool True ) ]) )
 
                     HideMutation _ hidden ->
-                        ( if hidden then
-                            "DELETE"
-
-                          else
-                            "POST"
-                        , "/api/v1/posts/" ++ urlEncode id ++ "/hide-for-me"
-                        , ""
+                        ( "POST"
+                        , "/post/hide"
+                        , Encode.encode 0 (Encode.object [ ( "post_id", Encode.int (idValue id) ), ( "hide", Encode.bool (not hidden) ) ])
                         )
         in
         ( { model | busy = Set.insert key model.busy, flash = NoFlash }
@@ -380,8 +441,8 @@ urlEncode =
 
 type alias Config msg =
     { retry : msg
-    , postCard : Domain.Post -> Html msg
-    , threadedPostCard : Domain.Post -> Html msg -> Html msg
+    , postCard : Domain.PostView -> Html msg
+    , threadedPostCard : Domain.CommentView -> Html msg -> Html msg
     , startReply : String -> msg
     , editor : Html msg
     , sort : String
@@ -394,8 +455,8 @@ type alias Config msg =
 
 
 type alias ViewModel =
-    { post : Remote Domain.Post
-    , replies : Remote (Domain.Page Domain.ThreadedPost)
+    { post : Remote Domain.PostView
+    , replies : Remote (Domain.Page (CommentTree.Threaded Domain.CommentView))
     , url : Url
     }
 
@@ -405,11 +466,11 @@ pagePost config model active postId =
     entityHeading
         (case model.post of
             Ready post ->
-                if String.isEmpty post.title then
+                if String.isEmpty post.post.name then
                     Translations.repliesTitle active.texts
 
                 else
-                    post.title
+                    post.post.name
 
             _ ->
                 Translations.repliesTitle active.texts
@@ -421,8 +482,8 @@ pagePost config model active postId =
                 (\post ->
                     div [ A.class "stack" ]
                         [ config.postCard post
-                        , if post.canReply && not post.deleted then
-                            button [ A.class "filled-button", Events.onClick (config.startReply post.id) ]
+                        , if not post.post.locked && not post.post.deleted then
+                            button [ A.class "filled-button", Events.onClick (config.startReply postId) ]
                                 [ text (Translations.reply active.texts) ]
 
                           else
@@ -442,7 +503,7 @@ pagePost config model active postId =
                     else
                         div [ A.class "stack" ]
                             [ div [ A.class "stack" ] (List.map (viewThreaded config active model) page.items)
-                            , viewPagination active.texts model.url page.offset page.limit (List.length page.items)
+                            , viewPagination active.texts model.url page.prevPage page.nextPage
                             ]
                 )
             ]
@@ -481,28 +542,55 @@ replyControls config active =
         ]
 
 
-viewThreaded : Config msg -> Active -> ViewModel -> Domain.ThreadedPost -> Html msg
-viewThreaded config active model (Domain.ThreadedPost node) =
+viewThreaded : Config msg -> Active -> ViewModel -> CommentTree.Threaded Domain.CommentView -> Html msg
+viewThreaded config active model (CommentTree.Threaded node) =
     let
-        basePost =
-            node.post
+        comment =
+            node.value
 
-        post =
-            { basePost | replies = node.childCount }
+        commentId =
+            String.fromInt comment.comment.id
 
         children =
-            if config.isExpanded post.id && not (List.isEmpty node.children) then
+            if config.isExpanded commentId && not (List.isEmpty node.children) then
                 div [ A.class "nested stack" ] (List.map (viewThreaded config active model) node.children)
 
             else
                 text ""
     in
-    config.threadedPostCard post children
+    config.threadedPostCard comment children
 
 
 reset : Model -> Model
 reset model =
     { model | post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty }
+
+
+idValue : String -> Int
+idValue id =
+    String.toInt id |> Maybe.withDefault 0
+
+
+scoreValue : Int -> Encode.Value
+scoreValue score =
+    if score > 0 then
+        Encode.bool True
+
+    else if score < 0 then
+        Encode.bool False
+
+    else
+        Encode.null
+
+
+cursorQuery : Url -> String
+cursorQuery url =
+    case Route.cursor url of
+        Just cursor ->
+            "&page_cursor=" ++ Url.percentEncode cursor
+
+        Nothing ->
+            ""
 
 
 load : String -> Url -> Model -> ( Model, Cmd Msg )
@@ -526,16 +614,15 @@ load id url model =
     in
     ( { model | post = Loading, replies = Loading, expandedReplies = Set.empty }
     , Cmd.batch
-        [ Api.get ("/api/v1/posts/" ++ urlEncode id) PostLoaded
+        [ Api.get ("/post?id=" ++ urlEncode id) PostLoaded
         , Api.get
-            ("/api/v1/posts/"
+            ("/comment/list?post_id="
                 ++ urlEncode id
-                ++ "/replies?limit=20&offset="
-                ++ String.fromInt (Route.offset url)
-                ++ "&sort="
+                ++ "&limit=20&sort="
                 ++ sort
                 ++ "&max_depth="
                 ++ String.fromInt maxDepth
+                ++ cursorQuery url
             )
             RepliesLoaded
         ]

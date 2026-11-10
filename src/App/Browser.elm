@@ -10,9 +10,6 @@ import Ports exposing (IncomingData(..), incomingDecoder)
 receiveIncoming : Decode.Value -> Model -> ( Model, Cmd Msg )
 receiveIncoming raw model =
     case Decode.decodeValue incomingDecoder raw of
-        Ok (IncomingCsrf value) ->
-            ( { model | csrf = value }, Cmd.none )
-
         Ok (IncomingFormatting currentFormatting) ->
             case model.active of
                 Just active ->

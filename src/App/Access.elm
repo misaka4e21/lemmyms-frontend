@@ -19,7 +19,7 @@ authProblem : Model -> Api.Problem -> Model
 authProblem model problem =
     if problem.status == 401 then
         clearPrivate
-            { model | auth = Anonymous, authGeneration = model.authGeneration + 1, csrf = "", flash = FlashProblem problem }
+            { model | auth = Anonymous, authGeneration = model.authGeneration + 1, flash = FlashProblem problem }
 
     else
         model

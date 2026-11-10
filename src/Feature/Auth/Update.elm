@@ -2,19 +2,22 @@ module Feature.Auth.Update exposing (Action(..), Msg(..), Outcome, isSessionActi
 
 import Api
 import App.Feedback exposing (Flash(..))
-import Domain
 import Feature.Auth.State exposing (Model)
 import Json.Encode as Encode
+import Lemmy.Domain as Domain
 
 
 type Msg
     = ActionDone Action Api.Response
+    | LoginCookieSet Api.Response
     | LoginIdentifierChanged String
     | LoginPasswordChanged String
     | LoginSubmitted
     | Logout
     | RegisterUsernameChanged String
     | RegisterEmailChanged String
+    | RegisterPasswordChanged String
+    | RegisterPasswordVerifyChanged String
     | RegisterSubmitted
     | ResendSubmitted
     | VerifyPasswordChanged String
@@ -41,7 +44,7 @@ type Action
 
 type alias Outcome =
     { flash : Flash
-    , identity : Maybe Domain.Identity
+    , identity : Maybe Domain.MyUserInfo
     , loggedOut : Bool
     , navigation : Maybe String
     }
@@ -55,6 +58,8 @@ type alias Working =
     , loginBusy : Bool
     , registerUsername : String
     , registerEmail : String
+    , registerPassword : String
+    , registerPasswordVerify : String
     , registerProblem : Maybe Api.Problem
     , registerBusy : Bool
     , verifyPassword : String
@@ -73,7 +78,7 @@ type alias Working =
     , changeProblem : Maybe Api.Problem
     , changeBusy : Bool
     , flash : Flash
-    , identity : Maybe Domain.Identity
+    , identity : Maybe Domain.MyUserInfo
     , loggedOut : Bool
     , navigation : Maybe String
     }
@@ -105,6 +110,8 @@ update csrf message state =
                 , loginBusy = state.loginBusy
                 , registerUsername = state.registerUsername
                 , registerEmail = state.registerEmail
+                , registerPassword = state.registerPassword
+                , registerPasswordVerify = state.registerPasswordVerify
                 , registerProblem = state.registerProblem
                 , registerBusy = state.registerBusy
                 , verifyPassword = state.verifyPassword
@@ -135,6 +142,8 @@ update csrf message state =
       , loginBusy = next.loginBusy
       , registerUsername = next.registerUsername
       , registerEmail = next.registerEmail
+      , registerPassword = next.registerPassword
+      , registerPasswordVerify = next.registerPasswordVerify
       , registerProblem = next.registerProblem
       , registerBusy = next.registerBusy
       , verifyPassword = next.verifyPassword
@@ -173,27 +182,39 @@ updateWorking csrf message model =
 
             else
                 ( { model | loginBusy = True, loginProblem = Nothing }
-                , Api.send csrf
-                    "POST"
-                    "/api/v1/auth/login"
+                , Api.login
                     (Encode.encode 0
                         (Encode.object
-                            [ ( "login", Encode.string model.loginIdentifier )
+                            [ ( "username_or_email", Encode.string model.loginIdentifier )
                             , ( "password", Encode.string model.loginPassword )
+                            , ( "stay_logged_in", Encode.bool True )
                             ]
                         )
                     )
-                    (ActionDone LoginAction)
+                    LoginCookieSet
                 )
 
+        LoginCookieSet response ->
+            if response.status >= 200 && response.status < 300 then
+                ( model, Api.get "/account" (ActionDone LoginAction) )
+
+            else
+                ( { model | loginBusy = False, loginProblem = Just { status = response.status, detail = response.body } }, Cmd.none )
+
         Logout ->
-            ( model, Api.send csrf "POST" "/api/v1/auth/logout" "" (ActionDone LogoutAction) )
+            ( model, Api.send csrf "POST" "/account/auth/logout" "" (ActionDone LogoutAction) )
 
         RegisterUsernameChanged value ->
             ( { model | registerUsername = value, registerProblem = Nothing }, Cmd.none )
 
         RegisterEmailChanged value ->
             ( { model | registerEmail = value, registerProblem = Nothing }, Cmd.none )
+
+        RegisterPasswordChanged value ->
+            ( { model | registerPassword = value, registerProblem = Nothing }, Cmd.none )
+
+        RegisterPasswordVerifyChanged value ->
+            ( { model | registerPasswordVerify = value, registerProblem = Nothing }, Cmd.none )
 
         RegisterSubmitted ->
             if model.registerBusy then
@@ -203,11 +224,13 @@ updateWorking csrf message model =
                 ( { model | registerBusy = True, registerProblem = Nothing }
                 , Api.send ""
                     "POST"
-                    "/api/v1/auth/register"
+                    "/account/auth/register"
                     (Encode.encode 0
                         (Encode.object
                             [ ( "username", Encode.string model.registerUsername )
                             , ( "email", Encode.string model.registerEmail )
+                            , ( "password", Encode.string model.registerPassword )
+                            , ( "password_verify", Encode.string model.registerPasswordVerify )
                             ]
                         )
                     )
@@ -218,7 +241,7 @@ updateWorking csrf message model =
             ( model
             , Api.send ""
                 "POST"
-                "/api/v1/auth/verification/resend"
+                "/account/auth/resend_verification_email"
                 (Encode.encode 0 (Encode.object [ ( "email", Encode.string model.registerEmail ) ]))
                 (ActionDone ResendAction)
             )
@@ -234,7 +257,7 @@ updateWorking csrf message model =
                 ( { model | verifyBusy = True, verifyProblem = Nothing }
                 , Api.send ""
                     "POST"
-                    "/api/v1/auth/verification/confirm"
+                    "/account/auth/verify_email"
                     (Encode.encode 0
                         (Encode.object
                             [ ( "token", Encode.string model.verificationToken )
@@ -256,7 +279,7 @@ updateWorking csrf message model =
                 ( { model | resetBusy = True, resetProblem = Nothing, resetAccepted = False }
                 , Api.send ""
                     "POST"
-                    "/api/v1/auth/password/reset"
+                    "/account/auth/password_reset"
                     (Encode.encode 0 (Encode.object [ ( "email", Encode.string (String.trim model.resetEmail) ) ]))
                     (ActionDone ResetRequestAction)
                 )
@@ -272,11 +295,12 @@ updateWorking csrf message model =
                 ( { model | resetBusy = True, resetProblem = Nothing }
                 , Api.send ""
                     "POST"
-                    "/api/v1/auth/password/reset/confirm"
+                    "/account/auth/password_change"
                     (Encode.encode 0
                         (Encode.object
                             [ ( "token", Encode.string model.resetToken )
                             , ( "password", Encode.string model.resetNewPassword )
+                            , ( "password_verify", Encode.string model.resetNewPassword )
                             ]
                         )
                     )
@@ -296,12 +320,13 @@ updateWorking csrf message model =
             else
                 ( { model | changeBusy = True, changeProblem = Nothing }
                 , Api.send csrf
-                    "POST"
-                    "/api/v1/auth/password/change"
+                    "PUT"
+                    "/account/auth/change_password"
                     (Encode.encode 0
                         (Encode.object
-                            [ ( "current_password", Encode.string model.changeCurrentPassword )
+                            [ ( "old_password", Encode.string model.changeCurrentPassword )
                             , ( "new_password", Encode.string model.changeNewPassword )
+                            , ( "new_password_verify", Encode.string model.changeNewPassword )
                             ]
                         )
                     )
@@ -311,7 +336,7 @@ updateWorking csrf message model =
         ActionDone action response ->
             case action of
                 LoginAction ->
-                    case Api.decodeResponse Domain.identity response of
+                    case Api.decodeResponse Domain.myUserInfo response of
                         Ok identity ->
                             ( { model | identity = Just identity, loginBusy = False, loginPassword = "", loginProblem = Nothing }, Cmd.none )
 

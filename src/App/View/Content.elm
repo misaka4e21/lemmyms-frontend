@@ -3,7 +3,6 @@ module App.View.Content exposing (editorConfig, pageCommunities, pageCommunity, 
 import App.Context exposing (Active)
 import App.Session exposing (AuthState(..))
 import App.State exposing (Model, Msg(..))
-import Domain
 import Feature.Community as Community
 import Feature.Editor.State exposing (EditorMode(..))
 import Feature.Editor.Update as Editor
@@ -15,21 +14,30 @@ import Feature.Search as Search
 import Generated.I18n as Translations
 import Html exposing (Html, a, text)
 import Html.Attributes as A
+import Lemmy.Domain as Domain
 import List
 import Route
 import Set exposing (Set)
+import Ui.CommentCard
 import Ui.PostCard
 
 
-postCard : Model -> Active -> Domain.Post -> Html Msg
+postCard : Model -> Active -> Domain.PostView -> Html Msg
 postCard model active =
     Ui.PostCard.postCard
         { formatted = model.formatted
+        , viewerActor =
+            case model.auth of
+                Authenticated account ->
+                    Just (Domain.personApId account)
+
+                _ ->
+                    Nothing
         , isBusy = \id -> Post.isBusy id model.posts.busy
         , isExpanded = \id -> Set.member id model.posts.expandedReplies
         , onLike = \id liked -> PostMessage (Post.ToggleLike id liked)
-        , onVote = \id score -> PostMessage (Post.Vote id score)
-        , onSave = \id saved -> PostMessage (Post.ToggleSave id saved)
+        , onVote = \id score -> PostMessage (Post.CommentVote id score)
+        , onSave = \id saved -> PostMessage (Post.CommentSave id saved)
         , onHideForMe = \id hidden -> PostMessage (Post.ToggleHideForMe id hidden)
         , onReport = \id community -> ReportMessage (Report.Open (Report.PostTarget id community))
         , canReport =
@@ -46,17 +54,22 @@ postCard model active =
         active.texts
 
 
-threadedPostCard : Model -> Active -> Domain.Post -> Html Msg -> Html Msg
-threadedPostCard model active post nested =
-    Ui.PostCard.postCard
+threadedPostCard : Model -> Active -> Domain.CommentView -> Html Msg -> Html Msg
+threadedPostCard model active comment nested =
+    Ui.CommentCard.commentCard
         { formatted = model.formatted
+        , viewerActor =
+            case model.auth of
+                Authenticated account ->
+                    Just (Domain.personApId account)
+
+                _ ->
+                    Nothing
         , isBusy = \id -> Post.isBusy id model.posts.busy
         , isExpanded = always True
-        , onLike = \id liked -> PostMessage (Post.ToggleLike id liked)
-        , onVote = \id score -> PostMessage (Post.Vote id score)
-        , onSave = \id saved -> PostMessage (Post.ToggleSave id saved)
-        , onHideForMe = \id hidden -> PostMessage (Post.ToggleHideForMe id hidden)
-        , onReport = \id community -> ReportMessage (Report.Open (Report.PostTarget id community))
+        , onVote = \id score -> PostMessage (Post.CommentVote id score)
+        , onSave = \id saved -> PostMessage (Post.CommentSave id saved)
+        , onReport = \id -> ReportMessage (Report.Open (Report.CommentTarget id))
         , canReport =
             case model.auth of
                 Authenticated _ ->
@@ -64,12 +77,11 @@ threadedPostCard model active post nested =
 
                 _ ->
                     False
-        , onDelete = OpenDeleteDialog
-        , onReplies = PostMessage << Post.ToggleReplies
+        , onToggle = PostMessage << Post.ToggleReplies
         , nested = always nested
         }
         active.texts
-        post
+        comment
 
 
 editorConfig : Model -> Feature.Editor.View.Config Msg
@@ -109,7 +121,7 @@ pagePost model active postId =
 
 viewNested : Active -> String -> Model -> Html Msg
 viewNested active parent _ =
-    a [ A.class "outlined-button", A.href (Route.path (Route.Post parent)) ]
+    a [ A.class "outlined-button", A.href (Route.path (Route.Comment parent)) ]
         [ text (Translations.repliesTitle active.texts) ]
 
 

@@ -1,9 +1,9 @@
 module App.Session exposing (AuthState(..))
 
-import Domain
+import Lemmy.Domain as Domain
 
 
 type AuthState
     = CheckingSession
     | Anonymous
-    | Authenticated Domain.Identity
+    | Authenticated Domain.MyUserInfo

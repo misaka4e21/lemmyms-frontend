@@ -1,17 +1,17 @@
 module App.Interaction exposing (applyPost)
 
 import App.State exposing (Model)
-import Domain
 import Feature.Search as Search exposing (SearchResult(..))
+import Lemmy.Domain as Domain
 import List
 import Remote exposing (Remote(..))
 
 
-applyPost : Domain.Post -> Model -> Model
+applyPost : Domain.PostView -> Model -> Model
 applyPost post model =
     let
         transform candidate =
-            if candidate.id == post.id then
+            if candidate.post.id == post.post.id then
                 post
 
             else
@@ -19,16 +19,6 @@ applyPost post model =
 
         page remote =
             Remote.map (\data -> { data | items = List.map transform data.items }) remote
-
-        threaded (Domain.ThreadedPost node) =
-            Domain.ThreadedPost
-                { node
-                    | post = transform node.post
-                    , children = List.map threaded node.children
-                }
-
-        threadedPage remote =
-            Remote.map (\data -> { data | items = List.map threaded data.items }) remote
 
         searchState =
             model.searchPage.search
@@ -38,7 +28,6 @@ applyPost post model =
             (\postsState ->
                 { postsState
                     | post = Remote.map transform model.posts.post
-                    , replies = threadedPage model.posts.replies
                 }
             )
                 model.posts

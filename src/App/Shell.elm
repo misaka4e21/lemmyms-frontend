@@ -1,16 +1,17 @@
 module App.Shell exposing (viewBoot, viewReady)
 
+import AccountSource exposing (AccountContentSource(..))
 import App.Context exposing (Active)
 import App.Feedback exposing (Flash(..), flashText)
 import App.Session exposing (AuthState(..))
 import App.State exposing (ConfirmationAction(..), Model, Msg(..))
-import Domain
 import Feature.Auth.Update as Auth
 import Generated.I18n as Translations
 import Html exposing (Html, a, bdi, button, div, h1, h2, header, img, label, main_, nav, option, p, section, select, span, text)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
+import Lemmy.Domain as Domain
 import List
 import Locale exposing (Locale(..))
 import Localization
@@ -175,26 +176,21 @@ viewDrawerProfile model active =
                 ( displayName, avatarUrl ) =
                     case model.drawerProfile of
                         Ready profile ->
-                            ( if String.isEmpty profile.name then
-                                account.username
+                            ( if String.isEmpty (Domain.displayNameOf profile.person) then
+                                Domain.personName account
 
                               else
-                                profile.name
-                            , profile.avatar
+                                Domain.displayNameOf profile.person
+                            , Domain.avatarOf profile.person
                             )
 
                         _ ->
-                            ( account.username, "" )
+                            ( Domain.personName account, "" )
 
                 roles =
                     List.filterMap identity
-                        [ if account.siteAdmin then
+                        [ if Domain.isAdmin account then
                             Just (Translations.siteAdministrator active.texts)
-
-                          else
-                            Nothing
-                        , if account.deploymentAdmin then
-                            Just (Translations.deploymentAdministrator active.texts)
 
                           else
                             Nothing
@@ -202,7 +198,7 @@ viewDrawerProfile model active =
 
                 meta =
                     "@"
-                        ++ account.username
+                        ++ Domain.personName account
                         ++ (if List.isEmpty roles then
                                 ""
 
@@ -216,7 +212,7 @@ viewDrawerProfile model active =
                         [ A.class "drawer-avatar drawer-avatar-placeholder"
                         , A.attribute "aria-hidden" "true"
                         ]
-                        [ text (String.left 1 account.username) ]
+                        [ text (String.left 1 (Domain.personName account)) ]
 
                   else
                     img
@@ -318,8 +314,8 @@ drawerAccount model active extras =
     in
     case model.auth of
         Authenticated account ->
-            [ drawerLink model active (Route.Profile account.username) Icon.Person (Translations.navProfile texts) extras
-            , drawerLink model active (Route.AccountContent Domain.SavedContent) (Icon.Bookmark False) (Translations.navMyContent texts) extras
+            [ drawerLink model active (Route.Profile (Domain.personName account)) Icon.Person (Translations.navProfile texts) extras
+            , drawerLink model active (Route.AccountContent SavedContent) (Icon.Bookmark False) (Translations.navMyContent texts) extras
             , drawerLink model active Route.AccountBlocks Icon.Block (Translations.navBlocks texts) extras
             , drawerLink model active Route.Settings Icon.Settings (Translations.navSettings texts) extras
             , button
@@ -339,7 +335,7 @@ drawerManagement : Model -> Active -> List (Html.Attribute Msg) -> List (Html Ms
 drawerManagement model active extras =
     case model.auth of
         Authenticated identity ->
-            if identity.siteAdmin || identity.deploymentAdmin then
+            if Domain.isAdmin identity then
                 [ drawerLink model active Route.AdminOverview Icon.Admin (Translations.navAdmin active.texts) extras ]
 
             else

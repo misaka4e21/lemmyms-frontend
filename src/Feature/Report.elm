@@ -16,6 +16,7 @@ import Ui.Formatting exposing (boolText)
 
 type Target
     = PostTarget String String
+    | CommentTarget String
     | CommunityTarget String
     | PersonTarget String
 
@@ -131,6 +132,9 @@ updateWorking csrf message model =
 
         Submit ->
             case model.target of
+                Just (PersonTarget _) ->
+                    ( model, Cmd.none )
+
                 Just target ->
                     let
                         reason =
@@ -143,7 +147,7 @@ updateWorking csrf message model =
                         ( { model | busy = True, problem = Nothing }
                         , Api.send csrf
                             "POST"
-                            "/api/v1/reports"
+                            (reportEndpoint target)
                             (Encode.encode 0 (reportPayload target reason))
                             (ActionDone SubmitAction)
                         )
@@ -183,30 +187,34 @@ updateWorking csrf message model =
 
 reportPayload : Target -> String -> Encode.Value
 reportPayload target reason =
-    let
-        ( kind, targetValue, communityId ) =
-            case target of
-                PostTarget id community ->
-                    ( "post", id, community )
+    case target of
+        PostTarget id _ ->
+            Encode.object [ ( "post_id", Encode.int (String.toInt id |> Maybe.withDefault 0) ), ( "reason", Encode.string reason ) ]
 
-                CommunityTarget id ->
-                    ( "community", id, id )
+        CommentTarget id ->
+            Encode.object [ ( "comment_id", Encode.int (String.toInt id |> Maybe.withDefault 0) ), ( "reason", Encode.string reason ) ]
 
-                PersonTarget actor ->
-                    ( "person", actor, "" )
-    in
-    Encode.object
-        ([ ( "target_kind", Encode.string kind )
-         , ( "target_id", Encode.string targetValue )
-         , ( "reason", Encode.string reason )
-         ]
-            ++ (if String.isEmpty communityId then
-                    []
+        CommunityTarget id ->
+            Encode.object [ ( "community_id", Encode.int (String.toInt id |> Maybe.withDefault 0) ), ( "reason", Encode.string reason ) ]
 
-                else
-                    [ ( "community_id", Encode.string communityId ) ]
-               )
-        )
+        PersonTarget _ ->
+            Encode.object [ ( "reason", Encode.string reason ) ]
+
+
+reportEndpoint : Target -> String
+reportEndpoint target =
+    case target of
+        PostTarget _ _ ->
+            "/post/report"
+
+        CommentTarget _ ->
+            "/comment/report"
+
+        CommunityTarget _ ->
+            "/community/report"
+
+        PersonTarget _ ->
+            "/post/report"
 
 
 type alias Config msg =
@@ -275,6 +283,9 @@ targetKindLabel texts target =
         PostTarget _ _ ->
             Translations.reportPost texts
 
+        CommentTarget _ ->
+            Translations.reportPost texts
+
         CommunityTarget _ ->
             Translations.reportCommunity texts
 
@@ -286,6 +297,9 @@ targetId : Target -> String
 targetId target =
     case target of
         PostTarget id _ ->
+            id
+
+        CommentTarget id ->
             id
 
         CommunityTarget id ->

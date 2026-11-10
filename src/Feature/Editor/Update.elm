@@ -2,13 +2,14 @@ module Feature.Editor.Update exposing (Msg(..), Outcome, load, update)
 
 import Api
 import App.Feedback exposing (Flash(..))
-import Domain
 import Feature.Authoring.State as AuthoringState
 import Feature.Authoring.Update as Authoring
 import Feature.Editor.State exposing (..)
 import File exposing (File)
 import Html exposing (label)
+import Json.Decode as Decode
 import Json.Encode as Encode
+import Lemmy.Domain as Domain
 import List
 import Ports exposing (focus)
 import Remote exposing (Remote(..))
@@ -38,7 +39,7 @@ type alias Outcome =
 
 type alias Working =
     { editor : Maybe EditorState
-    , source : Remote Domain.Source
+    , source : Remote Domain.PostView
     , flash : Flash
     , sessionProblem : Maybe Api.Problem
     , navigation : Maybe String
@@ -150,10 +151,10 @@ updateWorking csrf message model =
                         | editor =
                             Just
                                 { editor
-                                    | title = source.title
-                                    , authoring = AuthoringState.setValue source.body editor.authoring
-                                    , format = source.format
-                                    , version = Just source.version
+                                    | title = source.post.name
+                                    , authoring = AuthoringState.setValue (Maybe.withDefault "" source.post.body) editor.authoring
+                                    , format = "markdown"
+                                    , version = Just (Maybe.withDefault "0" source.post.updatedAt)
                                     , attachments = sourceAttachments source
                                     , conflict = Nothing
                                     , problem = Nothing
@@ -169,21 +170,20 @@ updateWorking csrf message model =
             setEditor model (\editor -> { editor | conflict = Nothing }) Cmd.none
 
         Saved mode response ->
-            case Api.decodeResponse Domain.post response of
-                Ok post ->
+            let
+                decoder =
+                    case mode of
+                        CreateReply _ ->
+                            Decode.map (\comment -> comment.post.id) (Decode.field "comment_view" Domain.commentView)
+
+                        _ ->
+                            Decode.map (\post -> post.post.id) (Decode.field "post_view" Domain.postView)
+            in
+            case Api.decodeResponse decoder response of
+                Ok postId ->
                     ( { model
                         | editor = Nothing
-                        , navigation =
-                            Just
-                                (Route.path
-                                    (case mode of
-                                        CreateReply parent ->
-                                            Route.Post parent
-
-                                        _ ->
-                                            Route.Post post.id
-                                    )
-                                )
+                        , navigation = Just (Route.path (Route.Post (String.fromInt postId)))
                       }
                     , Cmd.none
                     )
@@ -195,7 +195,7 @@ updateWorking csrf message model =
                                 ( { model | editor = Just { editor | saving = False, problem = Just problem }, source = Loading }
                                 , case mode of
                                     EditPost postId ->
-                                        Api.get ("/api/v1/posts/" ++ urlEncode postId ++ "/source") Reloaded
+                                        Api.get ("/post?id=" ++ urlEncode postId) Reloaded
 
                                     _ ->
                                         Cmd.none
@@ -212,7 +212,7 @@ updateWorking csrf message model =
                             ( model, Cmd.none )
 
         Reloaded response ->
-            case Api.decodeResponse Domain.source response of
+            case Api.decodeResponse Domain.postView response of
                 Ok source ->
                     case model.editor of
                         Just editor ->
@@ -225,7 +225,7 @@ updateWorking csrf message model =
                     ( { model | flash = FlashProblem problem }, Cmd.none )
 
         Uploaded mode response ->
-            case Api.decodeResponse Domain.media response of
+            case Api.decodeResponse Domain.imageUpload response of
                 Ok uploaded ->
                     case model.editor of
                         Just editor ->
@@ -235,18 +235,14 @@ updateWorking csrf message model =
                             else
                                 let
                                     label =
-                                        if String.isEmpty uploaded.name then
-                                            uploaded.id
+                                        if String.isEmpty uploaded.filename then
+                                            uploaded.filename
 
                                         else
-                                            uploaded.name
+                                            uploaded.filename
 
                                     markdown =
-                                        if String.startsWith "image/" uploaded.mediaType then
-                                            "![" ++ label ++ "](" ++ uploaded.reference ++ ")"
-
-                                        else
-                                            "[" ++ label ++ "](" ++ uploaded.reference ++ ")"
+                                        "![" ++ label ++ "](" ++ uploaded.imageUrl ++ ")"
 
                                     currentBody =
                                         body editor
@@ -264,7 +260,7 @@ updateWorking csrf message model =
                                             { editor
                                                 | uploading = False
                                                 , authoring = AuthoringState.setValue (String.trimRight currentBody ++ separator ++ markdown ++ "\n") editor.authoring
-                                                , attachments = editor.attachments ++ [ { id = uploaded.id, name = uploaded.name, reference = uploaded.reference } ]
+                                                , attachments = editor.attachments ++ [ { id = uploaded.filename, name = uploaded.filename, reference = uploaded.imageUrl } ]
                                             }
                                     , flash = FlashUploaded
                                   }
@@ -283,22 +279,17 @@ updateWorking csrf message model =
                     )
 
         SourceLoaded id response ->
-            case Api.decodeResponse Domain.source response of
+            case Api.decodeResponse Domain.postView response of
                 Ok source ->
                     ( { model
                         | source = Ready source
                         , editor =
                             Just
                                 { mode = EditPost id
-                                , title = source.title
-                                , authoring = AuthoringState.init "editor-body" source.body
-                                , format =
-                                    if String.isEmpty source.format then
-                                        "legacy"
-
-                                    else
-                                        source.format
-                                , version = Just source.version
+                                , title = source.post.name
+                                , authoring = AuthoringState.init "editor-body" (Maybe.withDefault "" source.post.body)
+                                , format = "markdown"
+                                , version = Just (Maybe.withDefault "0" source.post.updatedAt)
                                 , attachments = sourceAttachments source
                                 , uploading = False
                                 , saving = False
@@ -319,50 +310,41 @@ submitEditor csrf model editor =
         editorBody =
             body editor
 
-        attachmentIds =
-            Encode.list Encode.string (List.map .id editor.attachments)
-
         ( method, url, encodedBody ) =
             case editor.mode of
                 CreateTopic targetCommunity ->
                     ( "POST"
-                    , "/api/v1/communities/" ++ urlEncode targetCommunity ++ "/topics"
+                    , "/post"
                     , Encode.encode 0
                         (Encode.object
-                            [ ( "title", Encode.string editor.title )
+                            [ ( "name", Encode.string editor.title )
+                            , ( "community_id", Encode.int (String.toInt targetCommunity |> Maybe.withDefault 0) )
                             , ( "body", Encode.string editorBody )
-                            , ( "content_format", Encode.string editor.format )
-                            , ( "attachment_ids", attachmentIds )
                             ]
                         )
                     )
 
                 CreateReply postId ->
                     ( "POST"
-                    , "/api/v1/posts/" ++ urlEncode postId ++ "/replies"
+                    , "/comment"
                     , Encode.encode 0
                         (Encode.object
-                            [ ( "body", Encode.string editorBody )
-                            , ( "content_format", Encode.string editor.format )
-                            , ( "attachment_ids", attachmentIds )
+                            [ ( "content", Encode.string editorBody )
+                            , ( "post_id", Encode.int (String.toInt postId |> Maybe.withDefault 0) )
                             ]
                         )
                     )
 
                 EditPost postId ->
-                    ( "PATCH"
-                    , "/api/v1/posts/" ++ urlEncode postId
-                    , "{\"expected_version\":"
-                        ++ Maybe.withDefault "0" editor.version
-                        ++ ",\"title\":"
-                        ++ Encode.encode 0 (Encode.string editor.title)
-                        ++ ",\"body\":"
-                        ++ Encode.encode 0 (Encode.string editorBody)
-                        ++ ",\"content_format\":"
-                        ++ Encode.encode 0 (Encode.string editor.format)
-                        ++ ",\"attachment_ids\":"
-                        ++ Encode.encode 0 attachmentIds
-                        ++ "}"
+                    ( "PUT"
+                    , "/post"
+                    , Encode.encode 0
+                        (Encode.object
+                            [ ( "post_id", Encode.int (String.toInt postId |> Maybe.withDefault 0) )
+                            , ( "name", Encode.string editor.title )
+                            , ( "body", Encode.string editorBody )
+                            ]
+                        )
                     )
     in
     ( { model | editor = Just { editor | saving = True, problem = Nothing } }
@@ -378,5 +360,5 @@ setEditor model transform command =
 load : String -> Model -> ( Model, Cmd Msg )
 load id model =
     ( { model | source = Loading }
-    , Api.get ("/api/v1/posts/" ++ urlEncode id ++ "/source") (SourceLoaded id)
+    , Api.get ("/post?id=" ++ urlEncode id) (SourceLoaded id)
     )

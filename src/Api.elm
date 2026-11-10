@@ -1,8 +1,14 @@
-module Api exposing (Problem, Response, decodeResponse, decodeUnit, get, send, upload)
+module Api exposing (Problem, Response, decodeResponse, decodeUnit, get, login, send, upload)
 
 import File exposing (File)
 import Http
 import Json.Decode as Decode
+import Lemmy.Problem as LemmyProblem
+
+
+base : String
+base =
+    "/api/v4"
 
 
 type alias Response =
@@ -20,7 +26,7 @@ decodeResponse decoder response =
             |> Result.mapError (\error -> { status = response.status, detail = Decode.errorToString error })
 
     else
-        Err { status = response.status, detail = response.body }
+        Err (problem response)
 
 
 decodeUnit : Response -> Result Problem ()
@@ -29,7 +35,16 @@ decodeUnit response =
         Ok ()
 
     else
-        Err { status = response.status, detail = response.body }
+        Err (problem response)
+
+
+problem : Response -> Problem
+problem response =
+    let
+        value =
+            LemmyProblem.decode response.status response.body
+    in
+    { status = response.status, detail = value.code }
 
 
 expect : (Response -> msg) -> Http.Expect msg
@@ -50,15 +65,19 @@ expect toMsg =
 
 get : String -> (Response -> msg) -> Cmd msg
 get url toMsg =
-    Http.get { url = url, expect = expect toMsg }
+    Http.get { url = base ++ url, expect = expect toMsg }
 
 
 send : String -> String -> String -> String -> (Response -> msg) -> Cmd msg
 send csrf method url body toMsg =
+    let
+        _ =
+            csrf
+    in
     Http.request
         { method = method
-        , headers = [ Http.header "X-CSRF-Token" csrf ]
-        , url = url
+        , headers = []
+        , url = base ++ url
         , body =
             if body == "" then
                 Http.emptyBody
@@ -73,12 +92,29 @@ send csrf method url body toMsg =
 
 upload : String -> String -> File -> (Response -> msg) -> Cmd msg
 upload csrf purpose file toMsg =
+    let
+        _ =
+            ( csrf, purpose )
+    in
     Http.request
         { method = "POST"
-        , headers = [ Http.header "X-CSRF-Token" csrf ]
-        , url = "/api/v1/media"
-        , body = Http.multipartBody [ Http.stringPart "purpose" purpose, Http.filePart "file" file ]
+        , headers = []
+        , url = base ++ "/image"
+        , body = Http.multipartBody [ Http.filePart "image" file ]
         , expect = expect toMsg
         , timeout = Just 120000
+        , tracker = Nothing
+        }
+
+
+login : String -> (Response -> msg) -> Cmd msg
+login body toMsg =
+    Http.request
+        { method = "POST"
+        , headers = []
+        , url = "/api/v3/user/login"
+        , body = Http.stringBody "application/json" body
+        , expect = expect toMsg
+        , timeout = Just 30000
         , tracker = Nothing
         }

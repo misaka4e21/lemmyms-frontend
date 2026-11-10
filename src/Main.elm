@@ -13,19 +13,19 @@ import App.State exposing (ConfirmationAction(..), Model, Msg(..))
 import App.View exposing (view)
 import Browser
 import Browser.Navigation as Navigation
-import Domain
 import Feature.AccountBlocks as AccountBlocks
 import Feature.Auth.Update as Auth
 import Feature.CommunityManage.Update as Manage
 import Feature.Post as Post
 import Feature.SiteAdmin.Update as SiteAdmin
 import Json.Decode as Decode
+import Lemmy.Domain as Domain
 import Locale exposing (Locale(..))
 import Ports exposing (closeDialog, focus, incoming, openDialog)
 import Remote exposing (Remote(..))
 import Route
 import Ui.PostCard exposing (deleteTriggerId)
-import Url exposing (Url)
+import Url
 
 
 main : Program Decode.Value Model Msg
@@ -98,6 +98,14 @@ update message model =
 
         Incoming value ->
             receiveIncoming value model
+
+        SiteLoaded result ->
+            case result of
+                Ok site ->
+                    ( { model | site = Just site }, Cmd.none )
+
+                Err _ ->
+                    ( model, Cmd.none )
 
         SessionLoaded generation result ->
             if generation /= model.authGeneration then
@@ -345,7 +353,7 @@ loadDrawerProfile : Model -> Cmd Msg
 loadDrawerProfile model =
     case model.auth of
         Authenticated _ ->
-            Api.get "/api/v1/profile" (DrawerProfileLoaded << Api.decodeResponse Domain.profile)
+            Api.get "/account" (DrawerProfileLoaded << Api.decodeResponse Domain.ownPersonView)
 
         _ ->
             Cmd.none

@@ -4,13 +4,13 @@ import Api
 import App.Context exposing (Active)
 import App.Feedback exposing (Flash(..))
 import App.Session exposing (AuthState(..))
-import Domain
 import Generated.I18n as Translations
 import Html exposing (Html, button, div, form, h2, input, label, li, option, p, section, select, span, text, time, ul)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Lemmy.Domain as Domain
 import List
 import Remote exposing (Remote(..))
 import Ui.Feedback exposing (loginRequired, viewFormProblem, viewRemote)
@@ -19,12 +19,16 @@ import Ui.Layout exposing (pageHeading)
 
 
 type alias Model =
-    { blocks : Remote (List Domain.AccountBlock)
+    { blocks : Remote (List Block)
     , kind : String
     , target : String
     , busy : Bool
     , problem : Maybe Api.Problem
     }
+
+
+type alias Block =
+    { kind : String, target : String, createdAt : String }
 
 
 initial : Model
@@ -61,7 +65,7 @@ type alias Outcome =
 
 
 type alias Working =
-    { blocks : Remote (List Domain.AccountBlock)
+    { blocks : Remote (List Block)
     , kind : String
     , target : String
     , busy : Bool
@@ -125,9 +129,9 @@ updateWorking csrf message model =
                 )
 
         Loaded response ->
-            case Api.decodeResponse (Decode.field "items" (Decode.list Domain.accountBlock)) response of
+            case Api.decodeResponse Domain.myUserInfo response of
                 Ok blocks ->
-                    ( { model | blocks = Ready blocks }, Cmd.none )
+                    ( { model | blocks = Ready (blocksFromUser blocks) }, Cmd.none )
 
                 Err problem ->
                     ( { model | blocks = Failed problem, problem = Just problem }
@@ -157,13 +161,39 @@ updateWorking csrf message model =
 
 blockRequest : String -> String -> String -> String -> Action -> Cmd Msg
 blockRequest csrf method kind target action =
+    let
+        endpoint =
+            case kind of
+                "community" ->
+                    "/account/block/community"
+
+                "instance" ->
+                    "/account/block/instance/persons"
+
+                _ ->
+                    "/account/block/person"
+
+        field =
+            case kind of
+                "community" ->
+                    "community_id"
+
+                "instance" ->
+                    "instance_id"
+
+                _ ->
+                    "person_id"
+
+        block =
+            action == AddAction
+    in
     Api.send csrf
-        method
-        "/api/v1/account/blocks"
+        "POST"
+        endpoint
         (Encode.encode 0
             (Encode.object
-                [ ( "kind", Encode.string kind )
-                , ( "target", Encode.string target )
+                [ ( field, Encode.int (String.toInt target |> Maybe.withDefault 0) )
+                , ( "block", Encode.bool block )
                 ]
             )
         )
@@ -172,7 +202,15 @@ blockRequest csrf method kind target action =
 
 loadCommand : Cmd Msg
 loadCommand =
-    Api.get "/api/v1/account/blocks" Loaded
+    Api.get "/account" Loaded
+
+
+blocksFromUser : Domain.MyUserInfo -> List Block
+blocksFromUser user =
+    List.map (\personValue -> { kind = "person", target = personValue.apId, createdAt = "" }) user.personBlocks
+        ++ List.map (\communityValue -> { kind = "community", target = String.fromInt communityValue.id, createdAt = "" }) user.communityBlocks
+        ++ List.map (\instanceValue -> { kind = "instance", target = instanceValue.domain, createdAt = "" }) user.instanceCommunitiesBlocks
+        ++ List.map (\instanceValue -> { kind = "instance", target = instanceValue.domain, createdAt = "" }) user.instancePersonsBlocks
 
 
 load : Model -> ( Model, Cmd Msg )
@@ -191,7 +229,7 @@ type alias Config msg =
 
 
 type alias ViewModel =
-    { blocks : Remote (List Domain.AccountBlock)
+    { blocks : Remote (List Block)
     , kind : String
     , target : String
     , busy : Bool

@@ -1,31 +1,26 @@
 # Backend integration
 
-The frontend consumes the sibling `commune-backend` browser API without modifying backend code. The authoritative contracts are `docs/api.md`, `docs/authentication.md`, `docs/forum-browser-api.md`, and `docs/participation-api.md` in that repository.
+The frontend targets `LemmyMultisite` `1.0.0-beta.3`. Reads and writes use the same-origin `/api/v4` API. Login remains a temporary exception: it posts to `/api/v3/user/login` only to establish the HttpOnly `jwt` cookie, then verifies the session with `GET /api/v4/account`. The v3 response body is not used.
 
-All requests are same-origin. Browser session cookies are sent automatically. The client reads `__Host-commune_csrf` only for mutating requests and never writes sessions or CSRF values to browser storage. Responses are interpreted by committed DTO decoders and stable HTTP statuses; server error prose is not treated as localized interface text.
+The browser never reads the JWT. The cookie is host-scoped, `HttpOnly`, `SameSite=Lax`, and `Secure` when the request is HTTPS. There is no CSRF header. Requests are same-origin so the browser sends the cookie automatically.
 
 The main request groups are:
 
 | Area | Endpoints |
 | --- | --- |
-| Session | `/api/v1/auth/session`, `/login`, `/logout` |
-| Registration | `/api/v1/auth/register`, `/verification/resend`, `/verification/confirm` |
-| Discovery | `/api/v1/topics`, `/api/v1/communities`, `/api/v1/communities/{id}/topics` |
-| Posts | `/api/v1/posts/{id}`, `/replies`, `/vote`, `/likes`, `/save`, `/read`, `/hide-for-me`, `/source`, `/hide`, `/import` |
-| Search | `/api/v1/search?kind=posts|communities&q=...` |
-| Mentions | `/api/v1/mentions/candidates?q=...&limit=8` |
-| Notifications | `/api/v1/notifications`, `/unread-count`, `/{id}/read`, `/read-all` |
-| Profiles | `/api/v1/profile`, `/api/v1/profiles/{username}` |
-| Media | `/api/v1/media`, `/api/v1/media/private/{id}` |
-| Account content | `/api/v1/account/saved`, `/read`, `/hidden`, `/liked`, `/blocks` |
-| Community management | `/api/v1/communities/{id}/policy`, `/follow-requests`, `/members`, `/managers`, `/bans`, `/removals`, `/submissions` |
-| Moderation | `/api/v1/reports`, `/reports/{id}/resolve`, `/modlog`, `/admin/bans` |
-| Site administration | `/api/v1/site/vote-settings`, `/api/v1/admin/vote-settings` |
-| Password | `/api/v1/auth/password/reset`, `/reset/confirm`, `/change` |
-| Context | `/api/v1/contexts/{id}/backfill` |
+| Session | `GET /api/v4/site`, `GET /api/v4/account`, `POST /api/v3/user/login`, `POST /api/v4/account/auth/logout` |
+| Registration and recovery | `POST /api/v4/account/auth/register`, `verify_email`, `resend_verification_email`, `password_reset`, `password_change`, `PUT /change_password` |
+| Community | `GET/PUT /api/v4/community`, `POST /api/v4/community`, `GET /community/list`, `POST /community/follow`, `pending_follows/list`, `pending_follows/approve` |
+| Posts | `GET/PUT/DELETE /api/v4/post`, `POST /api/v4/post`, `GET /post/list`, `POST /post/like`, `PUT /post/save`, `POST /post/mark_as_read`, `POST /post/hide`, `POST /post/report`, `PUT /post/report/resolve`, `POST /post/remove` |
+| Comments | `GET/PUT/DELETE /api/v4/comment`, `POST /api/v4/comment`, `GET /comment/list`, `POST /comment/like`, `PUT /comment/save`, `POST /comment/report`, `PUT /comment/report/resolve` |
+| Search and mentions | `GET /api/v4/search` with `search_term`, `type_`, and `page_cursor` |
+| Notifications | `GET /account/notification/list`, `GET /account/unread_counts`, `POST /account/notification/mark_as_read`, `POST /account/notification/mark_as_read/all` |
+| Profiles | `GET /api/v4/person`, `GET /api/v4/account`, `PUT /account/settings/save`, `POST/DELETE /account/avatar` |
+| Media | `POST/DELETE /api/v4/image`; avatars use `/account/avatar` |
+| Account content | `GET /api/v4/account/saved`, `/read`, `/hidden`, `/liked`, `POST /api/v4/account/block/person`, `/community`, `/instance/persons`, `/instance/communities` |
+| Community management | `GET/PUT /api/v4/community`, `/community/pending_follows/list`, `/community/pending_follows/approve`, `/community/mod`, `/community/ban_user`, `/report/list`, `/modlog` |
+| Site administration | `GET/PUT /api/v4/site`, `/report/list`, `/modlog`, `/admin/ban` |
 
-Writes carry the current CSRF value. Editing reads `/source` and sends its revision as the numeric `expected_version`; a 409 `edit_conflict` keeps the draft and fetches fresh source for comparison. No write is automatically retried.
+List responses use `items`, `next_page`, and `prev_page`. The client keeps the cursor returned by the same endpoint and does not derive offsets or totals. Post and comment bodies are Markdown and are rendered in Elm through an allowlisted renderer. Images upload through the v4 Pictrs endpoint and use the returned `image_url` and `filename`.
 
-Management routes remain scoped to the site resolved by the browser authority. Deployment-wide site, account, role, active-ban inventory, report-detail, and cross-site moderation contracts are not currently available and are not simulated by the frontend.
-
-The isolated real-backend test seeds a site, an administrative account, and an ordinary account. It exercises sessions, CSRF, community creation, topic publication, valid image upload/binding, source-backed editing, votes, management, second-account replies, profile updates, search, notification projection, and the registration-disabled response. SMTP delivery and external federation are not exercised by the default fixture server.
+Management routes stay scoped to the tenant resolved by the browser Host. Community member rosters, submission review, removal queues, context backfill, and person reports have no v4 endpoint and are not implemented. The migration does not simulate those workflows.

@@ -1,5 +1,6 @@
 module App.View exposing (view)
 
+import AccountSource exposing (AccountContentSource(..))
 import App.Context exposing (Active)
 import App.Shell exposing (viewBoot, viewReady)
 import App.State exposing (ConfirmationAction(..), Model, Msg(..))
@@ -7,7 +8,6 @@ import App.View.Account exposing (pageLogin, pagePasswordReset, pagePasswordRese
 import App.View.Content exposing (editorConfig, pageCommunities, pageCommunity, pageLatest, pagePost, pageSearch, postCard)
 import App.View.Participation exposing (pageManage, pageNewCommunity, pageNotifications)
 import Browser
-import Domain
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
 import Feature.Editor.State exposing (EditorMode(..))
@@ -18,6 +18,7 @@ import Feature.SiteAdmin.Update as SiteAdmin
 import Feature.SiteAdmin.View as SiteAdminView
 import Generated.I18n as Translations
 import Html exposing (Html, p, text)
+import Lemmy.Domain as Domain
 import Remote exposing (Remote(..))
 import Route
 import Ui.Layout exposing (pageHeading)
@@ -76,7 +77,7 @@ routeTitle model active =
         Route.Community _ ->
             case model.communityPage.community of
                 Ready community ->
-                    community.title
+                    Maybe.withDefault community.community.name community.community.title
 
                 _ ->
                     Translations.communitiesTitle texts
@@ -84,14 +85,17 @@ routeTitle model active =
         Route.Post _ ->
             case model.posts.post of
                 Ready post ->
-                    if String.isEmpty post.title then
+                    if String.isEmpty post.post.name then
                         Translations.repliesTitle texts
 
                     else
-                        post.title
+                        post.post.name
 
                 _ ->
                     Translations.repliesTitle texts
+
+        Route.Comment _ ->
+            Translations.repliesTitle texts
 
         Route.NewCommunity ->
             Translations.createCommunity texts
@@ -175,6 +179,9 @@ pageView model active =
         Route.Post id ->
             pagePost model active id
 
+        Route.Comment id ->
+            pagePost model active id
+
         Route.NewCommunity ->
             pageNewCommunity model active
 
@@ -256,19 +263,19 @@ pageView model active =
                 (p [] [ text (Translations.notFound active.texts) ])
 
 
-accountContentTitle : Translations.I18n -> Domain.AccountContentSource -> String
+accountContentTitle : Translations.I18n -> AccountContentSource -> String
 accountContentTitle texts source =
     case source of
-        Domain.SavedContent ->
+        SavedContent ->
             Translations.savedPostsTitle texts
 
-        Domain.ReadContent ->
+        ReadContent ->
             Translations.readPostsTitle texts
 
-        Domain.HiddenContent ->
+        HiddenContent ->
             Translations.hiddenPostsTitle texts
 
-        Domain.LikedContent ->
+        LikedContent ->
             Translations.likedPostsTitle texts
 
 

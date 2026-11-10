@@ -140,7 +140,7 @@ viewEditor config active editor =
             Just source ->
                 section [ A.class "conflict-panel" ]
                     [ h3 [] [ text (Translations.latestSource active.texts) ]
-                    , pre [ A.dir "auto" ] [ text source.body ]
+                    , pre [ A.dir "auto" ] [ text (Maybe.withDefault "" source.post.body) ]
                     , div [ A.class "actions" ]
                         [ button [ A.type_ "button", A.class "outlined-button", Events.onClick config.editorKeepDraft ]
                             [ text (Translations.keepDraft active.texts) ]

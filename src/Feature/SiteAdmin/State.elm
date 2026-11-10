@@ -2,23 +2,23 @@ module Feature.SiteAdmin.State exposing (..)
 
 import Api
 import Dict exposing (Dict)
-import Domain
+import Lemmy.Domain as Domain
 import Remote exposing (Remote(..))
 import Set exposing (Set)
 
 
 type alias Model =
-    { voteSettings : Remote Domain.VoteSettings
+    { voteSettings : Remote Domain.LocalSite
     , upvotesEnabled : Bool
     , downvotesEnabled : Bool
     , settingsBusy : Bool
     , settingsProblem : Maybe Api.Problem
-    , reports : Remote (Domain.Page Domain.Report)
+    , reports : Remote (Domain.Page Domain.ReportView)
     , reportState : String
     , reportCommunity : String
     , reportNotes : Dict String String
     , reportBusy : Set String
-    , modlog : Remote (Domain.Page Domain.ModerationLogEntry)
+    , modlog : Remote (Domain.Page Domain.ModlogView)
     , modlogCommunity : String
     , banActor : String
     , banReason : String

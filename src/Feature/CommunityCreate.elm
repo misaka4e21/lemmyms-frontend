@@ -4,13 +4,13 @@ import Api
 import App.Context exposing (Active)
 import App.Feedback exposing (Flash(..))
 import App.Session exposing (AuthState(..))
-import Domain
 import Generated.I18n as Translations
 import Html exposing (Html, button, div, form, input, label, option, p, select, text)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Lemmy.Domain as Domain
 import Route
 import Ui.CommunityPolicy exposing (policyFields)
 import Ui.Feedback exposing (loginRequired, viewFormProblem)
@@ -136,14 +136,13 @@ updateWorking csrf message model =
                 ( { model | createCommunity = (\form -> { form | busy = True, problem = Nothing }) model.createCommunity }
                 , Api.send csrf
                     "POST"
-                    "/api/v1/communities"
+                    "/community"
                     (Encode.encode 0
                         (Encode.object
                             [ ( "name", Encode.string model.createCommunity.name )
                             , ( "title", Encode.string model.createCommunity.title )
-                            , ( "mode", Encode.string model.createCommunity.mode )
-                            , ( "read_policy", Encode.string model.createCommunity.readPolicy )
-                            , ( "post_policy", Encode.string model.createCommunity.postPolicy )
+                            , ( "visibility", Encode.string model.createCommunity.mode )
+                            , ( "posting_restricted_to_mods", Encode.bool (model.createCommunity.postPolicy == "managers") )
                             ]
                         )
                     )
@@ -151,9 +150,9 @@ updateWorking csrf message model =
                 )
 
         Created response ->
-            case Api.decodeResponse Domain.community response of
+            case Api.decodeResponse (Decode.field "community_view" Domain.communityView) response of
                 Ok community ->
-                    ( { model | createCommunity = emptyCommunityForm, flash = FlashCreated, navigation = Just (Route.path (Route.Community community.id)) }, Cmd.none )
+                    ( { model | createCommunity = emptyCommunityForm, flash = FlashCreated, navigation = Just (Route.path (Route.Community (String.fromInt community.community.id))) }, Cmd.none )
 
                 Err problem ->
                     ( { model | createCommunity = (\form -> { form | busy = False, problem = Just problem }) model.createCommunity }, Cmd.none )

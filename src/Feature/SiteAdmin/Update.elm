@@ -3,10 +3,10 @@ module Feature.SiteAdmin.Update exposing (Action(..), LoadKind(..), Msg(..), Out
 import Api
 import App.Feedback exposing (Flash(..))
 import Dict
-import Domain
 import Feature.SiteAdmin.State exposing (..)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Lemmy.Domain as Domain
 import List
 import Remote exposing (Remote(..))
 import Route
@@ -102,10 +102,10 @@ updateWorking context message state =
                 updated =
                     case kind of
                         LoadReports ->
-                            { model | reports = decodePage Domain.report response }
+                            { model | reports = decodePage (Domain.page Domain.reportView) response }
 
                         LoadModlog ->
-                            { model | modlog = decodePage Domain.moderationLogEntry response }
+                            { model | modlog = decodePage (Domain.page Domain.modlogView) response }
             in
             ( { state
                 | model = updated
@@ -115,14 +115,14 @@ updateWorking context message state =
             )
 
         SettingsLoaded response ->
-            case Api.decodeResponse Domain.voteSettings response of
+            case Api.decodeResponse Domain.siteView response of
                 Ok settings ->
                     ( { state
                         | model =
                             { model
-                                | voteSettings = Ready settings
-                                , upvotesEnabled = settings.upvotesEnabled
-                                , downvotesEnabled = settings.downvotesEnabled
+                                | voteSettings = Ready settings.localSite
+                                , upvotesEnabled = settings.localSite.defaultPostUpvotes /= Domain.DisabledVotes
+                                , downvotesEnabled = settings.localSite.defaultPostDownvotes /= Domain.DisabledVotes
                                 , settingsProblem = Nothing
                             }
                       }
@@ -155,11 +155,27 @@ updateWorking context message state =
                 ( { state | model = { model | settingsBusy = True, settingsProblem = Nothing } }
                 , Api.send context.csrf
                     "PUT"
-                    "/api/v1/admin/vote-settings"
+                    "/site"
                     (Encode.encode 0
                         (Encode.object
-                            [ ( "upvotes_enabled", Encode.bool model.upvotesEnabled )
-                            , ( "downvotes_enabled", Encode.bool model.downvotesEnabled )
+                            [ ( "default_post_upvotes"
+                              , Encode.string
+                                    (if model.upvotesEnabled then
+                                        "all"
+
+                                     else
+                                        "disable"
+                                    )
+                              )
+                            , ( "default_post_downvotes"
+                              , Encode.string
+                                    (if model.downvotesEnabled then
+                                        "all"
+
+                                     else
+                                        "disable"
+                                    )
+                              )
                             ]
                         )
                     )
@@ -167,14 +183,14 @@ updateWorking context message state =
                 )
 
         SettingsSaved response ->
-            case Api.decodeResponse Domain.voteSettings response of
+            case Api.decodeResponse Domain.siteView response of
                 Ok settings ->
                     ( { state
                         | model =
                             { model
-                                | voteSettings = Ready settings
-                                , upvotesEnabled = settings.upvotesEnabled
-                                , downvotesEnabled = settings.downvotesEnabled
+                                | voteSettings = Ready settings.localSite
+                                , upvotesEnabled = settings.localSite.defaultPostUpvotes /= Domain.DisabledVotes
+                                , downvotesEnabled = settings.localSite.defaultPostDownvotes /= Domain.DisabledVotes
                                 , settingsBusy = False
                                 , settingsProblem = Nothing
                             }
@@ -211,12 +227,13 @@ updateWorking context message state =
             else
                 ( { state | model = { model | reportBusy = Set.insert id model.reportBusy } }
                 , Api.send context.csrf
-                    "POST"
-                    ("/api/v1/reports/" ++ urlEncode id ++ "/resolve")
+                    "PUT"
+                    (reportResolvePath id model)
                     (Encode.encode 0
                         (Encode.object
-                            [ ( "state", Encode.string resolution )
-                            , ( "note", Encode.string (Dict.get id model.reportNotes |> Maybe.withDefault "") )
+                            [ ( "report_id", Encode.int (String.toInt id |> Maybe.withDefault 0) )
+                            , ( "resolved", Encode.bool (resolution == "resolved") )
+                            , ( "conclusion", Encode.string (Dict.get id model.reportNotes |> Maybe.withDefault "") )
                             ]
                         )
                     )
@@ -312,18 +329,19 @@ banRequest context state method =
     else
         ( { state | model = { model | banBusy = True, banProblem = Nothing } }
         , Api.send context.csrf
-            method
-            "/api/v1/admin/bans"
+            "POST"
+            "/admin/ban"
             (Encode.encode 0
                 (Encode.object
-                    ([ ( "actor", Encode.string (String.trim model.banActor) )
+                    ([ ( "person_id", Encode.int (String.toInt (String.trim model.banActor) |> Maybe.withDefault 0) )
+                     , ( "ban", Encode.bool (method == "POST") )
                      , ( "reason", Encode.string (String.trim model.banReason) )
                      ]
                         ++ (if String.isEmpty (String.trim model.banExpires) then
                                 []
 
                             else
-                                [ ( "expires_at", Encode.string (String.trim model.banExpires) ) ]
+                                [ ( "expires_at", Encode.int (String.toInt (String.trim model.banExpires) |> Maybe.withDefault 0) ) ]
                            )
                     )
                 )
@@ -332,9 +350,9 @@ banRequest context state method =
         )
 
 
-decodePage : Decode.Decoder a -> Api.Response -> Remote (Domain.Page a)
+decodePage : Decode.Decoder (Domain.Page a) -> Api.Response -> Remote (Domain.Page a)
 decodePage decoder response =
-    case Api.decodeResponse (Domain.page decoder) response of
+    case Api.decodeResponse decoder response of
         Ok page ->
             Ready page
 
@@ -376,11 +394,74 @@ reportsPath state community =
 
 reportsApiPath : String -> String -> String
 reportsApiPath state community =
-    "/api/v1/reports"
+    "/report/list"
         ++ query
-            [ ( "state", state )
+            [ ( "unresolved_only"
+              , if state == "open" then
+                    "true"
+
+                else
+                    ""
+              )
             , ( "community_id", community )
+            , ( "limit", "20" )
             ]
+
+
+reportResolvePath : String -> Model -> String
+reportResolvePath id model =
+    let
+        kind =
+            case model.reports of
+                Ready page ->
+                    page.items
+                        |> List.filterMap
+                            (\reportValue ->
+                                if String.fromInt (reportId reportValue) == id then
+                                    Just (reportKind reportValue)
+
+                                else
+                                    Nothing
+                            )
+                        |> List.head
+                        |> Maybe.withDefault "post"
+
+                _ ->
+                    "post"
+    in
+    "/" ++ kind ++ "/report/resolve"
+
+
+reportId : Domain.ReportView -> Int
+reportId reportValue =
+    case reportValue of
+        Domain.PostReportView report _ _ _ _ ->
+            report.id
+
+        Domain.CommentReportView report _ _ _ _ _ ->
+            report.id
+
+        Domain.CommunityReportView report _ _ _ ->
+            report.id
+
+        Domain.PrivateMessageReportView id _ _ _ _ _ _ ->
+            id
+
+
+reportKind : Domain.ReportView -> String
+reportKind reportValue =
+    case reportValue of
+        Domain.PostReportView _ _ _ _ _ ->
+            "post"
+
+        Domain.CommentReportView _ _ _ _ _ _ ->
+            "comment"
+
+        Domain.CommunityReportView _ _ _ _ ->
+            "community"
+
+        Domain.PrivateMessageReportView _ _ _ _ _ _ _ ->
+            "private_message"
 
 
 modlogPath : String -> String
@@ -390,7 +471,7 @@ modlogPath community =
 
 modlogApiPath : String -> String
 modlogApiPath community =
-    "/api/v1/modlog" ++ query [ ( "community_id", community ) ]
+    "/modlog" ++ query [ ( "community_id", community ), ( "limit", "20" ) ]
 
 
 query : List ( String, String ) -> String
@@ -410,7 +491,7 @@ query values =
 loadSettings : Model -> ( Model, Cmd Msg )
 loadSettings model =
     ( { model | voteSettings = Loading, settingsProblem = Nothing }
-    , Api.get "/api/v1/site/vote-settings" SettingsLoaded
+    , Api.get "/site" SettingsLoaded
     )
 
 

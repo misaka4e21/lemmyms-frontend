@@ -1,8 +1,9 @@
 module Feature.Authoring.Update exposing (Msg(..), Outcome, update)
 
 import Api
-import Domain
 import Feature.Authoring.State as State exposing (Model, ToolbarAction(..))
+import Json.Decode as Decode
+import Lemmy.Domain as Domain
 import Ports
 import Process
 import Task
@@ -52,9 +53,9 @@ update message model =
                     ( Just token, State.Pending ) ->
                         ( { model | status = State.Loading }
                         , Api.get
-                            ("/api/v1/mentions/candidates?q="
+                            ("/search?search_term="
                                 ++ Url.percentEncode token.query
-                                ++ "&limit=8"
+                                ++ "&type_=users&limit=8"
                             )
                             (CandidatesLoaded generation)
                         , { changed = False }
@@ -68,7 +69,7 @@ update message model =
                 ( model, Cmd.none, { changed = False } )
 
             else
-                case Api.decodeResponse Domain.mentionCandidatePage response of
+                case Api.decodeResponse (Decode.map .persons Domain.searchResponse) response of
                     Ok [] ->
                         ( { model | status = State.Empty }, Cmd.none, { changed = False } )
 

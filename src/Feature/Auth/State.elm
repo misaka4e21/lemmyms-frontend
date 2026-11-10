@@ -11,6 +11,8 @@ type alias Model =
     , loginBusy : Bool
     , registerUsername : String
     , registerEmail : String
+    , registerPassword : String
+    , registerPasswordVerify : String
     , registerProblem : Maybe Api.Problem
     , registerBusy : Bool
     , verifyPassword : String
@@ -40,6 +42,8 @@ initial token =
     , loginBusy = False
     , registerUsername = ""
     , registerEmail = ""
+    , registerPassword = ""
+    , registerPasswordVerify = ""
     , registerProblem = Nothing
     , registerBusy = False
     , verifyPassword = ""

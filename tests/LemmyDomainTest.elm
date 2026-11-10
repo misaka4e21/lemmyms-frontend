@@ -162,7 +162,9 @@ suite =
             \_ ->
                 let
                     tree =
-                        CommentTree.build .id .path .childCount
+                        CommentTree.build .id
+                            .path
+                            .childCount
                             [ { id = 6, path = "not-a-path", childCount = 0 } ]
                 in
                 Expect.equal [ 6 ] (List.map .id (CommentTree.flatten tree))
