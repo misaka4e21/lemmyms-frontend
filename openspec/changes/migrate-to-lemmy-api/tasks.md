@@ -1,7 +1,7 @@
 ## 1. Contract and Backend Prerequisites
 
 - [x] 1.1 Capture v4 response fixtures for site, account, community, post, comment, search, notification, report, modlog, and image upload; verify each fixture is committed under `tests/` and decodes without field guessing.
-- [ ] 1.2 In `LemmyMultisite`, make successful login set `jwt` as an HttpOnly, `SameSite=Lax`, `Secure`-when-HTTPS, `Path=/` cookie with no `Domain` attribute while retaining the JSON `jwt`; verify with `curl` that the cookie is set and a cookie-only `GET /api/v4/account` succeeds.
+- [ ] 1.2 Implement the temporary login bridge: post credentials to `/api/v3/user/login`, discard its response body, then verify the HttpOnly cookie with `GET /api/v4/account`; verify the browser never reads the JWT and that all non-login requests use `/api/v4`.
 - [ ] 1.3 Verify logout invalidates the login token and removes the `jwt` cookie, and verify two tenant hosts do not receive each other's cookie.
 - [x] 1.4 Define the v4 error-code catalog and verify known codes, unknown codes, and validation/rate-limit responses decode into the shared problem type.
 

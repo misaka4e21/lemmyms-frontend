@@ -5,15 +5,19 @@ Define the browser-facing contract between the Elm application and a Lemmy `1.0.
 ## ADDED Requirements
 
 ### Requirement: Same-origin v4 API boundary
-The application SHALL send every Lemmy request to the same-origin `/api/v4` prefix and SHALL NOT call the retired Commune `/api/v1` endpoints. Requests SHALL include browser credentials so an HttpOnly session cookie is sent automatically. The application SHALL NOT read the JWT from JavaScript, browser storage, or a response body.
+The application SHALL use the same-origin `/api/v4` prefix for all migrated reads and writes and SHALL NOT call the retired Commune `/api/v1` endpoints. Session establishment is the sole temporary exception: login SHALL call `/api/v3/user/login` to receive the HttpOnly `jwt` cookie until the v4 login route sets that cookie. The login response body SHALL NOT be used as application data; the application SHALL immediately verify the session through `/api/v4/account`. Requests SHALL include browser credentials so the HttpOnly cookie is sent automatically. The application SHALL NOT read the JWT from JavaScript, browser storage, or a response body.
 
 #### Scenario: Authenticated request after reload
 - **WHEN** an authenticated reader reloads the application and opens a protected route
 - **THEN** the browser sends the existing HttpOnly session cookie with the v4 request and the application restores the account without reading a token in JavaScript
 
 #### Scenario: No legacy fallback
-- **WHEN** a v4 request fails with a missing-resource or unsupported-operation response
-- **THEN** the application does not retry the same operation against `/api/v1` or another backend prefix
+- **WHEN** a v4 read or write fails with a missing-resource or unsupported-operation response
+- **THEN** the application does not retry that operation against `/api/v1`, `/api/v3`, or another backend prefix
+
+#### Scenario: Temporary v3 login bridge
+- **WHEN** a reader submits valid credentials while the v4 login route still lacks `Set-Cookie`
+- **THEN** the application calls `/api/v3/user/login` only to establish the HttpOnly cookie, then loads the account from `/api/v4/account` and does not use the v3 response body as session data
 
 ### Requirement: HttpOnly session lifecycle
 Login SHALL succeed only when the backend establishes an HttpOnly `jwt` cookie for the current origin, and the application SHALL treat the returned JSON JWT as opaque. Logout SHALL invalidate the server session and remove the cookie. A 401 response SHALL move the application to an anonymous state, clear protected visible data, and offer reauthentication without retrying the failed mutation.

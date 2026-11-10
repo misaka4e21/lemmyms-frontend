@@ -1,4 +1,4 @@
-module Lemmy.Api exposing (Response, decodeResponse, decodeUnit, get, send, upload)
+module Lemmy.Api exposing (Response, decodeResponse, decodeUnit, get, login, logout, send, upload)
 
 import File exposing (File)
 import Http
@@ -71,6 +71,24 @@ send method path body toMsg =
         , timeout = Just 30000
         , tracker = Nothing
         }
+
+
+login : String -> (Response -> msg) -> Cmd msg
+login body toMsg =
+    Http.request
+        { method = "POST"
+        , headers = []
+        , url = "/api/v3/user/login"
+        , body = Http.stringBody "application/json" body
+        , expect = expect toMsg
+        , timeout = Just 30000
+        , tracker = Nothing
+        }
+
+
+logout : (Response -> msg) -> Cmd msg
+logout toMsg =
+    send "POST" "/account/auth/logout" "" toMsg
 
 
 upload : File -> (Response -> msg) -> Cmd msg

@@ -52,6 +52,8 @@ The frontend will never read the JSON `jwt` field into its model, ports, storage
 
 Alternatives considered: keep the `lemmy-ui` pattern of a JavaScript-readable `jwt` cookie and an `Authorization` header. Rejected because it exposes the token to XSS. Store the JWT in memory or `sessionStorage`. Rejected because the user selected an HttpOnly cookie and because either choice loses login across reloads or weakens the storage boundary.
 
+The current `LemmyMultisite` v4 login handler returns the JWT only in JSON. Its legacy `/api/v3/user/login` handler already sets an HttpOnly, `SameSite=Lax`, host-only `jwt` cookie through `auth_cookie`. Until the v4 route does the same, the frontend will post login credentials to `/api/v3/user/login` solely to establish the cookie, then call `/api/v4/account` to verify the session and load `MyUserInfo`. The v3 response body is discarded. This is the only v3 request in the frontend; every read and write remains v4. Remove the bridge when v4 login sets the cookie.
+
 CSRF: `SameSite=Lax` blocks cross-site POST/PUT/DELETE cookie sending. The backend should additionally validate the `Origin`/`Referer` host for cookie-authenticated mutations. This is a defense-in-depth requirement for the backend cookie change; the frontend will not invent a CSRF token that the v4 contract does not define.
 
 ### Replace the domain model rather than adapt it
@@ -101,6 +103,7 @@ The existing route epoch and authentication generation remain. Cursor responses 
 ## Risks / Trade-offs
 
 - **Cross-repository backend change**: login must set the HttpOnly cookie. Mitigation: keep the JSON `jwt` field for other clients, add the cookie additively, and test both header and cookie authentication against the real `LemmyMultisite` build.
+- **Temporary v3 login dependency**: the bridge keeps one legacy endpoint until v4 login sets the cookie. Mitigation: isolate it in the transport layer, discard its body, verify the cookie through v4, and remove it when v4 supports `Set-Cookie`.
 - **Host-only cookie scope in a multisite installation**: a cookie with a parent `Domain` would leak sessions between tenants. Mitigation: omit `Domain`, use `Path=/`, and test two hosts on the same installation.
 - **CSRF with cookie auth**: HttpOnly prevents token theft but not cross-site request sending. Mitigation: `SameSite=Lax` plus backend Origin validation; never expose state-changing operations over GET.
 - **Markdown parser coverage**: the chosen Elm package may not implement every Lemmy Markdown extension. Mitigation: pin the package, add fixture coverage for the constructs used by existing content, and render unsupported constructs as text rather than raw HTML.
