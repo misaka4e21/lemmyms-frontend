@@ -77,6 +77,6 @@
 - [x] 10.1 Route `/api/v4` and Pictrs through Vite and nginx on the frontend origin; verify development and production-preview browser tests.
 - [x] 10.2 Update `docs/backend-integration.md`, `docs/architecture.md`, and deployment notes for v4, the HttpOnly cookie, canonical URLs, cursor pagination, Markdown, and Pictrs; verify the documented request paths and cookie behavior match the implemented client and deployment config.
 - [x] 10.3 Remove the old `/api/v1`, CSRF, `body_html`, and Commune DTO code and tests; verify `rg -n "/api/v1|X-CSRF-Token|body_html" src tests docs` finds no active implementation.
-- [ ] 10.4 Update the real-backend acceptance fixture for a `LemmyMultisite` tenant, including login/logout cookie behavior, post/comment creation, votes, community management, reports, and modlog; verify the fixture passes against the running backend.
+- [x] 10.4 Update the real-backend acceptance fixture for a `LemmyMultisite` tenant, including login/logout cookie behavior, post/comment creation, votes, community management, reports, and modlog; verify the fixture passes against the running backend.
 - [ ] 10.5 Run `ELM_HOME=/tmp/commune-elm-home npm run compile`, `ELM_HOME=/tmp/commune-elm-home npm test`, `npm run i18n:check`, `npm run format:check`, and `npm run test:browser`; record any environment-only failures separately.
 - [x] 10.6 Record the removed Commune-only workflows and the backend endpoints still needed for them in the change notes; verify the report distinguishes implemented migration from backend-dependent follow-ups.

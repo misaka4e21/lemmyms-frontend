@@ -21,6 +21,7 @@ import Feature.Report as Report
 import Feature.Search as Search
 import Feature.SiteAdmin.State as SiteAdminState
 import Feature.SiteAdmin.Update as SiteAdmin
+import Json.Decode as Decode
 import Lemmy.Domain as Domain
 import Remote exposing (Remote(..))
 import Route
@@ -282,5 +283,5 @@ loadSession model =
     Cmd.batch
         [ Api.get "/account"
             (SessionLoaded model.authGeneration << Api.decodeResponse Domain.myUserInfo)
-        , Api.get "/site" (SiteLoaded << Api.decodeResponse Domain.siteView)
+        , Api.get "/site" (SiteLoaded << Api.decodeResponse (Decode.map .siteView Domain.getSiteResponse))
         ]

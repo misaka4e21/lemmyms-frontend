@@ -296,7 +296,7 @@ updateWorking csrf url message model =
                     ( problemState { model | busy = Set.remove (mutationKey mutation) model.busy } problem, Cmd.none )
 
         Refreshed _ response ->
-            case Api.decodeResponse Domain.postView response of
+            case Api.decodeResponse (Decode.field "post_view" Domain.postView) response of
                 Ok post ->
                     ( { model
                         | post =
@@ -327,7 +327,7 @@ updateWorking csrf url message model =
                     ( problemState model problem, Cmd.none )
 
         PostLoaded response ->
-            case Api.decodeResponse Domain.postView response of
+            case Api.decodeResponse (Decode.field "post_view" Domain.postView) response of
                 Ok post ->
                     ( { model | post = Ready post }, Cmd.none )
 
