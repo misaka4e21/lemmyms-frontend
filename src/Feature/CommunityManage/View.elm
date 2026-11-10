@@ -31,6 +31,7 @@ type alias Config msg =
     , manageAddMember : msg
     , manageRemoveMember : String -> msg
     , manageAddManager : msg
+    , manageTransferCommunity : msg
     , manageRemoveManager : String -> msg
     , managePreviousMembers : msg
     , manageNextMembers : msg
@@ -148,13 +149,19 @@ manageRosters config active manage =
     section [ A.class "stack" ]
         [ if canManagers then
             div [ A.class "card form-stack" ]
-                [ label [ A.for "manage-actor" ] [ text (Translations.actorUri active.texts) ]
+                [ label [ A.for "manage-actor" ] [ text (Translations.personId active.texts) ]
                 , input [ A.id "manage-actor", A.type_ "text", A.value manage.actor, Events.onInput config.manageActorChanged ]
                     []
                 , div [ A.class "actions" ]
                     [ if canManagers then
                         button [ A.type_ "button", A.class "outlined-button", Events.onClick config.manageAddManager ]
                             [ text (Translations.addManager active.texts) ]
+
+                      else
+                        text ""
+                    , if canManagers then
+                        button [ A.type_ "button", A.class "outlined-button", Events.onClick config.manageTransferCommunity ]
+                            [ text (Translations.transferCommunity active.texts) ]
 
                       else
                         text ""

@@ -16,7 +16,11 @@ pageLogin model active =
 
 pageRegister : Model -> Active -> Html Msg
 pageRegister model active =
-    Feature.Auth.View.pageRegister (authViewConfig model) model.auth model.account active
+    Feature.Auth.View.pageRegister (authViewConfig model)
+        model.auth
+        model.account
+        active
+        (Maybe.map (.localSite >> .registrationMode) model.site)
 
 
 pageVerify : Model -> Active -> Html Msg

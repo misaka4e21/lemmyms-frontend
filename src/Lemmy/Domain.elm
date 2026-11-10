@@ -224,6 +224,12 @@ type alias CommunityView =
     }
 
 
+type alias CommunityResponse =
+    { communityView : CommunityView
+    , moderators : List CommunityModeratorView
+    }
+
+
 type alias CommunityFollowerView =
     { community : Community, follower : Person }
 
@@ -845,6 +851,13 @@ communityView =
         |> and (D.field "community" community)
         |> and (maybeField "community_actions" communityActions)
         |> and (defaultField "can_mod" False D.bool)
+
+
+communityResponse : Decoder CommunityResponse
+communityResponse =
+    D.map2 CommunityResponse
+        (D.field "community_view" communityView)
+        (defaultField "moderators" [] (D.list communityModeratorView))
 
 
 communityFollowerView : Decoder CommunityFollowerView

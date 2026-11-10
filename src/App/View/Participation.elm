@@ -24,6 +24,7 @@ pageManage model active id =
         , manageAddMember = ManageMessage Manage.ManageAddMember
         , manageRemoveMember = ManageMessage << Manage.ManageRemoveMember
         , manageAddManager = ManageMessage Manage.ManageAddManager
+        , manageTransferCommunity = ManageMessage Manage.ManageTransferCommunity
         , manageRemoveManager = ManageMessage << Manage.ManageRemoveManager
         , managePreviousMembers = ManageMessage Manage.ManagePreviousMembers
         , manageNextMembers = ManageMessage Manage.ManageNextMembers

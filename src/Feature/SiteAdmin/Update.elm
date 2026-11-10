@@ -34,6 +34,7 @@ type Msg
     | BanExpiresChanged String
     | CreateBan
     | RemoveBan
+    | BanResolved Bool (Result Api.Problem Int)
     | BanDone Action Api.Response
 
 
@@ -284,10 +285,24 @@ updateWorking context message state =
             ( { state | model = { model | banExpires = value, banProblem = Nothing } }, Cmd.none )
 
         CreateBan ->
-            banRequest context state "POST"
+            resolveBan context state True
 
         RemoveBan ->
-            banRequest context state "DELETE"
+            resolveBan context state False
+
+        BanResolved ban result ->
+            case result of
+                Ok personId ->
+                    sendBan context state personId ban
+
+                Err problem ->
+                    let
+                        current =
+                            state.model
+                    in
+                    ( { state | model = { current | banBusy = False, banProblem = Just problem } }
+                    , Cmd.none
+                    )
 
         BanDone _ response ->
             case Api.decodeUnit response of
@@ -317,8 +332,8 @@ updateWorking context message state =
                     )
 
 
-banRequest : Context -> Working -> String -> ( Working, Cmd Msg )
-banRequest context state method =
+resolveBan : Context -> Working -> Bool -> ( Working, Cmd Msg )
+resolveBan context state ban =
     let
         model =
             state.model
@@ -328,26 +343,57 @@ banRequest context state method =
 
     else
         ( { state | model = { model | banBusy = True, banProblem = Nothing } }
-        , Api.send context.csrf
-            "POST"
-            "/admin/ban"
-            (Encode.encode 0
-                (Encode.object
-                    ([ ( "person_id", Encode.int (String.toInt (String.trim model.banActor) |> Maybe.withDefault 0) )
-                     , ( "ban", Encode.bool (method == "POST") )
-                     , ( "reason", Encode.string (String.trim model.banReason) )
-                     ]
-                        ++ (if String.isEmpty (String.trim model.banExpires) then
-                                []
+        , Api.get
+            ("/person?username=" ++ Url.percentEncode (actorToUsername model.banActor))
+            (BanResolved ban << Api.decodeResponse (Decode.field "person_view" Domain.personView |> Decode.map (.person >> .id)))
+        )
 
-                            else
-                                [ ( "expires_at", Encode.int (String.toInt (String.trim model.banExpires) |> Maybe.withDefault 0) ) ]
-                           )
-                    )
+
+sendBan : Context -> Working -> Int -> Bool -> ( Working, Cmd Msg )
+sendBan context state personId ban =
+    let
+        model =
+            state.model
+    in
+    ( state
+    , Api.send context.csrf
+        "POST"
+        "/admin/ban"
+        (Encode.encode 0
+            (Encode.object
+                ([ ( "person_id", Encode.int personId )
+                 , ( "ban", Encode.bool ban )
+                 , ( "reason", Encode.string (String.trim model.banReason) )
+                 ]
+                    ++ (if String.isEmpty (String.trim model.banExpires) then
+                            []
+
+                        else
+                            [ ( "expires_at", Encode.int (String.toInt (String.trim model.banExpires) |> Maybe.withDefault 0) ) ]
+                       )
                 )
             )
-            (BanDone BanAction)
         )
+        (BanDone BanAction)
+    )
+
+
+actorToUsername : String -> String
+actorToUsername actor =
+    let
+        value =
+            String.trim actor
+    in
+    if String.startsWith "http://" value || String.startsWith "https://" value then
+        case String.split "/" value of
+            _ :: _ :: host :: rest ->
+                Maybe.withDefault value (List.head (List.reverse rest)) ++ "@" ++ host
+
+            _ ->
+                value
+
+    else
+        value
 
 
 decodePage : Decode.Decoder (Domain.Page a) -> Api.Response -> Remote (Domain.Page a)

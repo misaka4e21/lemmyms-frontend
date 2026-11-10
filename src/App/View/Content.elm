@@ -77,6 +77,17 @@ threadedPostCard model active comment nested =
 
                 _ ->
                     False
+        , editing =
+            if model.posts.editingComment == Just (String.fromInt comment.comment.id) then
+                Just model.posts.editingDraft
+
+            else
+                Nothing
+        , onEditStart = PostMessage << Post.StartEditComment
+        , onEditChange = \_ value -> PostMessage (Post.EditCommentDraftChanged value)
+        , onSaveEdit = PostMessage << Post.SaveComment
+        , onCancelEdit = PostMessage Post.CancelEditComment
+        , onDelete = PostMessage << Post.DeleteComment
         , onToggle = PostMessage << Post.ToggleReplies
         , nested = always nested
         }

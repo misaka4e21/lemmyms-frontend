@@ -103,8 +103,27 @@ pageLogin config auth model active =
         )
 
 
-pageRegister : Config msg -> AuthState -> Model -> Active -> Html msg
-pageRegister config auth model active =
+pageRegister : Config msg -> AuthState -> Model -> Active -> Maybe Domain.RegistrationMode -> Html msg
+pageRegister config auth model active registrationMode =
+    case registrationMode of
+        Just Domain.ClosedRegistration ->
+            pageHeading (Translations.registerTitle active.texts)
+                (p [ A.class "card muted" ] [ text (Translations.registrationClosed active.texts) ])
+
+        Just Domain.RequireApplication ->
+            pageHeading (Translations.registerTitle active.texts)
+                (p [ A.class "card muted" ] [ text (Translations.registrationApplicationRequired active.texts) ])
+
+        Just Domain.RequireInvitation ->
+            pageHeading (Translations.registerTitle active.texts)
+                (p [ A.class "card muted" ] [ text (Translations.registrationInvitationRequired active.texts) ])
+
+        _ ->
+            pageRegisterForm config auth model active
+
+
+pageRegisterForm : Config msg -> AuthState -> Model -> Active -> Html msg
+pageRegisterForm config auth model active =
     pageHeading (Translations.registerTitle active.texts)
         (form [ Events.onSubmit config.registerSubmitted, A.class "card form-stack" ]
             [ p [ A.class "muted" ] [ text (Translations.registerHelp active.texts) ]

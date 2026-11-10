@@ -26,12 +26,14 @@ type alias Model =
     , replies : Remote (Domain.Page (CommentTree.Threaded Domain.CommentView))
     , expandedReplies : Set String
     , busy : Set String
+    , editingComment : Maybe String
+    , editingDraft : String
     }
 
 
 initial : Model
 initial =
-    { post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty }
+    { post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty, editingComment = Nothing, editingDraft = "" }
 
 
 likeKey : String -> String
@@ -70,6 +72,13 @@ type Msg
     | CommentVote String Int
     | CommentSave String Bool
     | CommentMutationDone Api.Response
+    | StartEditComment String
+    | EditCommentDraftChanged String
+    | SaveComment String
+    | DeleteComment String
+    | CancelEditComment
+    | CommentSaved Api.Response
+    | CommentDeleted Api.Response
     | SortChanged String
     | DepthChanged Int
     | ConfirmDelete String
@@ -94,6 +103,8 @@ type alias Working =
     , replies : Remote (Domain.Page (CommentTree.Threaded Domain.CommentView))
     , expandedReplies : Set String
     , busy : Set String
+    , editingComment : Maybe String
+    , editingDraft : String
     , flash : Flash
     , sessionProblem : Maybe Api.Problem
     , navigation : Maybe String
@@ -113,6 +124,8 @@ update csrf url message state =
                 , replies = state.replies
                 , expandedReplies = state.expandedReplies
                 , busy = state.busy
+                , editingComment = state.editingComment
+                , editingDraft = state.editingDraft
                 , flash = NoFlash
                 , sessionProblem = Nothing
                 , navigation = Nothing
@@ -124,6 +137,8 @@ update csrf url message state =
       , replies = next.replies
       , expandedReplies = next.expandedReplies
       , busy = next.busy
+      , editingComment = next.editingComment
+      , editingDraft = next.editingDraft
       }
     , command
     , { flash = next.flash
@@ -219,6 +234,54 @@ updateWorking csrf url message model =
 
                         _ ->
                             ( model, Cmd.none )
+
+                Err problem ->
+                    ( problemState model problem, Cmd.none )
+
+        StartEditComment id ->
+            case findComment id model.replies of
+                Just comment ->
+                    ( { model | editingComment = Just id, editingDraft = comment.comment.content }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        EditCommentDraftChanged value ->
+            ( { model | editingDraft = value }, Cmd.none )
+
+        SaveComment id ->
+            ( model
+            , Api.send csrf
+                "PUT"
+                "/comment"
+                (Encode.encode 0 (Encode.object [ ( "comment_id", Encode.int (idValue id) ), ( "content", Encode.string model.editingDraft ) ]))
+                CommentSaved
+            )
+
+        DeleteComment id ->
+            ( model
+            , Api.send csrf
+                "DELETE"
+                "/comment"
+                (Encode.encode 0 (Encode.object [ ( "comment_id", Encode.int (idValue id) ), ( "deleted", Encode.bool True ) ]))
+                CommentDeleted
+            )
+
+        CancelEditComment ->
+            ( { model | editingComment = Nothing, editingDraft = "" }, Cmd.none )
+
+        CommentSaved response ->
+            case Api.decodeUnit response of
+                Ok () ->
+                    reloadReplies url { model | editingComment = Nothing, editingDraft = "" }
+
+                Err problem ->
+                    ( problemState model problem, Cmd.none )
+
+        CommentDeleted response ->
+            case Api.decodeUnit response of
+                Ok () ->
+                    reloadReplies url { model | editingComment = Nothing, editingDraft = "" }
 
                 Err problem ->
                     ( problemState model problem, Cmd.none )
@@ -563,7 +626,7 @@ viewThreaded config active model (CommentTree.Threaded node) =
 
 reset : Model -> Model
 reset model =
-    { model | post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty }
+    { model | post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty, editingComment = Nothing, editingDraft = "" }
 
 
 idValue : String -> Int
@@ -591,6 +654,55 @@ cursorQuery url =
 
         Nothing ->
             ""
+
+
+findComment : String -> Remote (Domain.Page (CommentTree.Threaded Domain.CommentView)) -> Maybe Domain.CommentView
+findComment id remote =
+    case remote of
+        Ready page ->
+            CommentTree.flatten page.items
+                |> List.filter (\view -> String.fromInt view.comment.id == id)
+                |> List.head
+
+        _ ->
+            Nothing
+
+
+reloadReplies : Url -> Working -> ( Working, Cmd Msg )
+reloadReplies url model =
+    let
+        sort =
+            Route.query "sort" url
+                |> (\value ->
+                        if List.member value [ "new", "old", "top", "controversial" ] then
+                            value
+
+                        else
+                            "old"
+                   )
+
+        maxDepth =
+            Route.query "max_depth" url
+                |> String.toInt
+                |> Maybe.withDefault 6
+                |> clamp 1 8
+    in
+    ( { model | replies = Loading }
+    , case Route.parse url of
+        Route.Post postId ->
+            Api.get
+                ("/comment/list?post_id="
+                    ++ urlEncode postId
+                    ++ "&limit=20&sort="
+                    ++ sort
+                    ++ "&max_depth="
+                    ++ String.fromInt maxDepth
+                )
+                RepliesLoaded
+
+        _ ->
+            Cmd.none
+    )
 
 
 load : String -> Url -> Model -> ( Model, Cmd Msg )

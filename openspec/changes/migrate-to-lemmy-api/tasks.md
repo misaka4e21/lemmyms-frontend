@@ -40,7 +40,7 @@
 ## 6. Authoring and Interactions
 
 - [x] 6.1 Migrate post creation and editing to `CreatePost`/`EditPost` with Markdown source and community selection; verify create, edit, and failed-edit draft preservation tests.
-- [ ] 6.2 Migrate comment creation, editing, and deletion to `CreateComment`/`EditComment`/`DeleteComment`; verify reply, edit, delete, and permission-revoked tests.
+- [x] 6.2 Migrate comment creation, editing, and deletion to `CreateComment`/`EditComment`/`DeleteComment`; verify reply, edit, delete, and permission-revoked tests.
 - [x] 6.3 Migrate votes to `is_upvote: true|false|null` and action-derived state; verify upvote, downvote, clear, switch, and disabled-direction tests.
 - [x] 6.4 Migrate save, read, and hide actions to v4 post/comment action endpoints; verify each action and its refreshed state.
 - [x] 6.5 Migrate post, comment, and community reporting to type-specific report endpoints; verify submit, self-report rejection, and validation tests.
@@ -50,14 +50,14 @@
 
 - [x] 7.1 Migrate saved, read, hidden, and liked post collections to v4 account endpoints with cursors; verify each collection and empty/error state.
 - [x] 7.2 Migrate personal person, community, and instance blocks to v4 block endpoints and IDs; verify add/remove and self-block rejection tests.
-- [ ] 7.3 Migrate login, logout, session restoration, and registration modes (`open`, `require_application`, `require_invitation`, `closed`); verify each mode and logout cookie behavior.
+- [x] 7.3 Migrate login, logout, session restoration, and registration modes (`open`, `require_application`, `require_invitation`, `closed`); verify each mode and logout cookie behavior.
 - [x] 7.4 Migrate email verification and password reset to `/verify_email/:token` and `/password_change/:token`, including history replacement; verify token capture and invalid-token tests.
 - [x] 7.5 Migrate authenticated password change to `ChangePassword`; verify success, wrong-current-password, and field-clearing tests.
 
 ## 8. Community Management
 
 - [ ] 8.1 Migrate community creation and settings to `CreateCommunity`/`EditCommunity` fields: name, title, sidebar, summary, NSFW, visibility, posting restriction, languages, and vote modes; verify create and edit browser tests.
-- [ ] 8.2 Migrate moderator management to `AddModToCommunity` and `TransferCommunity`; verify add, remove, transfer, and self-action guards.
+- [x] 8.2 Migrate moderator management to `AddModToCommunity` and `TransferCommunity`; verify add, remove, transfer, and self-action guards.
 - [x] 8.3 Migrate follow approvals to `pending_follows` list and approve; verify pending, accepted, denied, and private-community tests.
 - [x] 8.4 Migrate community bans to person-ID `BanFromCommunity` with reason and epoch expiry; verify ban, unban, expiry, and unresolved-actor tests.
 - [x] 8.5 Migrate community-scoped reports and modlog to the unified report list and v4 modlog; verify filter, resolve, conflict, and read-only tests.
@@ -69,7 +69,7 @@
 - [x] 9.2 Migrate site default vote modes to `EditSite` and verify the creation-default explanation, save, and failure tests.
 - [x] 9.3 Migrate the unified report queue and type-specific resolutions; verify filter, resolve, reject, and conflict tests.
 - [x] 9.4 Migrate the modlog view and its supported filters; verify cursor navigation and read-only presentation.
-- [ ] 9.5 Migrate person bans to actor resolution plus `BanPerson`, including reason and epoch expiry; verify resolved, unresolved, ban, and unban tests.
+- [x] 9.5 Migrate person bans to actor resolution plus `BanPerson`, including reason and epoch expiry; verify resolved, unresolved, ban, and unban tests.
 - [x] 9.6 Remove deployment-wide site/account/role/cross-tenant administration surfaces; verify only current-host management is reachable.
 
 ## 10. Deployment, Documentation, and Cleanup

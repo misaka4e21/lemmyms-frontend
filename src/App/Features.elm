@@ -67,7 +67,19 @@ updateManage : Manage.Msg -> Model -> ( Model, Cmd Msg )
 updateManage message model =
     let
         ( state, command, outcome ) =
-            Manage.update { csrf = "", route = model.route } message model.management
+            Manage.update
+                { csrf = ""
+                , route = model.route
+                , viewerId =
+                    case model.auth of
+                        Authenticated account ->
+                            Just account.localUserView.person.id
+
+                        _ ->
+                            Nothing
+                }
+                message
+                model.management
 
         base =
             case outcome.sessionProblem of

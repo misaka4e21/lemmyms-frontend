@@ -26,6 +26,7 @@ type Msg
     | ManageAddMember
     | ManageRemoveMember String
     | ManageAddManager
+    | ManageTransferCommunity
     | ManageRemoveManager String
     | ManagePreviousMembers
     | ManageNextMembers
@@ -63,7 +64,7 @@ type Action
 
 
 type alias Context =
-    { csrf : String, route : Route.Route }
+    { csrf : String, route : Route.Route, viewerId : Maybe Int }
 
 
 type alias Outcome =
@@ -182,6 +183,29 @@ updateWorking context message model =
 
         ManageAddManager ->
             manageActorRequest context model "add-manager" "POST" "managers"
+
+        ManageTransferCommunity ->
+            case model.manage of
+                Just manage ->
+                    if String.toInt manage.actor == context.viewerId then
+                        ( model, Cmd.none )
+
+                    else
+                        manageRequest context
+                            model
+                            "transfer"
+                            "POST"
+                            "/community/transfer"
+                            (Encode.encode 0
+                                (Encode.object
+                                    [ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
+                                    , ( "person_id", Encode.int (String.toInt manage.actor |> Maybe.withDefault 0) )
+                                    ]
+                                )
+                            )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         ManageRemoveManager actor ->
             manageActorRequestFor context model "remove-manager" "DELETE" "managers" actor
@@ -399,7 +423,31 @@ updateWorking context message model =
             in
             ( case kind of
                 LoadManageCommunity _ ->
-                    setCommunity (Api.decodeResponse (Decode.field "community_view" Domain.communityView) response)
+                    case Api.decodeResponse Domain.communityResponse response of
+                        Ok data ->
+                            updateManageRecord model
+                                (\manage ->
+                                    { manage
+                                        | community = Ready data.communityView
+                                        , managers = Ready { items = data.moderators, nextPage = Nothing, prevPage = Nothing }
+                                        , readPolicy = visibilityText data.communityView.community.visibility
+                                        , postPolicy =
+                                            if data.communityView.community.postingRestrictedToMods then
+                                                "managers"
+
+                                            else
+                                                "eligible_users"
+                                        , followPolicy =
+                                            if data.communityView.community.visibility == Domain.PrivateCommunity then
+                                                "approval"
+
+                                            else
+                                                "open"
+                                    }
+                                )
+
+                        Err problem ->
+                            updateManageRecord model (\manage -> { manage | community = Failed problem, problem = Just problem })
 
                 LoadMembers _ _ ->
                     setRoster True (Api.decodeResponse (Domain.page Domain.communityModeratorView) response)
@@ -456,7 +504,10 @@ manageActorRequestFor context model key method section actor =
 
 manageActorRequestWith : Context -> Working -> String -> String -> String -> String -> ( Working, Cmd Msg )
 manageActorRequestWith context model key method section actor =
-    if section == "managers" then
+    if String.toInt actor == context.viewerId then
+        ( model, Cmd.none )
+
+    else if section == "managers" then
         manageRequest context
             model
             key
