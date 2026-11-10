@@ -20,6 +20,21 @@ The application SHALL provide bookmarkable routes for latest discussions, commun
 - **WHEN** an anonymous reader opens an account collection, personal block, password change, or management route
 - **THEN** the application explains that authentication is required and does not issue protected reads or mutations
 
+### Requirement: Community directory sort compatibility
+The community directory SHALL request `/api/v4/community/list` with a `sort` value supported by Lemmy's `CommunitySortType` or omit the sort parameter. It SHALL NOT send `sort=top`. A successful response SHALL render the returned community page, and a rejected request SHALL show a localized failure with retry rather than an empty directory.
+
+#### Scenario: Supported community sort
+- **WHEN** a reader opens the community directory
+- **THEN** the request uses a supported community sort such as `active_monthly` and the returned communities are rendered
+
+#### Scenario: Unsupported sort is not sent
+- **WHEN** the community directory request is inspected
+- **THEN** it does not contain `sort=top` or another value outside the backend's community sort enum
+
+#### Scenario: Directory request is rejected
+- **WHEN** the community list endpoint rejects the request
+- **THEN** the interface shows a localized failure with a retry action and does not claim the directory is empty
+
 ### Requirement: Session and verified registration
 The application SHALL support username/email login, session restoration, logout, registration, verification resend, and password selection from `/verify-email#token=...`. Confirmation SHALL precede a separate login. Disabled registration and rate limits SHALL have localized outcomes. Verification tokens SHALL remain out of query strings, logs, and persistent storage and SHALL be removed from browser history after capture.
 
