@@ -1,4 +1,4 @@
-module Api exposing (Problem, Response, decodeResponse, decodeUnit, get, login, send, upload)
+module Api exposing (Problem, Response, decodeResponse, decodeUnit, get, login, send, upload, uploadTo)
 
 import File exposing (File)
 import Http
@@ -100,6 +100,19 @@ upload csrf purpose file toMsg =
         { method = "POST"
         , headers = []
         , url = base ++ "/image"
+        , body = Http.multipartBody [ Http.filePart "image" file ]
+        , expect = expect toMsg
+        , timeout = Just 120000
+        , tracker = Nothing
+        }
+
+
+uploadTo : String -> File -> (Response -> msg) -> Cmd msg
+uploadTo path file toMsg =
+    Http.request
+        { method = "POST"
+        , headers = []
+        , url = base ++ path
         , body = Http.multipartBody [ Http.filePart "image" file ]
         , expect = expect toMsg
         , timeout = Just 120000

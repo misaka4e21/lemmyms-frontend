@@ -52,9 +52,46 @@ update message model =
 
 load : Url -> ( Model, Cmd Msg )
 load url =
+    let
+        listingValue =
+            allowedListing (Route.listing "local" url)
+
+        sortValue =
+            allowedSort (Route.sort "active" url)
+
+        timeRange =
+            case String.toInt (Route.query "time_range" url) of
+                Just value ->
+                    if value > 0 then
+                        "&time_range_seconds=" ++ String.fromInt value
+
+                    else
+                        ""
+
+                Nothing ->
+                    ""
+    in
     ( { topics = Loading }
-    , Api.get ("/post/list?type=local&sort=active&limit=20" ++ cursorQuery url) Loaded
+    , Api.get ("/post/list?type=" ++ listingValue ++ "&sort=" ++ sortValue ++ "&limit=20" ++ timeRange ++ cursorQuery url) Loaded
     )
+
+
+allowedListing : String -> String
+allowedListing value =
+    if List.member value [ "all", "local", "subscribed", "moderator_view", "suggested" ] then
+        value
+
+    else
+        "local"
+
+
+allowedSort : String -> String
+allowedSort value =
+    if List.member value [ "active", "hot", "new", "old", "top", "most_comments", "new_comments", "controversial", "scaled" ] then
+        value
+
+    else
+        "active"
 
 
 cursorQuery : Url -> String
@@ -69,6 +106,7 @@ cursorQuery url =
 
 type alias Config msg =
     { retry : msg
+    , listingControls : Html msg
     , postCard : Domain.PostView -> Html msg
     }
 
@@ -82,17 +120,20 @@ type alias ViewModel =
 pageLatest : Config msg -> ViewModel -> Active -> Html msg
 pageLatest config model active =
     pageHeading (Translations.latestTitle active.texts)
-        (viewRemote config.retry
-            active.texts
-            model.topics
-            (\page ->
-                if List.isEmpty page.items then
-                    emptyWithPagination active.texts model.url page
+        (div [ A.class "stack" ]
+            [ config.listingControls
+            , viewRemote config.retry
+                active.texts
+                model.topics
+                (\page ->
+                    if List.isEmpty page.items then
+                        emptyWithPagination active.texts model.url page
 
-                else
-                    div [ A.class "stack" ]
-                        [ div [ A.class "stack" ] (List.map config.postCard page.items)
-                        , viewPagination active.texts model.url page.prevPage page.nextPage
-                        ]
-            )
+                    else
+                        div [ A.class "stack" ]
+                            [ div [ A.class "stack" ] (List.map config.postCard page.items)
+                            , viewPagination active.texts model.url page.prevPage page.nextPage
+                            ]
+                )
+            ]
         )

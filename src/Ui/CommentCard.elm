@@ -1,7 +1,7 @@
 module Ui.CommentCard exposing (Config, commentCard)
 
 import Generated.I18n as Translations
-import Html exposing (Html, a, article, bdi, button, div, h2, p, span, text, time)
+import Html exposing (Html, a, article, bdi, button, details, div, h2, p, span, summary, text, time)
 import Html.Attributes as A
 import Html.Events as Events
 import Lemmy.Domain as Domain
@@ -15,6 +15,9 @@ import Ui.VoteControl
 type alias Config msg =
     { formatted : Maybe Formatting
     , viewerActor : Maybe String
+    , viewerId : Maybe Int
+    , canAct : Bool
+    , canViewVotes : Bool
     , isBusy : String -> Bool
     , isExpanded : String -> Bool
     , onVote : String -> Int -> msg
@@ -23,6 +26,11 @@ type alias Config msg =
     , canReport : Bool
     , onDelete : String -> msg
     , onToggle : String -> msg
+    , onBlockAuthor : Int -> Bool -> msg
+    , onRemoveComment : String -> Bool -> msg
+    , onLockComment : String -> Bool -> msg
+    , onDistinguishComment : String -> Bool -> msg
+    , onViewVotes : String -> msg
     , nested : String -> Html msg
     }
 
@@ -61,6 +69,12 @@ commentCard config texts view =
 
         owner =
             config.viewerActor == Just view.creator.apId
+
+        blockedAuthor =
+            Maybe.andThen .blockedAt view.personActions /= Nothing
+
+        secondary =
+            config.canAct || view.canMod
     in
     article
         [ A.id ("comment-" ++ commentId)
@@ -153,6 +167,78 @@ commentCard config texts view =
                     , Events.onClick (config.onDelete commentId)
                     ]
                     [ Ui.Icon.view Ui.Icon.Delete ]
+
+              else
+                text ""
+            , if secondary then
+                details [ A.class "action-menu" ]
+                    [ summary [ A.class "text-button" ] [ text (Translations.moderationAction texts) ]
+                    , div [ A.class "action-menu-items" ]
+                        [ if config.canAct && config.viewerId /= Just view.creator.id then
+                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.onBlockAuthor view.creator.id (not blockedAuthor)) ]
+                                [ text
+                                    (if blockedAuthor then
+                                        Translations.unblockAuthor texts
+
+                                     else
+                                        Translations.blockAuthor texts
+                                    )
+                                ]
+
+                          else
+                            text ""
+                        , if view.canMod then
+                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.onRemoveComment commentId (not comment.removed)) ]
+                                [ text
+                                    (if comment.removed then
+                                        Translations.restore texts
+
+                                     else
+                                        Translations.remove texts
+                                    )
+                                ]
+
+                          else
+                            text ""
+                        , if view.canMod then
+                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.onLockComment commentId (not comment.locked)) ]
+                                [ text
+                                    (if comment.locked then
+                                        Translations.unlockPost texts
+
+                                     else
+                                        Translations.lockPost texts
+                                    )
+                                ]
+
+                          else
+                            text ""
+                        , if view.canMod then
+                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.onDistinguishComment commentId (not comment.distinguished)) ]
+                                [ text
+                                    (if comment.distinguished then
+                                        Translations.undistinguishComment texts
+
+                                     else
+                                        Translations.distinguishComment texts
+                                    )
+                                ]
+
+                          else
+                            text ""
+                        , if view.canMod || config.canViewVotes then
+                            button
+                                [ A.id ("view-votes-comment-" ++ commentId)
+                                , A.type_ "button"
+                                , A.class "text-button"
+                                , Events.onClick (config.onViewVotes commentId)
+                                ]
+                                [ text (Translations.viewVotes texts) ]
+
+                          else
+                            text ""
+                        ]
+                    ]
 
               else
                 text ""

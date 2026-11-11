@@ -253,4 +253,54 @@ suite =
 
                     _ ->
                         Expect.fail "fixtures should decode"
+        , test "decodes community tags and optional person actions" <|
+            \_ ->
+                let
+                    tag =
+                        decode Domain.communityTag
+                            "{\"id\":5,\"name\":\"news\",\"display_name\":\"News\",\"summary\":null,\"community_id\":2,\"color\":\"color_01\",\"deleted\":false}"
+                in
+                Expect.equal (Ok ( 5, "News", "color_01" ))
+                    (tag
+                        |> Result.map
+                            (\value ->
+                                ( value.id, Maybe.withDefault value.name value.displayName, value.color )
+                            )
+                    )
+        , test "keeps optional tags and person actions absent" <|
+            \_ ->
+                decode Domain.postView Fixtures.postViewJson
+                    |> Result.map
+                        (\view ->
+                            ( List.isEmpty view.tags, view.personActions )
+                        )
+                    |> Expect.equal (Ok ( True, Nothing ))
+        , test "decodes a tagged person content item" <|
+            \_ ->
+                let
+                    itemJson =
+                        "{\"type_\":\"post\"," ++ String.dropLeft 1 Fixtures.postViewJson
+                in
+                Expect.equal (Ok 10)
+                    (decode Domain.personContentItem itemJson
+                        |> Result.map
+                            (\item ->
+                                case item of
+                                    Domain.PersonPost post ->
+                                        post.post.id
+
+                                    Domain.PersonComment comment ->
+                                        comment.post.id
+                            )
+                    )
+        , test "decodes a vote view" <|
+            \_ ->
+                let
+                    voteJson =
+                        "{\"creator\":" ++ Fixtures.personJson ++ ",\"creator_banned\":false,\"creator_banned_from_community\":false,\"is_upvote\":true}"
+                in
+                Expect.equal (Ok ( "alice", True ))
+                    (decode Domain.voteView voteJson
+                        |> Result.map (\vote -> ( vote.creator.name, vote.isUpvote ))
+                    )
         ]

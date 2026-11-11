@@ -4,6 +4,7 @@ import Api
 import App.Feedback exposing (Flash(..))
 import Dict
 import Feature.CommunityManage.State exposing (..)
+import File exposing (File)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
@@ -48,6 +49,15 @@ type Msg
     | ManageBanExpiresChanged String
     | ManageCreateBan
     | ManageRemoveBan
+    | ManageTagNameChanged String
+    | ManageTagDisplayNameChanged String
+    | ManageTagColorChanged String
+    | ManageCreateTag
+    | ManageDeleteTag Int
+    | ManageIconSelected (Maybe File)
+    | ManageBannerSelected (Maybe File)
+    | ManageTagDone Api.Response
+    | ManageImageDone Api.Response
 
 
 type LoadKind
@@ -112,6 +122,19 @@ authProblem model problem =
 
     else
         model
+
+
+problemState : Working -> Api.Problem -> Working
+problemState model problem =
+    { model
+        | flash = FlashProblem problem
+        , sessionProblem =
+            if problem.status == 401 then
+                Just problem
+
+            else
+                Nothing
+    }
 
 
 urlEncode : String -> String
@@ -325,6 +348,116 @@ updateWorking context message model =
 
         ManageRemoveBan ->
             communityBanRequest context model "DELETE"
+
+        ManageTagNameChanged value ->
+            setManage model (\manage -> { manage | tagName = value, problem = Nothing }) Cmd.none
+
+        ManageTagDisplayNameChanged value ->
+            setManage model (\manage -> { manage | tagDisplayName = value, problem = Nothing }) Cmd.none
+
+        ManageTagColorChanged value ->
+            setManage model (\manage -> { manage | tagColor = value, problem = Nothing }) Cmd.none
+
+        ManageCreateTag ->
+            case model.manage of
+                Just manage ->
+                    if manage.tagBusy || String.isEmpty (String.trim manage.tagName) then
+                        ( model, Cmd.none )
+
+                    else
+                        ( updateManageRecord model (\value -> { value | tagBusy = True, problem = Nothing })
+                        , Api.send ""
+                            "POST"
+                            "/community/tag"
+                            (Encode.encode 0
+                                (Encode.object
+                                    [ ( "community_id", Encode.int context.communityId )
+                                    , ( "name", Encode.string (String.trim manage.tagName) )
+                                    , ( "display_name"
+                                      , if String.isEmpty (String.trim manage.tagDisplayName) then
+                                            Encode.null
+
+                                        else
+                                            Encode.string (String.trim manage.tagDisplayName)
+                                      )
+                                    , ( "color", Encode.string manage.tagColor )
+                                    ]
+                                )
+                            )
+                            ManageTagDone
+                        )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        ManageDeleteTag tagId ->
+            ( model
+            , Api.send ""
+                "DELETE"
+                "/community/tag"
+                (Encode.encode 0 (Encode.object [ ( "tag_id", Encode.int tagId ), ( "delete", Encode.bool True ) ]))
+                ManageTagDone
+            )
+
+        ManageIconSelected (Just file) ->
+            ( updateManageRecord model (\manage -> { manage | iconUploading = True })
+            , Api.uploadTo ("/community/icon?id=" ++ String.fromInt context.communityId) file ManageImageDone
+            )
+
+        ManageBannerSelected (Just file) ->
+            ( updateManageRecord model (\manage -> { manage | bannerUploading = True })
+            , Api.uploadTo ("/community/banner?id=" ++ String.fromInt context.communityId) file ManageImageDone
+            )
+
+        ManageIconSelected Nothing ->
+            ( model, Cmd.none )
+
+        ManageBannerSelected Nothing ->
+            ( model, Cmd.none )
+
+        ManageTagDone response ->
+            case Api.decodeUnit response of
+                Ok () ->
+                    let
+                        changed =
+                            { model | flash = FlashSaved }
+
+                        cleared =
+                            model.manage
+                                |> Maybe.map (\manage -> { manage | tagName = "", tagDisplayName = "", tagBusy = False, problem = Nothing })
+                                |> Maybe.withDefault emptyManage
+                    in
+                    case context.route of
+                        Route.CommunitySettings name ->
+                            loadManageState 0 name cleared changed
+
+                        _ ->
+                            ( changed, Cmd.none )
+
+                Err problem ->
+                    ( problemState model problem, Cmd.none )
+
+        ManageImageDone response ->
+            case Api.decodeUnit response of
+                Ok () ->
+                    let
+                        changed =
+                            { model | flash = FlashSaved }
+
+                        cleared =
+                            model.manage
+                                |> Maybe.map (\manage -> { manage | iconUploading = False, bannerUploading = False, problem = Nothing })
+                                |> Maybe.withDefault emptyManage
+                    in
+                    case context.route of
+                        Route.CommunitySettings name ->
+                            loadManageState 0 name cleared changed
+
+                        _ ->
+                            ( changed, Cmd.none )
+
+                Err problem ->
+                    ( problemState model problem, Cmd.none )
 
         ActionDone (ManageAction key) response ->
             case Api.decodeUnit response of

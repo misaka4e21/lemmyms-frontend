@@ -219,6 +219,8 @@ function fixtures() {
     posts: { 1: post },
     comments: { 10: comment },
     community,
+    tags: [],
+    crossPosts: [],
     calls: []
   };
 }
@@ -230,6 +232,7 @@ function postView(state) {
     creator: person,
     community: state.community,
     community_actions: communityActions,
+    tags: state.tags,
     post_actions: { ...postActions },
     creator_is_admin: true,
     can_mod: true,
@@ -246,13 +249,15 @@ function commentView(state) {
     community: state.community,
     community_actions: communityActions,
     comment_actions: { voted_at: null, saved_at: null, vote_is_upvote: null },
+    person_actions: null,
     creator_is_admin: false,
-    can_mod: true
+    can_mod: true,
+    tags: state.tags
   };
 }
 
 function communityView(state) {
-  return { community: state.community, community_actions: communityActions, can_mod: true };
+  return { community: state.community, community_actions: communityActions, can_mod: true, tags: state.tags };
 }
 
 function notificationView() {
@@ -356,7 +361,18 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     if (path === '/api/v4/account/auth/password_change' && method === 'POST') return json(route, 200, { success: true });
     if (path === '/api/v4/person') return json(route, 200, { person_view: { person, is_admin: true, person_actions: null, banned: false, ban_expires_at: null } });
     if (path === '/api/v4/post/list') return json(route, 200, pageOf([postView(state)]));
-    if (path === '/api/v4/post' && method === 'GET') return json(route, 200, { post_view: postView(state), community_view: communityView(state), cross_posts: [], moderators: [{ community, moderator: person }] });
+    if (path === '/api/v4/post' && method === 'GET') return json(route, 200, { post_view: postView(state), community_view: communityView(state), cross_posts: state.crossPosts, moderators: [{ community, moderator: person }] });
+    if (path === '/api/v4/person/content') {
+      const type = url.searchParams.get('type_');
+      return json(route, 200, {
+        items: [type === 'comments' ? { type_: 'comment', ...commentView(state) } : { type_: 'post', ...postView(state) }],
+        next_page: null,
+        prev_page: null
+      });
+    }
+    if (path === '/api/v4/account/saved' || path === '/api/v4/account/liked' || path === '/api/v4/account/read' || path === '/api/v4/account/hidden') {
+      return json(route, 200, pageOf([postView(state)]));
+    }
     if (path === '/api/v4/post' && method === 'POST') {
       state.posts[1] = { ...post, id: 2, name: body.name, body: body.body };
       return json(route, 200, { post_view: postView(state) });
@@ -382,6 +398,16 @@ async function mockApi(page, state, { authenticated = false } = {}) {
       return json(route, 200, { comment_view: commentView(state) });
     }
     if (path === '/api/v4/comment' && method === 'DELETE') return json(route, 200, { success: true });
+    if (path === '/api/v4/post/like/list' || path === '/api/v4/comment/like/list') {
+      return json(route, 200, {
+        items: [{ creator: replyPerson, creator_banned: false, creator_banned_from_community: false, is_upvote: true }],
+        next_page: null,
+        prev_page: null
+      });
+    }
+    if (path === '/api/v4/post/remove' || path === '/api/v4/post/lock' || path === '/api/v4/post/feature' || path === '/api/v4/comment/remove' || path === '/api/v4/comment/lock' || path === '/api/v4/comment/distinguish' || path === '/api/v4/account/block/person' || path === '/api/v4/account/block/community' || path === '/api/v4/post/mark_as_read') {
+      return route.fulfill({ status: 204 });
+    }
     if (path === '/api/v4/community/list') return json(route, 200, pageOf([communityView(state)]));
     if (path === '/api/v4/community' && method === 'GET') return json(route, 200, { community_view: communityView(state), moderators: [{ community, moderator: person }], discussion_languages: [0] });
     if (path === '/api/v4/community' && method === 'POST') {
@@ -390,15 +416,20 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     }
     if (path === '/api/v4/community' && method === 'PUT') return json(route, 200, { community_view: communityView(state), moderators: [{ community, moderator: person }], discussion_languages: [0] });
     if (path === '/api/v4/community/follow') return route.fulfill({ status: 204 });
+    if (path === '/api/v4/community/tag') return route.fulfill({ status: 204 });
+    if (path === '/api/v4/community/notifications') return route.fulfill({ status: 204 });
+    if (path === '/api/v4/community/icon' || path === '/api/v4/community/banner') {
+      return json(route, 200, { image_url: 'https://forum.test/pictrs/image/community.png', filename: 'community.png' });
+    }
     if (path === '/api/v4/community/mod' || path === '/api/v4/community/ban_user') return route.fulfill({ status: 204 });
     if (path === '/api/v4/community/pending_follows/list') return json(route, 200, pageOf([]));
     if (path === '/api/v4/search') {
       return json(route, 200, {
-        resolve: null,
-        comments: [],
+        resolve: (url.searchParams.get('search_term') || '').includes('http') ? { type_: 'post', ...postView(state) } : null,
+        comments: url.searchParams.get('type_') === 'comments' ? [commentView(state)] : [],
         posts: url.searchParams.get('type_') === 'posts' ? [postView(state)] : [],
         communities: url.searchParams.get('type_') === 'communities' ? [communityView(state)] : [],
-        persons: [],
+        persons: url.searchParams.get('type_') === 'users' ? [{ person, is_admin: true, person_actions: null, banned: false, ban_expires_at: null }] : [],
         prev_page: null,
         next_page: null
       });
@@ -435,7 +466,7 @@ async function open(page, path) {
 test('browses latest, community, post and search', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
   const state = fixtures();
-  await mockApi(page, state);
+  await mockApi(page, state, { authenticated: true });
   await open(page, '/');
   await expect(page.getByRole('heading', { name: 'Latest discussions' }).first()).toBeVisible();
   await expect(page.getByRole('link', { name: 'Hello world' })).toBeVisible();
@@ -593,6 +624,136 @@ test('loads community management by name and uses the resolved id', async ({ pag
   await page.getByLabel('Person ID').fill('2');
   await page.getByRole('button', { name: 'Add manager' }).click();
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/mod' && call.body.community_id === 1)).toBeTruthy();
+});
+
+test('applies listing controls, view modes, NSFW reveal, and cross-posts', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/');
+  await page.getByLabel('Listing').selectOption('subscribed');
+  await expect(page).toHaveURL(/type=subscribed/);
+  await page.getByLabel('Sort').selectOption('new');
+  await expect(page).toHaveURL(/sort=new/);
+  await page.getByLabel('Time range').selectOption('86400');
+  await expect(page).toHaveURL(/time_range=86400/);
+  await page.getByLabel('Layout').selectOption('small_card');
+  await expect(page).toHaveURL(/view=small_card/);
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/post/list' && call.search.includes('type=subscribed') && call.search.includes('sort=new') && call.search.includes('time_range_seconds=86400'))).toBeTruthy();
+  await expect(page.locator('.post-card-small_card')).toBeVisible();
+
+  state.posts[1] = { ...post, nsfw: true, thumbnail_url: 'https://forum.test/pictrs/image/post.png' };
+  myUser.local_user_view.local_user.blur_nsfw = true;
+  const cross = postView(state);
+  cross.post = { ...cross.post, id: 2, name: 'Cross post' };
+  state.crossPosts = [cross];
+  await page.goto('/post/1');
+  await expect(page.locator('#post-1').getByText('Show NSFW content')).toBeVisible();
+  await expect(page.locator('#post-1 .post-content')).not.toBeVisible();
+  await page.locator('#post-1').getByText('Show NSFW content').click();
+  await expect(page.locator('#post-1 .post-content')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Cross-posts' })).toBeVisible();
+});
+
+test('performs moderation actions and opens the vote list', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/post/1');
+  const postArticle = page.getByRole('article').filter({ hasText: 'Hello world' }).first();
+  await postArticle.getByText('Action').click();
+  await postArticle.getByRole('button', { name: 'Remove' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/post/remove')).toBeTruthy();
+  await page.goto('/post/1');
+  await postArticle.getByText('Action').click();
+  await postArticle.getByRole('button', { name: 'Lock post' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/post/lock')).toBeTruthy();
+  await page.goto('/post/1');
+  await postArticle.getByText('Action').click();
+  await postArticle.getByRole('button', { name: 'Feature in community' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/post/feature')).toBeTruthy();
+
+  await page.goto('/post/1');
+  await postArticle.getByText('Action').click();
+  await postArticle.getByRole('button', { name: 'Mark read' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/post/mark_as_read')).toBeTruthy();
+  await page.goto('/post/1');
+  await postArticle.getByText('Action').click();
+  await postArticle.getByRole('button', { name: 'Block community' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/block/community')).toBeTruthy();
+
+  await page.goto('/post/1');
+  await postArticle.getByText('Action').click();
+  await postArticle.getByRole('button', { name: 'View votes' }).click();
+  await expect(page.locator('#vote-dialog')).toBeVisible();
+  await expect(page.locator('#vote-dialog')).toContainText('bob');
+  await page.locator('#vote-dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.locator('#vote-dialog')).toHaveCount(0);
+  await expect(page.locator('#view-votes-post-1')).toBeFocused();
+
+  const commentArticle = page.getByRole('article').filter({ hasText: 'A reply' }).first();
+  await commentArticle.getByText('Action').click();
+  await commentArticle.getByRole('button', { name: 'Distinguish comment' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/comment/distinguish')).toBeTruthy();
+  await page.goto('/post/1');
+  await commentArticle.getByText('Action').click();
+  await commentArticle.getByRole('button', { name: 'Lock post' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/comment/lock')).toBeTruthy();
+  await page.goto('/post/1');
+  await commentArticle.getByText('Action').click();
+  await commentArticle.getByRole('button', { name: 'Remove' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/comment/remove')).toBeTruthy();
+});
+
+test('shows community tags, moderators, notifications, and uploaded images', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.tags = [{ id: 5, name: 'news', display_name: 'News tag', summary: null, community_id: 1, color: 'color_01', deleted: false }];
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/c/news');
+  await expect(page.getByText('News tag')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Moderators' })).toBeVisible();
+  await page.getByLabel('Community notifications').selectOption('mute');
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/notifications' && call.body.mode === 'mute')).toBeTruthy();
+
+  await page.goto('/c/news/settings');
+  await page.getByLabel('Tag name').fill('release');
+  await page.getByRole('button', { name: 'Add tag' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/tag' && call.body.name === 'release')).toBeTruthy();
+  await page.getByRole('button', { name: 'Delete tag' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/tag' && call.body.delete === true)).toBeTruthy();
+  await page.locator('#manage-icon').setInputFiles({ name: 'icon.png', mimeType: 'image/png', buffer: Buffer.from('icon') });
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/icon')).toBeTruthy();
+  await page.locator('#manage-banner').setInputFiles({ name: 'banner.png', mimeType: 'image/png', buffer: Buffer.from('banner') });
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/banner')).toBeTruthy();
+});
+
+test('searches comments, users, and URLs, and switches profile tabs', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/search?kind=comments&q=A');
+  await expect(page.getByText('A reply')).toBeVisible();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/search' && call.search.includes('type_=comments'))).toBeTruthy();
+
+  await page.goto('/search?kind=users&q=alice');
+  await expect(page.getByRole('link', { name: 'Alice' })).toBeVisible();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/search' && call.search.includes('type_=users'))).toBeTruthy();
+
+  await page.goto('/search?kind=url&q=https%3A%2F%2Fexample.test%2Fpost');
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/search' && call.search.includes('post_url_only=true'))).toBeTruthy();
+  await expect(page.getByRole('heading', { name: 'Resolved' })).toBeVisible();
+
+  await page.goto('/u/alice');
+  await page.getByRole('tab', { name: 'Comments' }).click();
+  await expect(page).toHaveURL(/view=comments/);
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/person/content' && call.search.includes('type_=comments'))).toBeTruthy();
+  await page.getByRole('tab', { name: 'Comments' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page).toHaveURL(/view=saved/);
+  await page.getByRole('tab', { name: 'Saved' }).click();
+  await expect(page).toHaveURL(/view=saved/);
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/saved')).toBeTruthy();
 });
 
 test('has no automated accessibility violations on the latest page', async ({ page }) => {

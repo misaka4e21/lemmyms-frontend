@@ -1,7 +1,6 @@
 module App.Interaction exposing (applyPost)
 
 import App.State exposing (Model)
-import Feature.Search as Search exposing (SearchResult(..))
 import Lemmy.Domain as Domain
 import List
 import Remote exposing (Remote(..))
@@ -39,8 +38,8 @@ applyPost post model =
                 { searchPageState
                     | search =
                         case model.searchPage.search.results of
-                            Ready (PostSearch data) ->
-                                { searchState | results = Ready (PostSearch { data | items = List.map transform data.items }) }
+                            Ready data ->
+                                { searchState | results = Ready { data | posts = List.map transform data.posts } }
 
                             _ ->
                                 model.searchPage.search

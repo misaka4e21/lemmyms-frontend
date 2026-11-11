@@ -494,6 +494,7 @@ updatePost message model =
                         { postsState
                             | post = state.post
                             , replies = state.replies
+                            , crossPosts = state.crossPosts
                             , expandedReplies = state.expandedReplies
                             , busy =
                                 if outcome.sessionProblem == Nothing then
@@ -501,6 +502,7 @@ updatePost message model =
 
                                 else
                                     base.posts.busy
+                            , voteDialog = state.voteDialog
                         }
                     )
                         base.posts

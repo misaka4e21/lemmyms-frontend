@@ -9,7 +9,7 @@ import Feature.Authoring.Update as Authoring
 import Feature.Authoring.View as AuthoringView
 import File exposing (File)
 import Generated.I18n as Translations
-import Html exposing (Html, a, bdi, button, div, form, h2, img, input, label, p, section, text)
+import Html exposing (Html, a, article, bdi, button, div, form, h2, img, input, label, nav, p, section, text)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
@@ -19,7 +19,9 @@ import Lemmy.Markdown as Markdown
 import Lemmy.Route as Route
 import Remote exposing (Remote(..))
 import Ui.Feedback exposing (loginRequired, viewFormProblem, viewRemote)
+import Ui.Formatting exposing (boolText)
 import Ui.Layout exposing (entityHeading, pageHeading)
+import Ui.Pagination exposing (viewPagination)
 import Ui.Rich
 import Url
 
@@ -59,12 +61,27 @@ profileFormFrom profile =
 
 
 type alias Model =
-    { publicProfile : Remote Domain.PersonView, ownProfile : Remote Domain.PersonView, profileForm : ProfileForm }
+    { publicProfile : Remote Domain.PersonView
+    , ownProfile : Remote Domain.PersonView
+    , profileForm : ProfileForm
+    , content : Remote ProfileContent
+    , contentView : String
+    }
+
+
+type ProfileContent
+    = PersonPosts (Domain.Page Domain.PersonContentItem)
+    | AccountPosts (Domain.Page Domain.PostView)
 
 
 initial : Model
 initial =
-    { publicProfile = NotAsked, ownProfile = NotAsked, profileForm = emptyProfileForm }
+    { publicProfile = NotAsked
+    , ownProfile = NotAsked
+    , profileForm = emptyProfileForm
+    , content = NotAsked
+    , contentView = "posts"
+    }
 
 
 type Msg
@@ -76,6 +93,8 @@ type Msg
     | ProfileClearAvatar
     | ProfileSave
     | AvatarFileSelected (Maybe File)
+    | PersonContentLoaded Api.Response
+    | AccountContentLoaded Api.Response
 
 
 type Action
@@ -88,16 +107,40 @@ type alias Outcome =
 
 
 type alias Working =
-    { publicProfile : Remote Domain.PersonView, ownProfile : Remote Domain.PersonView, profileForm : ProfileForm, flash : Flash, sessionProblem : Maybe Api.Problem }
+    { publicProfile : Remote Domain.PersonView
+    , ownProfile : Remote Domain.PersonView
+    , profileForm : ProfileForm
+    , content : Remote ProfileContent
+    , contentView : String
+    , flash : Flash
+    , sessionProblem : Maybe Api.Problem
+    }
 
 
 update : String -> Msg -> Model -> ( Model, Cmd Msg, Outcome )
 update csrf message state =
     let
         ( next, command ) =
-            updateWorking csrf message { publicProfile = state.publicProfile, ownProfile = state.ownProfile, profileForm = state.profileForm, flash = NoFlash, sessionProblem = Nothing }
+            updateWorking csrf
+                message
+                { publicProfile = state.publicProfile
+                , ownProfile = state.ownProfile
+                , profileForm = state.profileForm
+                , content = state.content
+                , contentView = state.contentView
+                , flash = NoFlash
+                , sessionProblem = Nothing
+                }
     in
-    ( { publicProfile = next.publicProfile, ownProfile = next.ownProfile, profileForm = next.profileForm }, command, { flash = next.flash, sessionProblem = next.sessionProblem } )
+    ( { publicProfile = next.publicProfile
+      , ownProfile = next.ownProfile
+      , profileForm = next.profileForm
+      , content = next.content
+      , contentView = next.contentView
+      }
+    , command
+    , { flash = next.flash, sessionProblem = next.sessionProblem }
+    )
 
 
 updateWorking : String -> Msg -> Working -> ( Working, Cmd Msg )
@@ -222,6 +265,42 @@ updateWorking csrf message model =
                     , Cmd.none
                     )
 
+        PersonContentLoaded response ->
+            case Api.decodeResponse Domain.personContentPage response of
+                Ok page ->
+                    ( { model | content = Ready (PersonPosts page) }, Cmd.none )
+
+                Err problem ->
+                    ( { model
+                        | content = Failed problem
+                        , sessionProblem =
+                            if problem.status == 401 then
+                                Just problem
+
+                            else
+                                Nothing
+                      }
+                    , Cmd.none
+                    )
+
+        AccountContentLoaded response ->
+            case Api.decodeResponse (Domain.page Domain.postView) response of
+                Ok page ->
+                    ( { model | content = Ready (AccountPosts page) }, Cmd.none )
+
+                Err problem ->
+                    ( { model
+                        | content = Failed problem
+                        , sessionProblem =
+                            if problem.status == 401 then
+                                Just problem
+
+                            else
+                                Nothing
+                      }
+                    , Cmd.none
+                    )
+
         OwnLoaded response ->
             case Api.decodeResponse Domain.ownPersonView response of
                 Ok profile ->
@@ -248,6 +327,8 @@ type alias Config msg =
     , profileClearAvatar : msg
     , profileSave : msg
     , avatarFileSelected : Maybe File -> msg
+    , postCard : Domain.PostView -> Html msg
+    , tabNavigate : String -> msg
     }
 
 
@@ -256,6 +337,9 @@ type alias ViewModel =
     , ownProfile : Remote Domain.PersonView
     , profileForm : ProfileForm
     , auth : AuthState
+    , content : Remote ProfileContent
+    , contentView : String
+    , url : Url.Url
     }
 
 
@@ -267,9 +351,158 @@ pagePublicProfile config model active username =
             model.publicProfile
             (\profile ->
                 div [ A.class "stack" ]
-                    [ profileCard active profile ]
+                    [ profileCard active profile
+                    , profileTabs config model active username
+                    , profileContent config model active
+                    ]
             )
         )
+
+
+profileTabs : Config msg -> ViewModel -> Active -> String -> Html msg
+profileTabs config model active username =
+    let
+        current =
+            model.contentView
+
+        own =
+            case model.auth of
+                Authenticated account ->
+                    Domain.personName account == username
+
+                _ ->
+                    False
+
+        tab view label =
+            a
+                [ A.href (profileViewUrl username view)
+                , A.class "outlined-button"
+                , A.attribute "role" "tab"
+                , A.attribute "aria-selected" (boolText (view == current))
+                , A.tabindex
+                    (if view == current then
+                        0
+
+                     else
+                        -1
+                    )
+                , Events.on "keydown"
+                    (Decode.field "key" Decode.string
+                        |> Decode.andThen
+                            (\key ->
+                                case key of
+                                    "ArrowRight" ->
+                                        Decode.succeed (config.tabNavigate (profileViewUrl username (nextView own current)))
+
+                                    "ArrowLeft" ->
+                                        Decode.succeed (config.tabNavigate (profileViewUrl username (previousView own current)))
+
+                                    _ ->
+                                        Decode.fail "ignore"
+                            )
+                    )
+                ]
+                [ text (label active.texts) ]
+    in
+    nav
+        [ A.class "tabs", A.attribute "role" "tablist" ]
+        ([ tab "posts" Translations.profilePosts
+         , tab "comments" Translations.profileComments
+         ]
+            ++ (if own then
+                    [ tab "saved" Translations.profileSaved
+                    , tab "liked" Translations.profileLiked
+                    , tab "read" Translations.profileRead
+                    , tab "hidden" Translations.profileHidden
+                    ]
+
+                else
+                    []
+               )
+        )
+
+
+profileViews : Bool -> List String
+profileViews own =
+    if own then
+        [ "posts", "comments", "saved", "liked", "read", "hidden" ]
+
+    else
+        [ "posts", "comments" ]
+
+
+nextView : Bool -> String -> String
+nextView own current =
+    nextInList current (profileViews own)
+
+
+previousView : Bool -> String -> String
+previousView own current =
+    nextInList current (List.reverse (profileViews own))
+
+
+nextInList : String -> List String -> String
+nextInList current views =
+    case views of
+        [] ->
+            current
+
+        first :: rest ->
+            if first == current then
+                Maybe.withDefault current (List.head rest)
+
+            else
+                nextInList current rest
+
+
+profileViewUrl : String -> String -> String
+profileViewUrl username view =
+    Route.path (Route.Profile username) ++ "?view=" ++ view
+
+
+profileContent : Config msg -> ViewModel -> Active -> Html msg
+profileContent config model active =
+    viewRemote config.retry
+        active.texts
+        model.content
+        (\content ->
+            case content of
+                PersonPosts page ->
+                    if List.isEmpty page.items then
+                        p [ A.class "empty-state" ] [ text (Translations.noContent active.texts) ]
+
+                    else
+                        div [ A.class "stack" ]
+                            [ div [ A.class "stack" ] (List.map (personContentItem config) page.items)
+                            , viewPagination active.texts model.url page.prevPage page.nextPage
+                            ]
+
+                AccountPosts page ->
+                    if List.isEmpty page.items then
+                        p [ A.class "empty-state" ] [ text (Translations.noContent active.texts) ]
+
+                    else
+                        div [ A.class "stack" ]
+                            [ div [ A.class "stack" ] (List.map config.postCard page.items)
+                            , viewPagination active.texts model.url page.prevPage page.nextPage
+                            ]
+        )
+
+
+personContentItem : Config msg -> Domain.PersonContentItem -> Html msg
+personContentItem config item =
+    case item of
+        Domain.PersonPost post ->
+            config.postCard post
+
+        Domain.PersonComment comment ->
+            article [ A.class "card" ]
+                [ p [ A.class "metadata" ]
+                    [ a [ A.href (Route.path (Route.Post comment.post.id (Just comment.comment.id))) ]
+                        [ text (Domain.displayNameOf comment.creator) ]
+                    ]
+                , Markdown.render comment.comment.content
+                ]
 
 
 profileCard : Active -> Domain.PersonView -> Html msg
@@ -347,19 +580,71 @@ pageSettings config model active =
 
 reset : Model -> Model
 reset model =
-    { model | publicProfile = NotAsked, ownProfile = NotAsked }
+    { model | publicProfile = NotAsked, ownProfile = NotAsked, content = NotAsked }
 
 
 clearPrivate : Model -> Model
 clearPrivate model =
-    { model | ownProfile = NotAsked, profileForm = emptyProfileForm }
+    { model | ownProfile = NotAsked, profileForm = emptyProfileForm, content = NotAsked }
 
 
-loadPublic : String -> Model -> ( Model, Cmd Msg )
-loadPublic username model =
-    ( { model | publicProfile = Loading }
-    , Api.get ("/person?username=" ++ Url.percentEncode username) PublicLoaded
+loadPublic : Url.Url -> String -> String -> Maybe String -> Model -> ( Model, Cmd Msg )
+loadPublic url username requestedView viewerName model =
+    let
+        own =
+            viewerName == Just username
+
+        view =
+            normalizedProfileView own requestedView
+
+        contentCommand =
+            if List.member view [ "saved", "liked", "read", "hidden" ] then
+                Api.get ("/account/" ++ view ++ "?limit=20" ++ cursorQuery url) AccountContentLoaded
+
+            else
+                Api.get
+                    ("/person/content?username="
+                        ++ Url.percentEncode username
+                        ++ "&type_="
+                        ++ (if view == "comments" then
+                                "comments"
+
+                            else
+                                "posts"
+                           )
+                        ++ "&limit=20"
+                        ++ cursorQuery url
+                    )
+                    PersonContentLoaded
+    in
+    ( { model | publicProfile = Loading, content = Loading, contentView = view }
+    , Cmd.batch
+        [ Api.get ("/person?username=" ++ Url.percentEncode username) PublicLoaded
+        , contentCommand
+        ]
     )
+
+
+cursorQuery : Url.Url -> String
+cursorQuery url =
+    case Route.cursor url of
+        Just cursor ->
+            "&page_cursor=" ++ Url.percentEncode cursor
+
+        Nothing ->
+            ""
+
+
+normalizedProfileView : Bool -> String -> String
+normalizedProfileView own value =
+    if List.member value [ "posts", "comments" ] then
+        value
+
+    else if own && List.member value [ "saved", "liked", "read", "hidden" ] then
+        value
+
+    else
+        "posts"
 
 
 loadOwn : Model -> ( Model, Cmd Msg )

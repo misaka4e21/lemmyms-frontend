@@ -216,7 +216,7 @@ pageView model active =
             pageNotifications model active
 
         Route.Profile username ->
-            pagePublicProfile model active username
+            pagePublicProfile (postCard model active) model active username
 
         Route.Settings ->
             pageSettings model active

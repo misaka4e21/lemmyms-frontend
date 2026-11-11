@@ -1,7 +1,7 @@
 module Ui.PostCard exposing (Config, deleteTriggerId, postCard)
 
 import Generated.I18n as Translations
-import Html exposing (Html, a, article, bdi, button, div, h2, h3, p, section, span, text, time)
+import Html exposing (Html, a, article, bdi, button, details, div, h2, h3, img, p, section, span, summary, text, time)
 import Html.Attributes as A
 import Html.Events as Events
 import Lemmy.Domain as Domain
@@ -15,8 +15,13 @@ import Ui.VoteControl
 type alias Config msg =
     { formatted : Maybe Formatting
     , viewerActor : Maybe String
+    , viewerId : Maybe Int
+    , blurNsfw : Bool
+    , mode : String
     , isBusy : String -> Bool
     , isExpanded : String -> Bool
+    , canAct : Bool
+    , canViewVotes : Bool
     , onVote : String -> Int -> msg
     , onLike : String -> Bool -> msg
     , onSave : String -> Bool -> msg
@@ -25,6 +30,13 @@ type alias Config msg =
     , canReport : Bool
     , onDelete : String -> msg
     , onReplies : String -> msg
+    , onMarkRead : String -> Bool -> msg
+    , onBlockAuthor : Int -> Bool -> msg
+    , onBlockCommunity : Int -> Bool -> msg
+    , onRemovePost : String -> Bool -> msg
+    , onLockPost : String -> Bool -> msg
+    , onFeaturePost : String -> Bool -> msg
+    , onViewVotes : String -> msg
     , nested : String -> Html msg
     }
 
@@ -74,17 +86,37 @@ postCard config texts view =
 
         owner =
             config.viewerActor == Just view.creator.apId
+
+        read =
+            Maybe.andThen .readAt view.postActions /= Nothing
+
+        blockedAuthor =
+            Maybe.andThen .blockedAt view.personActions /= Nothing
+
+        blockedCommunity =
+            Maybe.andThen .blockedAt view.communityActions /= Nothing
+
+        secondary =
+            config.canAct || view.canMod
     in
-    article [ A.class "card post-card", A.attribute "aria-labelledby" ("post-" ++ postId) ]
-        [ h2 [ A.id ("post-" ++ postId), A.dir "auto" ]
+    article
+        [ A.id ("post-" ++ postId)
+        , A.class ("card post-card post-card-" ++ normalizedMode config.mode)
+        , A.attribute "aria-labelledby" ("post-heading-" ++ postId)
+        ]
+        [ h2 [ A.id ("post-heading-" ++ postId), A.dir "auto" ]
             [ a [ A.href (Route.path (Route.Post post.id Nothing)) ] [ text post.name ] ]
         , p [ A.class "metadata" ]
-            [ bdi [] [ text (Translations.authorLabel authorText texts) ]
+            [ bdi []
+                [ a [ A.href (Route.path (Route.Profile view.creator.name)) ] [ text authorText ] ]
+            , text " · "
+            , a [ A.href (Route.path (Route.Community view.community.name)) ]
+                [ text (Maybe.withDefault view.community.name view.community.title) ]
             , text " · "
             , time [ A.datetime post.publishedAt, A.attribute "data-commune-time" "" ] [ text post.publishedAt ]
             ]
-        , Maybe.withDefault "" post.body |> Markdown.render
-        , linkSection texts post.url
+        , tagsRow texts view.tags
+        , nsfwGate config texts post
         , div [ A.class "post-actions" ]
             [ Ui.VoteControl.view
                 { formatted = config.formatted
@@ -100,36 +132,8 @@ postCard config texts view =
                 , onLike = config.onLike postId
                 }
                 texts
-            , if saved view then
-                button
-                    [ A.class "icon-button"
-                    , A.attribute "aria-label" saveName
-                    , A.attribute "title" saveName
-                    , A.attribute "aria-pressed" "true"
-                    , A.disabled (config.isBusy postId)
-                    , Events.onClick (config.onSave postId True)
-                    ]
-                    [ Ui.Icon.view (Ui.Icon.Bookmark True) ]
-
-              else
-                button
-                    [ A.class "icon-button"
-                    , A.attribute "aria-label" saveName
-                    , A.attribute "title" saveName
-                    , A.attribute "aria-pressed" "false"
-                    , A.disabled (config.isBusy postId)
-                    , Events.onClick (config.onSave postId False)
-                    ]
-                    [ Ui.Icon.view (Ui.Icon.Bookmark False) ]
-            , button
-                [ A.class "icon-button"
-                , A.attribute "aria-label" hideName
-                , A.attribute "title" hideName
-                , A.attribute "aria-pressed" (boolText (hidden view))
-                , A.disabled (config.isBusy postId)
-                , Events.onClick (config.onHideForMe postId (hidden view))
-                ]
-                [ Ui.Icon.view (Ui.Icon.Hide (hidden view)) ]
+            , toggleButton config texts postId saveName (saved view) (config.onSave postId (not (saved view))) (Ui.Icon.Bookmark (saved view))
+            , toggleButton config texts postId hideName (hidden view) (config.onHideForMe postId (not (hidden view))) (Ui.Icon.Hide (hidden view))
             , if config.canReport && not post.deleted then
                 button
                     [ A.class "icon-button"
@@ -178,6 +182,104 @@ postCard config texts view =
 
               else
                 text ""
+            , if secondary then
+                details [ A.class "action-menu" ]
+                    [ summary [ A.class "text-button" ] [ text (Translations.moderationAction texts) ]
+                    , div [ A.class "action-menu-items" ]
+                        [ if config.canAct then
+                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.onMarkRead postId (not read)) ]
+                                [ text
+                                    (if read then
+                                        Translations.markUnread texts
+
+                                     else
+                                        Translations.markRead texts
+                                    )
+                                ]
+
+                          else
+                            text ""
+                        , if config.canAct && config.viewerId /= Just view.creator.id then
+                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.onBlockAuthor view.creator.id (not blockedAuthor)) ]
+                                [ text
+                                    (if blockedAuthor then
+                                        Translations.unblockAuthor texts
+
+                                     else
+                                        Translations.blockAuthor texts
+                                    )
+                                ]
+
+                          else
+                            text ""
+                        , if config.canAct then
+                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.onBlockCommunity view.community.id (not blockedCommunity)) ]
+                                [ text
+                                    (if blockedCommunity then
+                                        Translations.unblockCommunityAction texts
+
+                                     else
+                                        Translations.blockCommunityAction texts
+                                    )
+                                ]
+
+                          else
+                            text ""
+                        , if view.canMod then
+                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.onRemovePost postId (not post.removed)) ]
+                                [ text
+                                    (if post.removed then
+                                        Translations.restore texts
+
+                                     else
+                                        Translations.remove texts
+                                    )
+                                ]
+
+                          else
+                            text ""
+                        , if view.canMod then
+                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.onLockPost postId (not post.locked)) ]
+                                [ text
+                                    (if post.locked then
+                                        Translations.unlockPost texts
+
+                                     else
+                                        Translations.lockPost texts
+                                    )
+                                ]
+
+                          else
+                            text ""
+                        , if view.canMod then
+                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.onFeaturePost postId (not post.featuredCommunity)) ]
+                                [ text
+                                    (if post.featuredCommunity then
+                                        Translations.unfeaturePost texts
+
+                                     else
+                                        Translations.featurePost texts
+                                    )
+                                ]
+
+                          else
+                            text ""
+                        , if view.canMod || config.canViewVotes then
+                            button
+                                [ A.id ("view-votes-post-" ++ postId)
+                                , A.type_ "button"
+                                , A.class "text-button"
+                                , Events.onClick (config.onViewVotes postId)
+                                ]
+                                [ text (Translations.viewVotes texts) ]
+
+                          else
+                            text ""
+                        ]
+                    ]
+
+              else
+                text ""
             ]
         , if config.isExpanded postId then
             config.nested postId
@@ -187,14 +289,65 @@ postCard config texts view =
         ]
 
 
-saved : Domain.PostView -> Bool
-saved view =
-    Maybe.andThen .savedAt view.postActions /= Nothing
+toggleButton : Config msg -> Translations.I18n -> String -> String -> Bool -> msg -> Ui.Icon.Icon -> Html msg
+toggleButton config texts postId labelText pressed click icon =
+    button
+        [ A.class "icon-button"
+        , A.attribute "aria-label" labelText
+        , A.attribute "title" labelText
+        , A.attribute "aria-pressed" (boolText pressed)
+        , A.disabled (config.isBusy postId)
+        , Events.onClick click
+        ]
+        [ Ui.Icon.view icon ]
 
 
-hidden : Domain.PostView -> Bool
-hidden view =
-    Maybe.andThen .hiddenAt view.postActions /= Nothing
+nsfwGate : Config msg -> Translations.I18n -> Domain.Post -> Html msg
+nsfwGate config texts post =
+    if post.nsfw && config.blurNsfw then
+        details [ A.class "nsfw-gate" ]
+            [ summary [ A.class "text-button" ] [ text (Translations.showNsfw texts) ]
+            , content texts post
+            ]
+
+    else
+        content texts post
+
+
+content : Translations.I18n -> Domain.Post -> Html msg
+content texts post =
+    div [ A.class "post-content" ]
+        [ case post.thumbnailUrl of
+            Just thumbnail ->
+                img
+                    [ A.class "post-thumbnail"
+                    , A.src thumbnail
+                    , A.alt (Maybe.withDefault "" post.altText)
+                    , A.attribute "referrerpolicy" "no-referrer"
+                    ]
+                    []
+
+            Nothing ->
+                text ""
+        , Maybe.withDefault "" post.body |> Markdown.render
+        , linkSection texts post.url
+        ]
+
+
+tagsRow : Translations.I18n -> List Domain.CommunityTag -> Html msg
+tagsRow texts tags =
+    if List.isEmpty tags then
+        text ""
+
+    else
+        p [ A.class "chips" ]
+            (List.map
+                (\tag ->
+                    span [ A.class "chip" ]
+                        [ text (Maybe.withDefault tag.name tag.displayName) ]
+                )
+                tags
+            )
 
 
 linkSection : Translations.I18n -> Maybe String -> Html msg
@@ -208,6 +361,25 @@ linkSection texts url =
 
         Nothing ->
             text ""
+
+
+saved : Domain.PostView -> Bool
+saved view =
+    Maybe.andThen .savedAt view.postActions /= Nothing
+
+
+hidden : Domain.PostView -> Bool
+hidden view =
+    Maybe.andThen .hiddenAt view.postActions /= Nothing
+
+
+normalizedMode : String -> String
+normalizedMode value =
+    if List.member value [ "list", "card", "small_card" ] then
+        value
+
+    else
+        "card"
 
 
 deleteTriggerId : String -> String

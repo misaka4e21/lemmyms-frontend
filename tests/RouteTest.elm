@@ -203,4 +203,18 @@ suite =
                             |> Maybe.withDefault (Url.fromString "https://forum.test/" |> Maybe.withDefault { protocol = Url.Https, host = "forum.test", port_ = Nothing, path = "/", query = Nothing, fragment = Nothing })
                 in
                 Expect.equal False (String.contains "offset" (Route.postCommentsUrl 10 (Route.query "sort" url) 4 (Route.cursor url)))
+        , test "replaces one query parameter and drops the cursor" <|
+            \_ ->
+                let
+                    url =
+                        Url.fromString "https://forum.test/c/news?type=local&sort=top&page_cursor=abc&view=card"
+                            |> Maybe.withDefault (Url.fromString "https://forum.test/" |> Maybe.withDefault { protocol = Url.Https, host = "forum.test", port_ = Nothing, path = "/", query = Nothing, fragment = Nothing })
+                in
+                Expect.equal
+                    [ "/c/news?type=local&view=card&sort=new"
+                    , "/c/news?type=local&sort=top"
+                    ]
+                    [ Route.withQuery "sort" "new" url
+                    , Route.withQuery "view" "" url
+                    ]
         ]

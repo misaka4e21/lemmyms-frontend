@@ -4,8 +4,9 @@ import App.Context exposing (Active)
 import App.Session exposing (AuthState(..))
 import Dict
 import Feature.CommunityManage.State exposing (..)
+import File exposing (File)
 import Generated.I18n as Translations
-import Html exposing (Html, a, bdi, button, div, form, h2, input, label, li, option, p, section, select, span, text, textarea, ul)
+import Html exposing (Html, a, bdi, button, div, form, h2, img, input, label, li, option, p, section, select, span, text, textarea, ul)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode
@@ -53,6 +54,13 @@ type alias Config msg =
     , manageBanExpiresChanged : String -> msg
     , manageCreateBan : msg
     , manageConfirmRemoveBan : msg
+    , manageTagNameChanged : String -> msg
+    , manageTagDisplayNameChanged : String -> msg
+    , manageTagColorChanged : String -> msg
+    , manageCreateTag : msg
+    , manageDeleteTag : Int -> msg
+    , manageIconSelected : Maybe File -> msg
+    , manageBannerSelected : Maybe File -> msg
     }
 
 
@@ -80,6 +88,16 @@ pageManage config model active communityIdValue =
                             text ""
                     , if canManageCommunity manage then
                         managePolicy config active manage
+
+                      else
+                        text ""
+                    , if canManageCommunity manage then
+                        manageImages config active manage
+
+                      else
+                        text ""
+                    , if canManageCommunity manage then
+                        manageTags config active manage
 
                       else
                         text ""
@@ -118,6 +136,126 @@ communitySection active community =
             ]
         , p [ A.class "chips" ] [ span [ A.class "chip" ] [ text (modeLabel active.texts (visibilityText community.community.visibility)) ] ]
         ]
+
+
+manageImages : Config msg -> Active -> ManageState -> Html msg
+manageImages config active manage =
+    case manage.community of
+        Ready community ->
+            section [ A.class "card form-stack" ]
+                [ h2 [] [ text (Translations.communityDetail active.texts) ]
+                , case community.community.icon of
+                    Just icon ->
+                        img [ A.class "community-icon", A.src icon, A.alt "", A.attribute "referrerpolicy" "no-referrer" ] []
+
+                    Nothing ->
+                        text ""
+                , div []
+                    [ label [ A.for "manage-icon" ] [ text (Translations.uploadIcon active.texts) ]
+                    , input
+                        [ A.id "manage-icon"
+                        , A.type_ "file"
+                        , A.attribute "accept" "image/*"
+                        , Events.on "change" (Json.Decode.maybe (Json.Decode.at [ "target", "files", "0" ] File.decoder) |> Json.Decode.map config.manageIconSelected)
+                        ]
+                        []
+                    ]
+                , case community.community.banner of
+                    Just banner ->
+                        img [ A.class "community-banner", A.src banner, A.alt "", A.attribute "referrerpolicy" "no-referrer" ] []
+
+                    Nothing ->
+                        text ""
+                , div []
+                    [ label [ A.for "manage-banner" ] [ text (Translations.uploadBanner active.texts) ]
+                    , input
+                        [ A.id "manage-banner"
+                        , A.type_ "file"
+                        , A.attribute "accept" "image/*"
+                        , Events.on "change" (Json.Decode.maybe (Json.Decode.at [ "target", "files", "0" ] File.decoder) |> Json.Decode.map config.manageBannerSelected)
+                        ]
+                        []
+                    ]
+                , if manage.iconUploading || manage.bannerUploading then
+                    p [ A.class "muted", A.attribute "role" "status" ] [ text (Translations.loadingMessage active.texts) ]
+
+                  else
+                    text ""
+                ]
+
+        _ ->
+            text ""
+
+
+manageTags : Config msg -> Active -> ManageState -> Html msg
+manageTags config active manage =
+    case manage.community of
+        Ready community ->
+            section [ A.class "card form-stack" ]
+                [ h2 [] [ text (Translations.tags active.texts) ]
+                , if List.isEmpty community.tags then
+                    p [ A.class "muted" ] [ text (Translations.noTags active.texts) ]
+
+                  else
+                    ul [ A.class "roster-list" ]
+                        (List.map
+                            (\tag ->
+                                li []
+                                    [ span [ A.class "chip" ] [ text (Maybe.withDefault tag.name tag.displayName) ]
+                                    , button
+                                        [ A.type_ "button"
+                                        , A.class "text-button danger-text"
+                                        , Events.onClick (config.manageDeleteTag tag.id)
+                                        ]
+                                        [ text (Translations.deleteTag active.texts) ]
+                                    ]
+                            )
+                            community.tags
+                        )
+                , div []
+                    [ label [ A.for "manage-tag-name" ] [ text (Translations.tagName active.texts) ]
+                    , input
+                        [ A.id "manage-tag-name"
+                        , A.type_ "text"
+                        , A.value manage.tagName
+                        , Events.onInput config.manageTagNameChanged
+                        ]
+                        []
+                    ]
+                , div []
+                    [ label [ A.for "manage-tag-display-name" ] [ text (Translations.tagDisplayName active.texts) ]
+                    , input
+                        [ A.id "manage-tag-display-name"
+                        , A.type_ "text"
+                        , A.value manage.tagDisplayName
+                        , Events.onInput config.manageTagDisplayNameChanged
+                        ]
+                        []
+                    ]
+                , div []
+                    [ label [ A.for "manage-tag-color" ] [ text (Translations.colorLabel active.texts) ]
+                    , select
+                        [ A.id "manage-tag-color"
+                        , Events.on "change" (Json.Decode.map config.manageTagColorChanged (Json.Decode.at [ "target", "value" ] Json.Decode.string))
+                        ]
+                        (List.map
+                            (\color ->
+                                option [ A.value color, A.selected (color == manage.tagColor) ] [ text color ]
+                            )
+                            [ "color_01", "color_02", "color_03", "color_04", "color_05", "color_06", "color_07", "color_08", "color_09", "color_10" ]
+                        )
+                    ]
+                , button
+                    [ A.type_ "button"
+                    , A.class "filled-button"
+                    , A.disabled manage.tagBusy
+                    , Events.onClick config.manageCreateTag
+                    ]
+                    [ text (Translations.addTag active.texts) ]
+                ]
+
+        _ ->
+            text ""
 
 
 managePolicy : Config msg -> Active -> ManageState -> Html msg

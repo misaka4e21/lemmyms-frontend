@@ -43,6 +43,12 @@ type alias ManageState =
     , banExpires : String
     , banBusy : Bool
     , banProblem : Maybe Api.Problem
+    , tagName : String
+    , tagDisplayName : String
+    , tagColor : String
+    , tagBusy : Bool
+    , iconUploading : Bool
+    , bannerUploading : Bool
     , problem : Maybe Api.Problem
     }
 
@@ -95,6 +101,12 @@ emptyManage =
     , banExpires = ""
     , banBusy = False
     , banProblem = Nothing
+    , tagName = ""
+    , tagDisplayName = ""
+    , tagColor = "color_01"
+    , tagBusy = False
+    , iconUploading = False
+    , bannerUploading = False
     , problem = Nothing
     }
 

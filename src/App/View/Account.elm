@@ -2,10 +2,13 @@ module App.View.Account exposing (pageLogin, pagePasswordReset, pagePasswordRese
 
 import App.Context exposing (Active)
 import App.State exposing (Model, Msg(..))
+import Browser
 import Feature.Auth.Update as Auth
 import Feature.Auth.View
 import Feature.Profile as Profile
 import Html exposing (Html)
+import Lemmy.Domain as Domain
+import Url
 
 
 pageLogin : Model -> Active -> Html Msg
@@ -67,22 +70,55 @@ authViewConfig model =
     }
 
 
-pagePublicProfile : Model -> Active -> String -> Html Msg
-pagePublicProfile model active username =
-    Profile.pagePublicProfile (profileViewConfig model) { publicProfile = model.profile.publicProfile, ownProfile = model.profile.ownProfile, profileForm = model.profile.profileForm, auth = model.auth } active username
+pagePublicProfile : (Domain.PostView -> Html Msg) -> Model -> Active -> String -> Html Msg
+pagePublicProfile postCard model active username =
+    Profile.pagePublicProfile
+        (profileViewConfig postCard model)
+        { publicProfile = model.profile.publicProfile
+        , ownProfile = model.profile.ownProfile
+        , profileForm = model.profile.profileForm
+        , auth = model.auth
+        , content = model.profile.content
+        , contentView = model.profile.contentView
+        , url = model.url
+        }
+        active
+        username
 
 
 pageSettings : Model -> Active -> Html Msg
 pageSettings model active =
-    Profile.pageSettings (profileViewConfig model) { publicProfile = model.profile.publicProfile, ownProfile = model.profile.ownProfile, profileForm = model.profile.profileForm, auth = model.auth } active
+    Profile.pageSettings
+        (profileViewConfig (\_ -> Html.text "") model)
+        { publicProfile = model.profile.publicProfile
+        , ownProfile = model.profile.ownProfile
+        , profileForm = model.profile.profileForm
+        , auth = model.auth
+        , content = model.profile.content
+        , contentView = model.profile.contentView
+        , url = model.url
+        }
+        active
 
 
-profileViewConfig : Model -> Profile.Config Msg
-profileViewConfig model =
+profileViewConfig : (Domain.PostView -> Html Msg) -> Model -> Profile.Config Msg
+profileViewConfig postCard model =
     { retry = RetryPage
     , profileDisplayNameChanged = ProfileMessage << Profile.ProfileDisplayNameChanged
     , profileAuthoring = ProfileMessage << Profile.ProfileAuthoring
     , profileClearAvatar = ProfileMessage Profile.ProfileClearAvatar
     , profileSave = ProfileMessage Profile.ProfileSave
     , avatarFileSelected = ProfileMessage << Profile.AvatarFileSelected
+    , postCard = postCard
+    , tabNavigate = \path -> Navigate (Browser.Internal (absoluteUrl model.url path))
     }
+
+
+absoluteUrl : Url.Url -> String -> Url.Url
+absoluteUrl current path =
+    case Url.fromString ("https://local" ++ path) of
+        Just parsed ->
+            { parsed | protocol = current.protocol, host = current.host, port_ = current.port_ }
+
+        Nothing ->
+            current

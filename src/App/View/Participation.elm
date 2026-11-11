@@ -46,6 +46,13 @@ pageManage model active id =
         , manageBanExpiresChanged = ManageMessage << Manage.ManageBanExpiresChanged
         , manageCreateBan = ManageMessage Manage.ManageCreateBan
         , manageConfirmRemoveBan = OpenConfirmation RemoveCommunityBanDialog
+        , manageTagNameChanged = ManageMessage << Manage.ManageTagNameChanged
+        , manageTagDisplayNameChanged = ManageMessage << Manage.ManageTagDisplayNameChanged
+        , manageTagColorChanged = ManageMessage << Manage.ManageTagColorChanged
+        , manageCreateTag = ManageMessage Manage.ManageCreateTag
+        , manageDeleteTag = ManageMessage << Manage.ManageDeleteTag
+        , manageIconSelected = ManageMessage << Manage.ManageIconSelected
+        , manageBannerSelected = ManageMessage << Manage.ManageBannerSelected
         }
         { auth = model.auth, manage = model.management.manage }
         active

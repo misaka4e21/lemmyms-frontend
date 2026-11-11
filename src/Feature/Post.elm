@@ -1,10 +1,10 @@
-module Feature.Post exposing (Config, Model, Msg(..), Outcome, initial, isBusy, likeKey, load, pagePost, reset, update)
+module Feature.Post exposing (CommentModAction(..), Config, Model, Msg(..), Outcome, PostModAction(..), VoteTarget(..), initial, isBusy, likeKey, load, pagePost, reset, update)
 
 import Api
 import App.Context exposing (Active)
 import App.Feedback exposing (Flash(..))
 import Generated.I18n as Translations
-import Html exposing (Html, button, div, h2, label, option, p, section, select, text)
+import Html exposing (Html, bdi, button, div, h2, label, li, option, p, section, select, text, ul)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
@@ -13,6 +13,7 @@ import Lemmy.CommentTree as CommentTree
 import Lemmy.Domain as Domain
 import Lemmy.Route as Route
 import List
+import Ports exposing (closeDialog, focus, openDialog)
 import Remote exposing (Remote(..))
 import Set exposing (Set)
 import Ui.Feedback exposing (viewRemote)
@@ -24,15 +25,47 @@ import Url exposing (Url)
 type alias Model =
     { post : Remote Domain.PostView
     , replies : Remote (Domain.Page (CommentTree.Threaded Domain.CommentView))
+    , crossPosts : List Domain.PostView
     , expandedReplies : Set String
     , busy : Set String
     , focusComment : Maybe String
+    , voteDialog : Maybe VoteDialog
     }
 
 
 initial : Model
 initial =
-    { post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty, focusComment = Nothing }
+    { post = NotAsked
+    , replies = NotAsked
+    , crossPosts = []
+    , expandedReplies = Set.empty
+    , busy = Set.empty
+    , focusComment = Nothing
+    , voteDialog = Nothing
+    }
+
+
+type PostModAction
+    = RemovePostAction Bool
+    | LockPostAction Bool
+    | FeaturePostAction Bool
+
+
+type CommentModAction
+    = RemoveCommentAction Bool
+    | LockCommentAction Bool
+    | DistinguishCommentAction Bool
+
+
+type VoteTarget
+    = PostVotes String
+    | CommentVotes String
+
+
+type alias VoteDialog =
+    { target : VoteTarget
+    , votes : Remote (Domain.Page Domain.VoteView)
+    }
 
 
 likeKey : String -> String
@@ -81,6 +114,16 @@ type Msg
     | Deleted Api.Response
     | PostLoaded Api.Response
     | RepliesLoaded Api.Response
+    | ModeratePost String PostModAction
+    | ModerateComment String CommentModAction
+    | ModerationDone Api.Response
+    | BlockPerson Int Bool
+    | BlockCommunity Int Bool
+    | BlockDone Api.Response
+    | SetRead String Bool
+    | OpenVotes VoteTarget
+    | CloseVotes
+    | VotesLoaded Api.Response
 
 
 type alias Outcome =
@@ -96,9 +139,11 @@ type alias Outcome =
 type alias Working =
     { post : Remote Domain.PostView
     , replies : Remote (Domain.Page (CommentTree.Threaded Domain.CommentView))
+    , crossPosts : List Domain.PostView
     , expandedReplies : Set String
     , busy : Set String
     , focusComment : Maybe String
+    , voteDialog : Maybe VoteDialog
     , flash : Flash
     , sessionProblem : Maybe Api.Problem
     , navigation : Maybe String
@@ -117,9 +162,11 @@ update csrf url message state =
                 message
                 { post = state.post
                 , replies = state.replies
+                , crossPosts = state.crossPosts
                 , expandedReplies = state.expandedReplies
                 , busy = state.busy
                 , focusComment = state.focusComment
+                , voteDialog = state.voteDialog
                 , flash = NoFlash
                 , sessionProblem = Nothing
                 , navigation = Nothing
@@ -130,9 +177,11 @@ update csrf url message state =
     in
     ( { post = next.post
       , replies = next.replies
+      , crossPosts = next.crossPosts
       , expandedReplies = next.expandedReplies
       , busy = next.busy
       , focusComment = state.focusComment
+      , voteDialog = next.voteDialog
       }
     , command
     , { flash = next.flash
@@ -345,9 +394,9 @@ updateWorking csrf url message model =
                     ( problemState model problem, Cmd.none )
 
         PostLoaded response ->
-            case Api.decodeResponse (Decode.field "post_view" Domain.postView) response of
-                Ok post ->
-                    ( { model | post = Ready post }, Cmd.none )
+            case Api.decodeResponse postDetailDecoder response of
+                Ok ( post, crossPosts ) ->
+                    ( { model | post = Ready post, crossPosts = crossPosts }, Cmd.none )
 
                 Err problem ->
                     ( problemState { model | post = Failed problem } problem, Cmd.none )
@@ -385,11 +434,205 @@ updateWorking csrf url message model =
                     in
                     ( problemState updated problem, Cmd.none )
 
+        ModeratePost id action ->
+            ( { model | busy = Set.insert ("moderate-" ++ id) model.busy }
+            , Api.send "" "POST" (postModerationPath action) (postModerationBody id action) ModerationDone
+            )
+
+        ModerateComment id action ->
+            ( { model | busy = Set.insert ("moderate-comment-" ++ id) model.busy }
+            , Api.send "" "POST" (commentModerationPath action) (commentModerationBody id action) ModerationDone
+            )
+
+        ModerationDone response ->
+            case Api.decodeUnit response of
+                Ok () ->
+                    ( { model | busy = Set.empty, reloadRoute = True, flash = FlashSaved }, Cmd.none )
+
+                Err problem ->
+                    ( problemState { model | busy = Set.empty } problem, Cmd.none )
+
+        BlockPerson id block ->
+            ( { model | busy = Set.insert "block-person" model.busy }
+            , Api.send "" "POST" "/account/block/person" (Encode.encode 0 (Encode.object [ ( "person_id", Encode.int id ), ( "block", Encode.bool block ) ])) BlockDone
+            )
+
+        BlockCommunity id block ->
+            ( { model | busy = Set.insert "block-community" model.busy }
+            , Api.send "" "POST" "/account/block/community" (Encode.encode 0 (Encode.object [ ( "community_id", Encode.int id ), ( "block", Encode.bool block ) ])) BlockDone
+            )
+
+        BlockDone response ->
+            case Api.decodeUnit response of
+                Ok () ->
+                    ( { model | busy = Set.empty, reloadRoute = True, flash = FlashSaved }, Cmd.none )
+
+                Err problem ->
+                    ( problemState { model | busy = Set.empty } problem, Cmd.none )
+
+        SetRead id read ->
+            ( { model | busy = Set.insert ("read-" ++ id) model.busy }
+            , Api.send ""
+                "POST"
+                "/post/mark_as_read"
+                (Encode.encode 0 (Encode.object [ ( "post_id", Encode.int (idValue id) ), ( "read", Encode.bool read ) ]))
+                ModerationDone
+            )
+
+        OpenVotes target ->
+            ( { model | voteDialog = Just { target = target, votes = Loading } }
+            , Cmd.batch [ openDialog "vote-dialog", Api.get (voteListPath target) VotesLoaded ]
+            )
+
+        CloseVotes ->
+            ( { model | voteDialog = Nothing }
+            , Cmd.batch
+                [ closeDialog "vote-dialog"
+                , case model.voteDialog of
+                    Just dialog ->
+                        focus (voteTriggerId dialog.target)
+
+                    Nothing ->
+                        Cmd.none
+                ]
+            )
+
+        VotesLoaded response ->
+            case model.voteDialog of
+                Just dialog ->
+                    case Api.decodeResponse (Domain.page Domain.voteView) response of
+                        Ok page ->
+                            ( { model | voteDialog = Just { dialog | votes = Ready page } }, Cmd.none )
+
+                        Err problem ->
+                            ( { model | voteDialog = Just { dialog | votes = Failed problem } }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
 
 commentExists : String -> List (CommentTree.Threaded Domain.CommentView) -> Bool
 commentExists id threads =
     CommentTree.flatten threads
         |> List.any (\comment -> String.fromInt comment.comment.id == id)
+
+
+postDetailDecoder : Decode.Decoder ( Domain.PostView, List Domain.PostView )
+postDetailDecoder =
+    Decode.map2 Tuple.pair
+        (Decode.field "post_view" Domain.postView)
+        (Decode.oneOf
+            [ Decode.field "cross_posts" (Decode.list Domain.postView)
+            , Decode.succeed []
+            ]
+        )
+
+
+postModerationPath : PostModAction -> String
+postModerationPath action =
+    case action of
+        RemovePostAction _ ->
+            "/post/remove"
+
+        LockPostAction _ ->
+            "/post/lock"
+
+        FeaturePostAction _ ->
+            "/post/feature"
+
+
+postModerationBody : String -> PostModAction -> String
+postModerationBody id action =
+    case action of
+        RemovePostAction removed ->
+            Encode.encode 0
+                (Encode.object
+                    [ ( "post_id", Encode.int (idValue id) )
+                    , ( "removed", Encode.bool removed )
+                    , ( "reason", Encode.string "" )
+                    ]
+                )
+
+        LockPostAction locked ->
+            Encode.encode 0
+                (Encode.object
+                    [ ( "post_id", Encode.int (idValue id) )
+                    , ( "locked", Encode.bool locked )
+                    , ( "reason", Encode.string "" )
+                    ]
+                )
+
+        FeaturePostAction featured ->
+            Encode.encode 0
+                (Encode.object
+                    [ ( "post_id", Encode.int (idValue id) )
+                    , ( "featured", Encode.bool featured )
+                    , ( "feature_type", Encode.string "community" )
+                    ]
+                )
+
+
+commentModerationPath : CommentModAction -> String
+commentModerationPath action =
+    case action of
+        RemoveCommentAction _ ->
+            "/comment/remove"
+
+        LockCommentAction _ ->
+            "/comment/lock"
+
+        DistinguishCommentAction _ ->
+            "/comment/distinguish"
+
+
+commentModerationBody : String -> CommentModAction -> String
+commentModerationBody id action =
+    case action of
+        RemoveCommentAction removed ->
+            Encode.encode 0
+                (Encode.object
+                    [ ( "comment_id", Encode.int (idValue id) )
+                    , ( "removed", Encode.bool removed )
+                    , ( "reason", Encode.string "" )
+                    ]
+                )
+
+        LockCommentAction locked ->
+            Encode.encode 0
+                (Encode.object
+                    [ ( "comment_id", Encode.int (idValue id) )
+                    , ( "locked", Encode.bool locked )
+                    , ( "reason", Encode.string "" )
+                    ]
+                )
+
+        DistinguishCommentAction distinguished ->
+            Encode.encode 0
+                (Encode.object
+                    [ ( "comment_id", Encode.int (idValue id) )
+                    , ( "distinguished", Encode.bool distinguished )
+                    ]
+                )
+
+
+voteListPath : VoteTarget -> String
+voteListPath target =
+    case target of
+        PostVotes id ->
+            "/post/like/list?post_id=" ++ Url.percentEncode id ++ "&limit=50"
+
+        CommentVotes id ->
+            "/comment/like/list?comment_id=" ++ Url.percentEncode id ++ "&limit=50"
+
+
+voteTriggerId : VoteTarget -> String
+voteTriggerId target =
+    case target of
+        PostVotes id ->
+            "view-votes-post-" ++ id
+
+        CommentVotes id ->
+            "view-votes-comment-" ++ id
 
 
 postMutation : String -> Working -> Mutation -> ( Working, Cmd Msg )
@@ -519,12 +762,22 @@ type alias Config msg =
     , depthChanged : Int -> msg
     , isExpanded : String -> Bool
     , onReplies : String -> msg
+    , onMarkRead : String -> Bool -> msg
+    , onBlockAuthor : Int -> Bool -> msg
+    , onBlockCommunity : Int -> Bool -> msg
+    , onRemovePost : String -> Bool -> msg
+    , onLockPost : String -> Bool -> msg
+    , onFeaturePost : String -> Bool -> msg
+    , onViewVotes : String -> msg
+    , onCloseVotes : msg
     }
 
 
 type alias ViewModel =
     { post : Remote Domain.PostView
     , replies : Remote (Domain.Page (CommentTree.Threaded Domain.CommentView))
+    , crossPosts : List Domain.PostView
+    , voteDialog : Maybe VoteDialog
     , url : Url
     }
 
@@ -550,6 +803,7 @@ pagePost config model active postId =
                 (\post ->
                     div [ A.class "stack" ]
                         [ config.postCard post
+                        , crossPostsSection config active model.crossPosts
                         , if not post.post.locked && not post.post.deleted then
                             button [ A.class "filled-button", Events.onClick (config.startReply postId) ]
                                 [ text (Translations.reply active.texts) ]
@@ -574,8 +828,68 @@ pagePost config model active postId =
                             , viewPagination active.texts model.url page.prevPage page.nextPage
                             ]
                 )
+            , voteDialogView config active model.voteDialog
             ]
         )
+
+
+crossPostsSection : Config msg -> Active -> List Domain.PostView -> Html msg
+crossPostsSection config active posts =
+    if List.isEmpty posts then
+        text ""
+
+    else
+        section [ A.class "stack" ]
+            [ h2 [] [ text (Translations.crossPosts active.texts) ]
+            , div [ A.class "stack" ] (List.map config.postCard posts)
+            ]
+
+
+voteDialogView : Config msg -> Active -> Maybe VoteDialog -> Html msg
+voteDialogView config active dialog =
+    case dialog of
+        Nothing ->
+            text ""
+
+        Just value ->
+            Html.node "dialog"
+                [ A.id "vote-dialog"
+                , A.class "confirmation"
+                , A.attribute "aria-labelledby" "vote-dialog-title"
+                , Events.on "close" (Decode.succeed config.onCloseVotes)
+                ]
+                [ div [ A.class "form-stack" ]
+                    [ h2 [ A.id "vote-dialog-title" ] [ text (Translations.viewVotes active.texts) ]
+                    , viewRemote config.retry
+                        active.texts
+                        value.votes
+                        (\page ->
+                            if List.isEmpty page.items then
+                                p [ A.class "muted" ] [ text (Translations.noVotes active.texts) ]
+
+                            else
+                                ul [ A.class "roster-list" ]
+                                    (List.map
+                                        (\vote ->
+                                            li []
+                                                [ bdi [] [ text vote.creator.apId ]
+                                                , text " · "
+                                                , text
+                                                    (if vote.isUpvote then
+                                                        Translations.upvotesLabel active.texts
+
+                                                     else
+                                                        Translations.downvotesLabel active.texts
+                                                    )
+                                                ]
+                                        )
+                                        page.items
+                                    )
+                        )
+                    , button [ A.type_ "button", A.class "text-button", Events.onClick config.onCloseVotes ]
+                        [ text (Translations.closeLabel active.texts) ]
+                    ]
+                ]
 
 
 replyControls : Config msg -> Active -> Html msg
@@ -631,7 +945,15 @@ viewThreaded config active model (CommentTree.Threaded node) =
 
 reset : Model -> Model
 reset model =
-    { model | post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty, focusComment = Nothing }
+    { model
+        | post = NotAsked
+        , replies = NotAsked
+        , crossPosts = []
+        , expandedReplies = Set.empty
+        , busy = Set.empty
+        , focusComment = Nothing
+        , voteDialog = Nothing
+    }
 
 
 idValue : String -> Int
@@ -717,7 +1039,14 @@ load id commentId url model =
                 |> Maybe.withDefault 6
                 |> clamp 1 8
     in
-    ( { model | post = Loading, replies = Loading, expandedReplies = Set.empty, focusComment = Maybe.map String.fromInt commentId }
+    ( { model
+        | post = Loading
+        , replies = Loading
+        , crossPosts = []
+        , expandedReplies = Set.empty
+        , focusComment = Maybe.map String.fromInt commentId
+        , voteDialog = Nothing
+      }
     , Cmd.batch
         [ Api.get ("/post?id=" ++ urlEncode (String.fromInt id)) PostLoaded
         , Api.get

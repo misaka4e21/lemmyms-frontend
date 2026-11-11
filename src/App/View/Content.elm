@@ -3,6 +3,7 @@ module App.View.Content exposing (editorConfig, pageCommentTarget, pageCommuniti
 import App.Context exposing (Active)
 import App.Session exposing (AuthState(..))
 import App.State exposing (Model, Msg(..))
+import Browser
 import Feature.Community as Community
 import Feature.Editor.State exposing (EditorMode(..))
 import Feature.Editor.Update as Editor
@@ -12,16 +13,19 @@ import Feature.Post as Post
 import Feature.Report as Report
 import Feature.Search as Search
 import Generated.I18n as Translations
-import Html exposing (Html, a, p, text)
+import Html exposing (Html, a, article, bdi, h2, p, text)
 import Html.Attributes as A
 import Lemmy.Domain as Domain
+import Lemmy.Markdown
 import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
 import Set exposing (Set)
 import Ui.CommentCard
 import Ui.Layout exposing (pageHeading)
+import Ui.ListingControls
 import Ui.PostCard
+import Url exposing (Url)
 
 
 postCard : Model -> Active -> Domain.PostView -> Html Msg
@@ -35,6 +39,9 @@ postCard model active =
 
                 _ ->
                     Nothing
+        , viewerId = viewerIdOf model
+        , blurNsfw = blurNsfwOf model
+        , mode = normalizedView (Route.query "view" model.url)
         , isBusy = \id -> Post.isBusy id model.posts.busy
         , isExpanded = \id -> Set.member id model.posts.expandedReplies
         , onLike = \id liked -> PostMessage (Post.ToggleLike id liked)
@@ -49,8 +56,17 @@ postCard model active =
 
                 _ ->
                     False
+        , canAct = isAuthenticated model
+        , canViewVotes = canViewVotes model
         , onDelete = OpenDeleteDialog
         , onReplies = PostMessage << Post.ToggleReplies
+        , onMarkRead = \id read -> PostMessage (Post.SetRead id read)
+        , onBlockAuthor = \id block -> PostMessage (Post.BlockPerson id block)
+        , onBlockCommunity = \id block -> PostMessage (Post.BlockCommunity id block)
+        , onRemovePost = \id remove -> PostMessage (Post.ModeratePost id (Post.RemovePostAction remove))
+        , onLockPost = \id lock -> PostMessage (Post.ModeratePost id (Post.LockPostAction lock))
+        , onFeaturePost = \id feature -> PostMessage (Post.ModeratePost id (Post.FeaturePostAction feature))
+        , onViewVotes = \id -> PostMessage (Post.OpenVotes (Post.PostVotes id))
         , nested = \id -> viewNested active id model
         }
         active.texts
@@ -67,6 +83,9 @@ threadedPostCard model active comment nested =
 
                 _ ->
                     Nothing
+        , viewerId = viewerIdOf model
+        , canAct = isAuthenticated model
+        , canViewVotes = canViewVotes model
         , isBusy = \id -> Post.isBusy id model.posts.busy
         , isExpanded = always True
         , onVote = \id score -> PostMessage (Post.CommentVote id score)
@@ -81,10 +100,55 @@ threadedPostCard model active comment nested =
                     False
         , onDelete = PostMessage << Post.DeleteComment
         , onToggle = PostMessage << Post.ToggleReplies
+        , onBlockAuthor = \id block -> PostMessage (Post.BlockPerson id block)
+        , onRemoveComment = \id remove -> PostMessage (Post.ModerateComment id (Post.RemoveCommentAction remove))
+        , onLockComment = \id lock -> PostMessage (Post.ModerateComment id (Post.LockCommentAction lock))
+        , onDistinguishComment = \id distinguished -> PostMessage (Post.ModerateComment id (Post.DistinguishCommentAction distinguished))
+        , onViewVotes = \id -> PostMessage (Post.OpenVotes (Post.CommentVotes id))
         , nested = always nested
         }
         active.texts
         comment
+
+
+viewerIdOf : Model -> Maybe Int
+viewerIdOf model =
+    case model.auth of
+        Authenticated account ->
+            Just account.localUserView.person.id
+
+        _ ->
+            Nothing
+
+
+blurNsfwOf : Model -> Bool
+blurNsfwOf model =
+    case model.auth of
+        Authenticated account ->
+            account.localUserView.localUser.blurNsfw
+
+        _ ->
+            False
+
+
+isAuthenticated : Model -> Bool
+isAuthenticated model =
+    case model.auth of
+        Authenticated _ ->
+            True
+
+        _ ->
+            False
+
+
+canViewVotes : Model -> Bool
+canViewVotes model =
+    case model.auth of
+        Authenticated account ->
+            Domain.isAdmin account
+
+        _ ->
+            False
 
 
 editorConfig : Model -> Feature.Editor.View.Config Msg
@@ -114,12 +178,36 @@ searchViewConfig model active =
     , searchQueryChanged = SearchMessage << Search.SearchQueryChanged
     , searchSubmitted = SearchMessage Search.SearchSubmitted
     , postCard = postCard model active
+    , commentCard = \comment -> threadedPostCard model active comment (text "")
+    , personCard = personCard active
     }
+
+
+personCard : Active -> Domain.PersonView -> Html msg
+personCard active personView =
+    let
+        person =
+            personView.person
+    in
+    article [ A.class "card" ]
+        [ h2 [] [ a [ A.href (Route.path (Route.Profile person.name)) ] [ text (Domain.displayNameOf person) ] ]
+        , p [ A.class "metadata" ] [ bdi [] [ text person.apId ] ]
+        , Maybe.withDefault "" person.bio |> Lemmy.Markdown.render
+        ]
 
 
 pagePost : Model -> Active -> String -> Html Msg
 pagePost model active postId =
-    Post.pagePost (postViewConfig model active) { post = model.posts.post, replies = model.posts.replies, url = model.url } active postId
+    Post.pagePost
+        (postViewConfig model active)
+        { post = model.posts.post
+        , replies = model.posts.replies
+        , crossPosts = model.posts.crossPosts
+        , voteDialog = model.posts.voteDialog
+        , url = model.url
+        }
+        active
+        postId
 
 
 pageCreatePost : Model -> Active -> Html Msg
@@ -188,6 +276,14 @@ postViewConfig model active =
     , depthChanged = PostMessage << Post.DepthChanged
     , isExpanded = \id -> Set.member id model.posts.expandedReplies
     , onReplies = PostMessage << Post.ToggleReplies
+    , onMarkRead = \id read -> PostMessage (Post.SetRead id read)
+    , onBlockAuthor = \id block -> PostMessage (Post.BlockPerson id block)
+    , onBlockCommunity = \id block -> PostMessage (Post.BlockCommunity id block)
+    , onRemovePost = \id remove -> PostMessage (Post.ModeratePost id (Post.RemovePostAction remove))
+    , onLockPost = \id lock -> PostMessage (Post.ModeratePost id (Post.LockPostAction lock))
+    , onFeaturePost = \id feature -> PostMessage (Post.ModeratePost id (Post.FeaturePostAction feature))
+    , onViewVotes = \id -> PostMessage (Post.OpenVotes (Post.PostVotes id))
+    , onCloseVotes = PostMessage Post.CloseVotes
     }
 
 
@@ -199,6 +295,7 @@ pageLatest model active =
 feedViewConfig : Model -> Active -> Feed.Config Msg
 feedViewConfig model active =
     { retry = RetryPage
+    , listingControls = listingControls model active
     , postCard = postCard model active
     }
 
@@ -216,6 +313,8 @@ pageCommunity model active id =
 communityViewConfig : Model -> Active -> Community.Config Msg
 communityViewConfig model active =
     { retry = RetryPage
+    , listingControls = listingControls model active
+    , notificationChanged = CommunityMessage << Community.NotificationModeChanged
     , postCard = postCard model active
     , toggleFollow = CommunityMessage << Community.ToggleFollow
     , reportCommunity = \id -> ReportMessage (Report.Open (Report.CommunityTarget id))
@@ -227,8 +326,38 @@ communityViewModel model =
     { communities = model.communityPage.communities
     , community = model.communityPage.community
     , communityTopics = model.communityPage.communityTopics
+    , moderators = model.communityPage.moderators
+    , notificationBusy = model.communityPage.notificationBusy
     , busy = model.communityPage.busy
     , problem = model.communityPage.problem
     , auth = model.auth
     , url = model.url
     }
+
+
+listingControls : Model -> Active -> Html Msg
+listingControls model active =
+    Ui.ListingControls.view active.texts
+        { listing = Route.listing "local" model.url
+        , sort = Route.sort "active" model.url
+        , timeRange = Route.query "time_range" model.url
+        , viewMode = normalizedView (Route.query "view" model.url)
+        , listingChanged = \value -> Navigate (Browser.Internal (urlFor "type" value model.url))
+        , sortChanged = \value -> Navigate (Browser.Internal (urlFor "sort" value model.url))
+        , timeRangeChanged = \value -> Navigate (Browser.Internal (urlFor "time_range" value model.url))
+        , viewModeChanged = \value -> Navigate (Browser.Internal (urlFor "view" value model.url))
+        }
+
+
+urlFor : String -> String -> Url -> Url
+urlFor name value url =
+    Route.withQueryUrl name value url
+
+
+normalizedView : String -> String
+normalizedView value =
+    if List.member value [ "list", "card", "small_card" ] then
+        value
+
+    else
+        "card"

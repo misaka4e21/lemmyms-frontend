@@ -221,6 +221,18 @@ type alias CommunityView =
     { community : Community
     , communityActions : Maybe CommunityActions
     , canMod : Bool
+    , tags : List CommunityTag
+    }
+
+
+type alias CommunityTag =
+    { id : Id
+    , name : String
+    , displayName : Maybe String
+    , summary : Maybe String
+    , communityId : Id
+    , color : String
+    , deleted : Bool
     }
 
 
@@ -294,11 +306,13 @@ type alias PostView =
     , creator : Person
     , community : Community
     , communityActions : Maybe CommunityActions
+    , personActions : Maybe PersonActions
     , postActions : Maybe PostActions
     , creatorIsAdmin : Bool
     , canMod : Bool
     , creatorIsModerator : Bool
     , creatorBannedFromCommunity : Bool
+    , tags : List CommunityTag
     }
 
 
@@ -339,10 +353,25 @@ type alias CommentView =
     , post : Post
     , community : Community
     , communityActions : Maybe CommunityActions
+    , personActions : Maybe PersonActions
     , commentActions : Maybe CommentActions
     , creatorIsAdmin : Bool
     , canMod : Bool
+    , tags : List CommunityTag
     }
+
+
+type alias VoteView =
+    { creator : Person
+    , creatorBanned : Bool
+    , creatorBannedFromCommunity : Bool
+    , isUpvote : Bool
+    }
+
+
+type PersonContentItem
+    = PersonPost PostView
+    | PersonComment CommentView
 
 
 type alias LocalUser =
@@ -852,6 +881,19 @@ communityView =
         |> and (D.field "community" community)
         |> and (maybeField "community_actions" communityActions)
         |> and (defaultField "can_mod" False D.bool)
+        |> and (defaultField "tags" [] (D.list communityTag))
+
+
+communityTag : Decoder CommunityTag
+communityTag =
+    D.succeed CommunityTag
+        |> and (D.field "id" identifier)
+        |> and (D.field "name" D.string)
+        |> and (maybeField "display_name" D.string)
+        |> and (maybeField "summary" D.string)
+        |> and (D.field "community_id" identifier)
+        |> and (defaultField "color" "" D.string)
+        |> and (defaultField "deleted" False D.bool)
 
 
 communityResponse : Decoder CommunityResponse
@@ -936,11 +978,13 @@ postView =
         |> and (D.field "creator" person)
         |> and (D.field "community" community)
         |> and (maybeField "community_actions" communityActions)
+        |> and (maybeField "person_actions" personActions)
         |> and (maybeField "post_actions" postActions)
         |> and (defaultField "creator_is_admin" False D.bool)
         |> and (defaultField "can_mod" False D.bool)
         |> and (defaultField "creator_is_moderator" False D.bool)
         |> and (defaultField "creator_banned_from_community" False D.bool)
+        |> and (defaultField "tags" [] (D.list communityTag))
 
 
 comment : Decoder Comment
@@ -984,9 +1028,48 @@ commentView =
         |> and (D.field "post" post)
         |> and (D.field "community" community)
         |> and (maybeField "community_actions" communityActions)
+        |> and (maybeField "person_actions" personActions)
         |> and (maybeField "comment_actions" commentActions)
         |> and (defaultField "creator_is_admin" False D.bool)
         |> and (defaultField "can_mod" False D.bool)
+        |> and (defaultField "tags" [] (D.list communityTag))
+
+
+voteView : Decoder VoteView
+voteView =
+    D.succeed VoteView
+        |> and (D.field "creator" person)
+        |> and (defaultField "creator_banned" False D.bool)
+        |> and (defaultField "creator_banned_from_community" False D.bool)
+        |> and (D.field "is_upvote" D.bool)
+
+
+personContentPage : Decoder (Page PersonContentItem)
+personContentPage =
+    D.succeed
+        (\items nextPage prevPage ->
+            { items = items, nextPage = nextPage, prevPage = prevPage }
+        )
+        |> and (D.field "items" (D.list personContentItem))
+        |> and (maybeField "next_page" D.string)
+        |> and (maybeField "prev_page" D.string)
+
+
+personContentItem : Decoder PersonContentItem
+personContentItem =
+    D.field "type_" D.string
+        |> D.andThen
+            (\kind ->
+                case kind of
+                    "post" ->
+                        D.map PersonPost postView
+
+                    "comment" ->
+                        D.map PersonComment commentView
+
+                    other ->
+                        D.fail ("Unsupported person content type: " ++ other)
+            )
 
 
 threadedPage : Decoder (Page (CommentTree.Threaded CommentView))

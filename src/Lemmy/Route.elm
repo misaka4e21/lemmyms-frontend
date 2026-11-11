@@ -11,6 +11,8 @@ module Lemmy.Route exposing
     , query
     , searchUrl
     , sort
+    , withQuery
+    , withQueryUrl
     )
 
 import AccountSource exposing (AccountContentSource(..))
@@ -225,6 +227,21 @@ path route =
 
 query : String -> Url -> String
 query name url =
+    queryPairs url
+        |> List.filterMap
+            (\( key, value ) ->
+                if key == name then
+                    Just value
+
+                else
+                    Nothing
+            )
+        |> List.head
+        |> Maybe.withDefault ""
+
+
+queryPairs : Url -> List ( String, String )
+queryPairs url =
     url.query
         |> Maybe.withDefault ""
         |> String.split "&"
@@ -232,17 +249,52 @@ query name url =
             (\part ->
                 case String.split "=" part of
                     key :: values ->
-                        if key == name then
-                            Just (Url.percentDecode (String.replace "+" " " (String.join "=" values)) |> Maybe.withDefault "")
-
-                        else
-                            Nothing
+                        Just
+                            ( key
+                            , Url.percentDecode (String.replace "+" " " (String.join "=" values))
+                                |> Maybe.withDefault ""
+                            )
 
                     _ ->
                         Nothing
             )
-        |> List.head
-        |> Maybe.withDefault ""
+        |> List.filter (\( key, _ ) -> not (String.isEmpty key))
+
+
+withQuery : String -> String -> Url -> String
+withQuery name value url =
+    let
+        existing =
+            queryPairs url
+                |> List.filter (\( key, _ ) -> key /= name && key /= "page_cursor")
+
+        updated =
+            if String.isEmpty value then
+                existing
+
+            else
+                existing ++ [ ( name, value ) ]
+    in
+    url.path
+        ++ Builder.toQuery
+            (List.map (\( key, item ) -> Builder.string key item) updated)
+
+
+withQueryUrl : String -> String -> Url -> Url
+withQueryUrl name value url =
+    let
+        encoded =
+            withQuery name value url
+
+        queryValue =
+            case String.split "?" encoded of
+                _ :: queryPart :: _ ->
+                    Just queryPart
+
+                _ ->
+                    Nothing
+    in
+    { url | query = queryValue, fragment = Nothing }
 
 
 cursor : Url -> Maybe String
@@ -269,6 +321,8 @@ cursorUrl url cursorValue =
                 ++ optionalQuery "sort" url
                 ++ optionalQuery "max_depth" url
                 ++ optionalQuery "type" url
+                ++ optionalQuery "time_range" url
+                ++ optionalQuery "view" url
                 ++ optionalQuery "state" url
                 ++ optionalQuery "community_id" url
             )
