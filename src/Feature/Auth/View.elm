@@ -4,7 +4,7 @@ import App.Context exposing (Active)
 import App.Session exposing (AuthState(..))
 import Feature.Auth.State exposing (Model)
 import Generated.I18n as Translations
-import Html exposing (Html, a, button, div, form, input, label, p, section, text)
+import Html exposing (Html, a, button, div, form, img, input, label, p, section, text, textarea)
 import Html.Attributes as A
 import Html.Events as Events
 import Lemmy.Domain as Domain
@@ -24,6 +24,10 @@ type alias Config msg =
     , registerEmailChanged : String -> msg
     , registerPasswordChanged : String -> msg
     , registerPasswordVerifyChanged : String -> msg
+    , registerApplicationAnswerChanged : String -> msg
+    , registerInviteTokenChanged : String -> msg
+    , captchaAnswerChanged : String -> msg
+    , loadCaptcha : msg
     , registerSubmitted : msg
     , resendSubmitted : msg
     , verifyPasswordChanged : String -> msg
@@ -103,30 +107,87 @@ pageLogin config auth model active =
         )
 
 
-pageRegister : Config msg -> AuthState -> Model -> Active -> Maybe Domain.RegistrationMode -> Html msg
-pageRegister config auth model active registrationMode =
-    case registrationMode of
-        Just Domain.ClosedRegistration ->
-            pageHeading (Translations.registerTitle active.texts)
-                (p [ A.class "card muted" ] [ text (Translations.registrationClosed active.texts) ])
+pageRegister : Config msg -> AuthState -> Model -> Active -> Maybe Domain.SiteRegistration -> Html msg
+pageRegister config auth model active registration =
+    case registration of
+        Just value ->
+            if value.mode == Domain.ClosedRegistration then
+                pageHeading (Translations.registerTitle active.texts)
+                    (p [ A.class "card muted" ] [ text (Translations.registrationClosed active.texts) ])
 
-        Just Domain.RequireApplication ->
-            pageHeading (Translations.registerTitle active.texts)
-                (p [ A.class "card muted" ] [ text (Translations.registrationApplicationRequired active.texts) ])
+            else
+                pageRegisterForm config auth model active registration
 
-        Just Domain.RequireInvitation ->
-            pageHeading (Translations.registerTitle active.texts)
-                (p [ A.class "card muted" ] [ text (Translations.registrationInvitationRequired active.texts) ])
-
-        _ ->
-            pageRegisterForm config auth model active
+        Nothing ->
+            pageRegisterForm config auth model active Nothing
 
 
-pageRegisterForm : Config msg -> AuthState -> Model -> Active -> Html msg
-pageRegisterForm config auth model active =
+pageRegisterForm : Config msg -> AuthState -> Model -> Active -> Maybe Domain.SiteRegistration -> Html msg
+pageRegisterForm config auth model active registration =
     pageHeading (Translations.registerTitle active.texts)
         (form [ Events.onSubmit config.registerSubmitted, A.class "card form-stack" ]
             [ p [ A.class "muted" ] [ text (Translations.registerHelp active.texts) ]
+            , case model.registerNotice of
+                Just "application" ->
+                    p [ A.class "notice", A.attribute "role" "status" ] [ text (Translations.registrationApplicationRequired active.texts) ]
+
+                Just "verification" ->
+                    p [ A.class "notice", A.attribute "role" "status" ] [ text (Translations.verificationSuccess active.texts) ]
+
+                _ ->
+                    text ""
+            , case registration of
+                Just value ->
+                    case value.applicationQuestion of
+                        Just question ->
+                            div []
+                                [ label [ A.for "register-answer" ] [ text question ]
+                                , textarea [ A.id "register-answer", A.value model.registerApplicationAnswer, Events.onInput config.registerApplicationAnswerChanged ] []
+                                ]
+
+                        Nothing ->
+                            text ""
+
+                Nothing ->
+                    text ""
+            , case registration of
+                Just value ->
+                    if value.mode == Domain.RequireInvitation then
+                        div []
+                            [ label [ A.for "register-token" ] [ text (Translations.registrationInvitationRequired active.texts) ]
+                            , input [ A.id "register-token", A.type_ "text", A.value model.registerInviteToken, Events.onInput config.registerInviteTokenChanged ] []
+                            ]
+
+                    else
+                        text ""
+
+                Nothing ->
+                    text ""
+            , case registration of
+                Just value ->
+                    if value.captchaEnabled then
+                        div [ A.class "stack" ]
+                            [ case model.captcha of
+                                Just captcha ->
+                                    div [ A.class "stack" ]
+                                        [ img [ A.src ("data:image/png;base64," ++ captcha.png), A.alt (Translations.captcha active.texts) ] []
+                                        , Html.node "audio" [ A.controls True, A.src ("data:audio/wav;base64," ++ captcha.wav) ] []
+                                        ]
+
+                                Nothing ->
+                                    text ""
+                            , label [ A.for "captcha-answer" ] [ text (Translations.captchaAnswer active.texts) ]
+                            , input [ A.id "captcha-answer", A.type_ "text", A.value model.captchaAnswer, Events.onInput config.captchaAnswerChanged ] []
+                            , button [ A.type_ "button", A.class "text-button", A.disabled model.captchaBusy, Events.onClick config.loadCaptcha ]
+                                [ text (Translations.refreshCaptcha active.texts) ]
+                            , viewFormProblemWithId active.texts "captcha-error" (Maybe.map (problemText active.texts) model.captchaProblem)
+                            ]
+
+                    else
+                        text ""
+
+                Nothing ->
+                    text ""
             , div []
                 [ label [ A.for "register-username" ] [ text (Translations.username active.texts) ]
                 , input

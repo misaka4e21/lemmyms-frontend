@@ -6,6 +6,7 @@ import App.Session exposing (AuthState(..))
 import App.State exposing (Model)
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
+import Feature.AccountSettings as AccountSettings
 import Feature.CommunityManage.State as ManageState
 import Feature.Notifications as Notifications
 import Feature.Profile as Profile
@@ -33,9 +34,11 @@ clearPrivate model =
         , notificationsPage = Notifications.initial
         , management = ManageState.initial
         , accountContent = AccountContent.initial
+        , accountSettings = AccountSettings.initial
         , accountBlocks = AccountBlocks.initial
         , report = Report.initial
         , siteAdmin = SiteAdminState.initial
         , commentTarget = NotAsked
+        , donationPrompt = False
         , posts = (\postsState -> { postsState | busy = Set.empty }) model.posts
     }

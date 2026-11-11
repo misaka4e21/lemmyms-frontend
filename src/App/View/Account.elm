@@ -3,6 +3,7 @@ module App.View.Account exposing (pageLogin, pagePasswordReset, pagePasswordRese
 import App.Context exposing (Active)
 import App.State exposing (Model, Msg(..))
 import Browser
+import Feature.AccountSettings as AccountSettings
 import Feature.Auth.Update as Auth
 import Feature.Auth.View
 import Feature.Profile as Profile
@@ -22,7 +23,15 @@ pageRegister model active =
         model.auth
         model.account
         active
-        (Maybe.map (.localSite >> .registrationMode) model.site)
+        (Maybe.map
+            (\site ->
+                { mode = site.localSite.registrationMode
+                , applicationQuestion = site.localSite.applicationQuestion
+                , captchaEnabled = model.captchaEnabled
+                }
+            )
+            model.site
+        )
 
 
 pageVerify : Model -> Active -> Html Msg
@@ -56,6 +65,10 @@ authViewConfig model =
     , registerEmailChanged = AuthMessage << Auth.RegisterEmailChanged
     , registerPasswordChanged = AuthMessage << Auth.RegisterPasswordChanged
     , registerPasswordVerifyChanged = AuthMessage << Auth.RegisterPasswordVerifyChanged
+    , registerApplicationAnswerChanged = AuthMessage << Auth.RegisterApplicationAnswerChanged
+    , registerInviteTokenChanged = AuthMessage << Auth.RegisterInviteTokenChanged
+    , captchaAnswerChanged = AuthMessage << Auth.CaptchaAnswerChanged
+    , loadCaptcha = AuthMessage Auth.LoadCaptcha
     , registerSubmitted = AuthMessage Auth.RegisterSubmitted
     , resendSubmitted = AuthMessage Auth.ResendSubmitted
     , verifyPasswordChanged = AuthMessage << Auth.VerifyPasswordChanged
@@ -88,17 +101,7 @@ pagePublicProfile postCard model active username =
 
 pageSettings : Model -> Active -> Html Msg
 pageSettings model active =
-    Profile.pageSettings
-        (profileViewConfig (\_ -> Html.text "") model)
-        { publicProfile = model.profile.publicProfile
-        , ownProfile = model.profile.ownProfile
-        , profileForm = model.profile.profileForm
-        , auth = model.auth
-        , content = model.profile.content
-        , contentView = model.profile.contentView
-        , url = model.url
-        }
-        active
+    Html.map AccountSettingsMessage (AccountSettings.view active model.auth model.accountSettings)
 
 
 profileViewConfig : (Domain.PostView -> Html Msg) -> Model -> Profile.Config Msg

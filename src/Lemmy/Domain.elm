@@ -87,6 +87,7 @@ type alias LocalSite =
     , siteSetup : Bool
     , communityCreationAdminOnly : Bool
     , emailVerificationRequired : Bool
+    , applicationQuestion : Maybe String
     , privateInstance : Bool
     , registrationMode : RegistrationMode
     , federationEnabled : Bool
@@ -141,6 +142,7 @@ type alias Person =
     , local : Bool
     , deleted : Bool
     , botAccount : Bool
+    , matrixUserId : Maybe String
     , apId : String
     , instanceId : Id
     , postCount : Int
@@ -395,7 +397,76 @@ type alias LocalUser =
     , showScore : Bool
     , showUpvotes : Bool
     , showDownvotes : String
+    , sendNotificationsToEmail : Bool
+    , openLinksInNewTab : Bool
+    , infiniteScrollEnabled : Bool
+    , totp2faEnabled : Bool
+    , animatedImagesEnabled : Bool
+    , collapseBotComments : Bool
+    , privateMessagesEnabled : Bool
+    , autoMarkFetchedPostsAsRead : Bool
+    , hidePostsWithMedia : Bool
+    , defaultPostTimeRangeSeconds : Maybe Int
+    , showUpvotePercentage : Bool
+    , showPersonVotes : Bool
+    , defaultItemsPerPage : Int
+    , showMedia : Bool
+    , lastDonationNotificationAt : Maybe String
     , localSiteId : Id
+    }
+
+
+type alias GenerateTotpSecretResponse =
+    { totpSecretUrl : String }
+
+
+type alias EditTotpResponse =
+    { enabled : Bool }
+
+
+type alias LoginToken =
+    { userId : Id
+    , publishedAt : String
+    , ip : Maybe String
+    , userAgent : Maybe String
+    }
+
+
+type alias ListLoginsResponse =
+    { logins : List LoginToken }
+
+
+type alias Invitation =
+    { token : String
+    , maxUses : Maybe Int
+    , usesCount : Int
+    , expiresAt : Maybe String
+    , publishedAt : String
+    }
+
+
+type alias Captcha =
+    { png : String
+    , wav : String
+    , uuid : String
+    }
+
+
+type alias GetCaptchaResponse =
+    { ok : Maybe Captcha }
+
+
+type alias LoginResponse =
+    { jwt : Maybe String
+    , registrationCreated : Bool
+    , verifyEmailSent : Bool
+    }
+
+
+type alias SiteRegistration =
+    { mode : RegistrationMode
+    , applicationQuestion : Maybe String
+    , captchaEnabled : Bool
     }
 
 
@@ -717,6 +788,7 @@ localSite =
         |> and (D.field "site_setup" D.bool)
         |> and (D.field "community_creation_admin_only" D.bool)
         |> and (D.field "email_verification_required" D.bool)
+        |> and (maybeField "application_question" D.string)
         |> and (D.field "private_instance" D.bool)
         |> and (D.field "registration_mode" registrationMode)
         |> and (D.field "federation_enabled" D.bool)
@@ -782,6 +854,7 @@ person =
         |> and (defaultField "local" False D.bool)
         |> and (defaultField "deleted" False D.bool)
         |> and (defaultField "bot_account" False D.bool)
+        |> and (maybeField "matrix_user_id" D.string)
         |> and (D.field "ap_id" D.string)
         |> and (D.field "instance_id" identifier)
         |> and (defaultField "post_count" 0 D.int)
@@ -1072,6 +1145,61 @@ personContentItem =
             )
 
 
+totpSecretResponse : Decoder GenerateTotpSecretResponse
+totpSecretResponse =
+    D.map GenerateTotpSecretResponse (D.field "totp_secret_url" D.string)
+
+
+editTotpResponse : Decoder EditTotpResponse
+editTotpResponse =
+    D.map EditTotpResponse (D.field "enabled" D.bool)
+
+
+loginToken : Decoder LoginToken
+loginToken =
+    D.succeed LoginToken
+        |> and (D.field "user_id" identifier)
+        |> and (D.field "published_at" D.string)
+        |> and (maybeField "ip" D.string)
+        |> and (maybeField "user_agent" D.string)
+
+
+listLoginsResponse : Decoder ListLoginsResponse
+listLoginsResponse =
+    D.map ListLoginsResponse (D.field "logins" (D.list loginToken))
+
+
+invitation : Decoder Invitation
+invitation =
+    D.succeed Invitation
+        |> and (D.field "token" D.string)
+        |> and (maybeField "max_uses" D.int)
+        |> and (defaultField "uses_count" 0 D.int)
+        |> and (maybeField "expires_at" D.string)
+        |> and (D.field "published_at" D.string)
+
+
+captcha : Decoder Captcha
+captcha =
+    D.map3 Captcha
+        (D.field "png" D.string)
+        (D.field "wav" D.string)
+        (D.field "uuid" D.string)
+
+
+getCaptchaResponse : Decoder GetCaptchaResponse
+getCaptchaResponse =
+    D.map GetCaptchaResponse (maybeField "ok" captcha)
+
+
+loginResponse : Decoder LoginResponse
+loginResponse =
+    D.succeed LoginResponse
+        |> and (maybeField "jwt" D.string)
+        |> and (defaultField "registration_created" False D.bool)
+        |> and (defaultField "verify_email_sent" False D.bool)
+
+
 threadedPage : Decoder (Page (CommentTree.Threaded CommentView))
 threadedPage =
     page commentView
@@ -1112,6 +1240,21 @@ localUser =
         |> and (defaultField "show_score" True D.bool)
         |> and (defaultField "show_upvotes" True D.bool)
         |> and (defaultField "show_downvotes" "show" D.string)
+        |> and (defaultField "send_notifications_to_email" False D.bool)
+        |> and (defaultField "open_links_in_new_tab" False D.bool)
+        |> and (defaultField "infinite_scroll_enabled" False D.bool)
+        |> and (defaultField "totp_2fa_enabled" False D.bool)
+        |> and (defaultField "animated_images_enabled" True D.bool)
+        |> and (defaultField "collapse_bot_comments" False D.bool)
+        |> and (defaultField "private_messages_enabled" True D.bool)
+        |> and (defaultField "auto_mark_fetched_posts_as_read" False D.bool)
+        |> and (defaultField "hide_posts_with_media" False D.bool)
+        |> and (maybeField "default_post_time_range_seconds" D.int)
+        |> and (defaultField "show_upvote_percentage" False D.bool)
+        |> and (defaultField "show_person_votes" False D.bool)
+        |> and (defaultField "default_items_per_page" 20 D.int)
+        |> and (defaultField "show_media" True D.bool)
+        |> and (maybeField "last_donation_notification_at" D.string)
         |> and (D.field "local_site_id" identifier)
 
 

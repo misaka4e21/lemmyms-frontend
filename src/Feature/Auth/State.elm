@@ -1,6 +1,7 @@
 module Feature.Auth.State exposing (Model, initial, withResetToken, withVerificationToken)
 
 import Api
+import Lemmy.Domain as Domain
 
 
 type alias Model =
@@ -13,6 +14,13 @@ type alias Model =
     , registerEmail : String
     , registerPassword : String
     , registerPasswordVerify : String
+    , registerApplicationAnswer : String
+    , registerInviteToken : String
+    , captcha : Maybe Domain.Captcha
+    , captchaAnswer : String
+    , captchaProblem : Maybe Api.Problem
+    , captchaBusy : Bool
+    , registerNotice : Maybe String
     , registerProblem : Maybe Api.Problem
     , registerBusy : Bool
     , verifyPassword : String
@@ -44,6 +52,13 @@ initial token =
     , registerEmail = ""
     , registerPassword = ""
     , registerPasswordVerify = ""
+    , registerApplicationAnswer = ""
+    , registerInviteToken = ""
+    , captcha = Nothing
+    , captchaAnswer = ""
+    , captchaProblem = Nothing
+    , captchaBusy = False
+    , registerNotice = Nothing
     , registerProblem = Nothing
     , registerBusy = False
     , verifyPassword = ""

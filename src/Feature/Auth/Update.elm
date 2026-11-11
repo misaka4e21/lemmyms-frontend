@@ -18,6 +18,11 @@ type Msg
     | RegisterEmailChanged String
     | RegisterPasswordChanged String
     | RegisterPasswordVerifyChanged String
+    | RegisterApplicationAnswerChanged String
+    | RegisterInviteTokenChanged String
+    | CaptchaAnswerChanged String
+    | LoadCaptcha
+    | CaptchaLoaded Api.Response
     | RegisterSubmitted
     | ResendSubmitted
     | VerifyPasswordChanged String
@@ -35,6 +40,7 @@ type Action
     = LoginAction
     | LogoutAction
     | RegisterAction
+    | RegisterAccountAction
     | ResendAction
     | VerifyAction
     | ResetRequestAction
@@ -60,6 +66,13 @@ type alias Working =
     , registerEmail : String
     , registerPassword : String
     , registerPasswordVerify : String
+    , registerApplicationAnswer : String
+    , registerInviteToken : String
+    , captcha : Maybe Domain.Captcha
+    , captchaAnswer : String
+    , captchaProblem : Maybe Api.Problem
+    , captchaBusy : Bool
+    , registerNotice : Maybe String
     , registerProblem : Maybe Api.Problem
     , registerBusy : Bool
     , verifyPassword : String
@@ -112,6 +125,13 @@ update csrf message state =
                 , registerEmail = state.registerEmail
                 , registerPassword = state.registerPassword
                 , registerPasswordVerify = state.registerPasswordVerify
+                , registerApplicationAnswer = state.registerApplicationAnswer
+                , registerInviteToken = state.registerInviteToken
+                , captcha = state.captcha
+                , captchaAnswer = state.captchaAnswer
+                , captchaProblem = state.captchaProblem
+                , captchaBusy = state.captchaBusy
+                , registerNotice = state.registerNotice
                 , registerProblem = state.registerProblem
                 , registerBusy = state.registerBusy
                 , verifyPassword = state.verifyPassword
@@ -144,6 +164,13 @@ update csrf message state =
       , registerEmail = next.registerEmail
       , registerPassword = next.registerPassword
       , registerPasswordVerify = next.registerPasswordVerify
+      , registerApplicationAnswer = next.registerApplicationAnswer
+      , registerInviteToken = next.registerInviteToken
+      , captcha = next.captcha
+      , captchaAnswer = next.captchaAnswer
+      , captchaProblem = next.captchaProblem
+      , captchaBusy = next.captchaBusy
+      , registerNotice = next.registerNotice
       , registerProblem = next.registerProblem
       , registerBusy = next.registerBusy
       , verifyPassword = next.verifyPassword
@@ -216,6 +243,28 @@ updateWorking csrf message model =
         RegisterPasswordVerifyChanged value ->
             ( { model | registerPasswordVerify = value, registerProblem = Nothing }, Cmd.none )
 
+        RegisterApplicationAnswerChanged value ->
+            ( { model | registerApplicationAnswer = value, registerProblem = Nothing }, Cmd.none )
+
+        RegisterInviteTokenChanged value ->
+            ( { model | registerInviteToken = value, registerProblem = Nothing }, Cmd.none )
+
+        CaptchaAnswerChanged value ->
+            ( { model | captchaAnswer = value, captchaProblem = Nothing }, Cmd.none )
+
+        LoadCaptcha ->
+            ( { model | captchaBusy = True, captchaProblem = Nothing }
+            , Api.get "/account/auth/get_captcha" CaptchaLoaded
+            )
+
+        CaptchaLoaded response ->
+            case Api.decodeResponse Domain.getCaptchaResponse response of
+                Ok result ->
+                    ( { model | captchaBusy = False, captcha = result.ok, captchaAnswer = "", captchaProblem = Nothing }, Cmd.none )
+
+                Err problem ->
+                    ( { model | captchaBusy = False, captchaProblem = Just problem }, Cmd.none )
+
         RegisterSubmitted ->
             if model.registerBusy then
                 ( model, Cmd.none )
@@ -231,6 +280,17 @@ updateWorking csrf message model =
                             , ( "email", Encode.string model.registerEmail )
                             , ( "password", Encode.string model.registerPassword )
                             , ( "password_verify", Encode.string model.registerPasswordVerify )
+                            , ( "answer", optionalString model.registerApplicationAnswer )
+                            , ( "token", optionalString model.registerInviteToken )
+                            , ( "captcha_answer", optionalString model.captchaAnswer )
+                            , ( "captcha_uuid"
+                              , case model.captcha of
+                                    Just captcha ->
+                                        Encode.string captcha.uuid
+
+                                    Nothing ->
+                                        Encode.null
+                              )
                             ]
                         )
                     )
@@ -352,12 +412,32 @@ updateWorking csrf message model =
                             ( { model | flash = FlashProblem problem }, Cmd.none )
 
                 RegisterAction ->
-                    case Api.decodeUnit response of
-                        Ok () ->
-                            ( { model | registerBusy = False, flash = FlashRegistrationAccepted }, Cmd.none )
+                    case Api.decodeResponse Domain.loginResponse response of
+                        Ok login ->
+                            if login.registrationCreated then
+                                ( { model | registerBusy = False, registerNotice = Just "application", flash = FlashRegistrationAccepted }, Cmd.none )
+
+                            else if login.verifyEmailSent then
+                                ( { model | registerBusy = False, registerNotice = Just "verification", flash = FlashRegistrationAccepted }, Cmd.none )
+
+                            else if login.jwt /= Nothing then
+                                ( { model | registerBusy = False, registerNotice = Just "session" }
+                                , Api.get "/account" (ActionDone RegisterAccountAction)
+                                )
+
+                            else
+                                ( { model | registerBusy = False, registerNotice = Just "unknown", flash = FlashRegistrationAccepted }, Cmd.none )
 
                         Err problem ->
                             ( { model | registerBusy = False, registerProblem = Just problem }, Cmd.none )
+
+                RegisterAccountAction ->
+                    case Api.decodeResponse Domain.myUserInfo response of
+                        Ok identity ->
+                            ( { model | identity = Just identity, flash = FlashRegistrationAccepted }, Cmd.none )
+
+                        Err problem ->
+                            ( { model | registerProblem = Just problem }, Cmd.none )
 
                 ResendAction ->
                     case Api.decodeUnit response of
@@ -415,3 +495,12 @@ updateWorking csrf message model =
 
                         Err problem ->
                             ( { model | changeBusy = False, changeProblem = Just problem, flash = FlashProblem problem }, Cmd.none )
+
+
+optionalString : String -> Encode.Value
+optionalString value =
+    if String.isEmpty (String.trim value) then
+        Encode.null
+
+    else
+        Encode.string value

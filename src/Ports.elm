@@ -100,3 +100,19 @@ openDialog identifier =
 closeDialog : String -> Cmd msg
 closeDialog identifier =
     outgoing (Encode.object [ ( "action", Encode.string "dialog-close" ), ( "id", Encode.string identifier ) ])
+
+
+setTheme : String -> Cmd msg
+setTheme theme =
+    outgoing (Encode.object [ ( "action", Encode.string "theme" ), ( "theme", Encode.string theme ) ])
+
+
+download : String -> String -> Cmd msg
+download filename content =
+    outgoing
+        (Encode.object
+            [ ( "action", Encode.string "download" )
+            , ( "filename", Encode.string filename )
+            , ( "content", Encode.string content )
+            ]
+        )

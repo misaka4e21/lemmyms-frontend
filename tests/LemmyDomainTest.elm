@@ -303,4 +303,42 @@ suite =
                     (decode Domain.voteView voteJson
                         |> Result.map (\vote -> ( vote.creator.name, vote.isUpvote ))
                     )
+        , test "decodes account security and invitation payloads" <|
+            \_ ->
+                let
+                    login =
+                        decode Domain.loginToken
+                            "{\"user_id\":1,\"published_at\":\"2026-11-11T00:00:00Z\",\"ip\":\"127.0.0.1\",\"user_agent\":\"Playwright\"}"
+
+                    invite =
+                        decode Domain.invitation
+                            "{\"token\":\"invite-token\",\"max_uses\":3,\"uses_count\":1,\"expires_at\":null,\"published_at\":\"2026-11-11T00:00:00Z\"}"
+
+                    captcha =
+                        decode Domain.captcha
+                            "{\"png\":\"png\",\"wav\":\"wav\",\"uuid\":\"uuid\"}"
+                in
+                Expect.equal (Ok ( "Playwright", "invite-token", "uuid" ))
+                    (Result.map3
+                        (\loginValue inviteValue captchaValue ->
+                            ( Maybe.withDefault "" loginValue.userAgent
+                            , inviteValue.token
+                            , captchaValue.uuid
+                            )
+                        )
+                        login
+                        invite
+                        captcha
+                    )
+        , test "keeps optional settings fields absent" <|
+            \_ ->
+                decode Domain.myUserInfo Fixtures.myUserJson
+                    |> Result.map
+                        (\user ->
+                            ( user.localUserView.localUser.totp2faEnabled
+                            , user.localUserView.localUser.defaultItemsPerPage
+                            , user.localUserView.person.matrixUserId
+                            )
+                        )
+                    |> Expect.equal (Ok ( False, 20, Nothing ))
         ]

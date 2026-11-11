@@ -8,6 +8,7 @@ import Browser
 import Browser.Navigation as Navigation
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
+import Feature.AccountSettings as AccountSettings
 import Feature.Auth.State
 import Feature.Auth.Update as Auth
 import Feature.Community as Community
@@ -44,6 +45,8 @@ type alias Model =
     , authGeneration : Int
     , auth : AuthState
     , site : Maybe Domain.SiteView
+    , captchaEnabled : Bool
+    , donationPrompt : Bool
     , active : Maybe Active
     , requested : Locale
     , bootFailed : Bool
@@ -58,6 +61,7 @@ type alias Model =
     , editorPage : Feature.Editor.State.Model
     , management : Feature.CommunityManage.State.Model
     , accountContent : AccountContent.Model
+    , accountSettings : AccountSettings.Model
     , accountBlocks : AccountBlocks.Model
     , report : Report.Model
     , siteAdmin : Feature.SiteAdmin.State.Model
@@ -90,7 +94,7 @@ type Msg
     | CatalogResult Localization.Pending (Result Http.Error (Translations.I18n -> Translations.I18n))
     | Incoming Decode.Value
     | SessionLoaded Int (Result Api.Problem Domain.MyUserInfo)
-    | SiteLoaded (Result Api.Problem Domain.SiteView)
+    | SiteLoaded (Result Api.Problem Domain.GetSiteResponse)
     | DrawerProfileLoaded (Result Api.Problem Domain.PersonView)
     | OpenDrawer
     | CloseDrawer
@@ -106,6 +110,8 @@ type Msg
     | ManageResponse Int Manage.Msg
     | AccountContentMessage AccountContent.Msg
     | AccountContentResponse Int AccountContent.Msg
+    | AccountSettingsMessage AccountSettings.Msg
+    | AccountSettingsResponse Int AccountSettings.Msg
     | AccountBlocksMessage AccountBlocks.Msg
     | AccountBlocksResponse Int AccountBlocks.Msg
     | ReportMessage Report.Msg
@@ -129,3 +135,4 @@ type Msg
     | CommunityMessage Community.Msg
     | CommunityResponse Int Community.Msg
     | DismissFlash
+    | DismissDonation

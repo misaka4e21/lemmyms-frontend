@@ -1,4 +1,4 @@
-module App.Features exposing (updateAccountBlocks, updateAccountContent, updateAuth, updateCommunity, updateCommunityCreate, updateEditor, updateFeed, updateManage, updateNotifications, updatePost, updateProfile, updateReport, updateSearch, updateSiteAdmin)
+module App.Features exposing (updateAccountBlocks, updateAccountContent, updateAccountSettings, updateAuth, updateCommunity, updateCommunityCreate, updateEditor, updateFeed, updateManage, updateNotifications, updatePost, updateProfile, updateReport, updateSearch, updateSiteAdmin)
 
 import Api
 import App.Access exposing (authProblem, clearPrivate)
@@ -9,6 +9,7 @@ import App.State exposing (Model, Msg(..))
 import Browser.Navigation as Navigation
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
+import Feature.AccountSettings as AccountSettings
 import Feature.Auth.Update as Auth
 import Feature.Community as Community
 import Feature.CommunityCreate as CommunityCreate
@@ -142,6 +143,40 @@ updateAccountContent message model =
                     model
     in
     ( { base | accountContent = state }, Cmd.none )
+
+
+updateAccountSettings : AccountSettings.Msg -> Model -> ( Model, Cmd Msg )
+updateAccountSettings message model =
+    let
+        ( state, command, outcome ) =
+            AccountSettings.update message model.accountSettings
+
+        base =
+            case outcome.sessionProblem of
+                Just problem ->
+                    authProblem model problem
+
+                Nothing ->
+                    model
+
+        changed =
+            { base
+                | flash =
+                    if outcome.flash == NoFlash then
+                        base.flash
+
+                    else
+                        outcome.flash
+                , accountSettings = state
+            }
+    in
+    if outcome.deleted then
+        ( clearPrivate { changed | auth = Anonymous, authGeneration = changed.authGeneration + 1, routeEpoch = changed.routeEpoch + 1 }
+        , Navigation.pushUrl model.key "/login"
+        )
+
+    else
+        ( changed, Cmd.map (AccountSettingsResponse model.routeEpoch) command )
 
 
 updateAccountBlocks : AccountBlocks.Msg -> Model -> ( Model, Cmd Msg )

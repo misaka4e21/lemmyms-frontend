@@ -60,6 +60,7 @@ suite =
                             , local = True
                             , deleted = False
                             , botAccount = False
+                            , matrixUserId = Nothing
                             , apId = "https://forum.test/users/alice"
                             , instanceId = 1
                             , postCount = 0

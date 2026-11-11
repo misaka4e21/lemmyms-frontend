@@ -3,7 +3,7 @@ module Main exposing (main)
 import Api
 import App.Access exposing (authProblem)
 import App.Browser exposing (receiveIncoming)
-import App.Features exposing (updateAccountBlocks, updateAccountContent, updateAuth, updateCommunity, updateCommunityCreate, updateEditor, updateFeed, updateManage, updateNotifications, updatePost, updateProfile, updateReport, updateSearch, updateSiteAdmin)
+import App.Features exposing (updateAccountBlocks, updateAccountContent, updateAccountSettings, updateAuth, updateCommunity, updateCommunityCreate, updateEditor, updateFeed, updateManage, updateNotifications, updatePost, updateProfile, updateReport, updateSearch, updateSiteAdmin)
 import App.Feedback exposing (Flash(..))
 import App.Init exposing (init)
 import App.Localization exposing (beginStartup, resolveCatalog, selectLocale)
@@ -22,7 +22,7 @@ import Json.Decode as Decode
 import Lemmy.Domain as Domain
 import Lemmy.Route as Route
 import Locale exposing (Locale(..))
-import Ports exposing (closeDialog, focus, incoming, openDialog)
+import Ports exposing (closeDialog, focus, incoming, openDialog, setTheme)
 import Remote exposing (Remote(..))
 import Ui.PostCard exposing (deleteTriggerId)
 import Url
@@ -110,7 +110,7 @@ update message model =
         SiteLoaded result ->
             case result of
                 Ok site ->
-                    ( { model | site = Just site }, Cmd.none )
+                    ( { model | site = Just site.siteView, captchaEnabled = site.captchaEnabled }, Cmd.none )
 
                 Err _ ->
                     ( model, Cmd.none )
@@ -124,7 +124,11 @@ update message model =
                     changed =
                         case result of
                             Ok identity ->
-                                { model | auth = Authenticated identity, drawerProfile = Loading }
+                                { model
+                                    | auth = Authenticated identity
+                                    , drawerProfile = Loading
+                                    , donationPrompt = identity.localUserView.localUser.lastDonationNotificationAt == Nothing
+                                }
 
                             Err problem ->
                                 { model
@@ -141,7 +145,7 @@ update message model =
                     ( loaded, command ) =
                         loadRoute changed
                 in
-                ( loaded, Cmd.batch [ command, unreadCommand loaded, loadDrawerProfile changed ] )
+                ( loaded, Cmd.batch [ command, unreadCommand loaded, loadDrawerProfile changed, themeCommand changed ] )
 
         DrawerProfileLoaded result ->
             case model.auth of
@@ -237,6 +241,16 @@ update message model =
         AccountContentResponse epoch event ->
             if epoch == model.routeEpoch then
                 updateAccountContent event model
+
+            else
+                ( model, Cmd.none )
+
+        AccountSettingsMessage event ->
+            updateAccountSettings event model
+
+        AccountSettingsResponse epoch event ->
+            if epoch == model.routeEpoch then
+                updateAccountSettings event model
 
             else
                 ( model, Cmd.none )
@@ -373,6 +387,11 @@ update message model =
         DismissFlash ->
             ( { model | flash = NoFlash }, Cmd.none )
 
+        DismissDonation ->
+            ( { model | donationPrompt = False }
+            , Api.send "" "POST" "/account/donation_dialog_shown" "" (\_ -> Noop)
+            )
+
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
@@ -384,6 +403,16 @@ loadDrawerProfile model =
     case model.auth of
         Authenticated _ ->
             Api.get "/account" (DrawerProfileLoaded << Api.decodeResponse Domain.ownPersonView)
+
+        _ ->
+            Cmd.none
+
+
+themeCommand : Model -> Cmd Msg
+themeCommand model =
+    case model.auth of
+        Authenticated account ->
+            setTheme account.localUserView.localUser.theme
 
         _ ->
             Cmd.none

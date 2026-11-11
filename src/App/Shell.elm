@@ -71,6 +71,11 @@ viewReady content reportDialog model active =
                 [ main_ [ A.id "main-content", A.class "page-content", A.tabindex -1 ]
                     [ viewLocaleNotice model active
                     , viewFlash model active
+                    , if model.donationPrompt then
+                        viewDonationPrompt active
+
+                      else
+                        text ""
                     , content
                     ]
                 ]
@@ -425,6 +430,15 @@ confirmationHelp active action =
 
         RemoveBlockDialog _ _ ->
             Translations.confirmBlockHelp active.texts
+
+
+viewDonationPrompt : Active -> Html Msg
+viewDonationPrompt active =
+    section [ A.class "card notice", A.attribute "role" "status" ]
+        [ p [] [ text (Translations.donationPrompt active.texts) ]
+        , button [ A.type_ "button", A.class "text-button", Events.onClick DismissDonation ]
+            [ text (Translations.dismissDonation active.texts) ]
+        ]
 
 
 viewFlash : Model -> Active -> Html Msg

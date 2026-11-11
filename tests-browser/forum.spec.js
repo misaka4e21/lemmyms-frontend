@@ -221,6 +221,7 @@ function fixtures() {
     community,
     tags: [],
     crossPosts: [],
+    failSettings: false,
     calls: []
   };
 }
@@ -347,15 +348,54 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     state.calls.push({ method, path, search: url.search, body });
 
     if (path === '/api/v4/site') return json(route, 200, site);
-    if (path === '/api/v4/account') return state.signedIn ? json(route, 200, myUser) : json(route, 401, { error: 'not_logged_in' });
+    if (path === '/api/v4/account' && method === 'GET') return state.signedIn ? json(route, 200, myUser) : json(route, 401, { error: 'not_logged_in' });
     if (path === '/api/v4/account/unread_counts') return json(route, 200, { notification_count: 1 });
     if (path === '/api/v4/account/notification/list') return json(route, 200, pageOf([notificationView()]));
     if (path === '/api/v4/account/notification/mark_as_read') return route.fulfill({ status: 204 });
     if (path === '/api/v4/account/notification/mark_as_read/all') return route.fulfill({ status: 204 });
     if (path === '/api/v4/account/settings/save' && method === 'PUT') {
+      if (state.failSettings) return json(route, 400, { error: 'invalid_input' });
       myUser.local_user_view.person.display_name = body.display_name || 'Alice';
       myUser.local_user_view.person.bio = body.bio || '';
-      return json(route, 200, { success: true });
+      myUser.local_user_view.local_user.theme = body.theme || 'browser';
+      myUser.local_user_view.local_user.default_listing_type = body.default_listing_type || 'local';
+      myUser.local_user_view.local_user.default_items_per_page = body.default_items_per_page || 20;
+      return json(route, 200, myUser);
+    }
+    if (path === '/api/v4/account/login/list') {
+      return json(route, 200, { logins: [{ user_id: 1, published_at: '2026-10-20T08:30:00Z', ip: '127.0.0.1', user_agent: 'Playwright' }] });
+    }
+    if (path === '/api/v4/account/invite/list') {
+      return json(route, 200, pageOf([{ token: 'invite-token', max_uses: 3, uses_count: 1, expires_at: '2027-01-01T00:00:00Z', published_at: '2026-10-20T08:30:00Z' }]));
+    }
+    if (path === '/api/v4/account/invite' && method === 'POST') return route.fulfill({ status: 204 });
+    if (path === '/api/v4/account/invite' && method === 'DELETE') return route.fulfill({ status: 204 });
+    if (path === '/api/v4/account/avatar' || path === '/api/v4/account/banner') {
+      return json(route, 200, { image_url: 'https://forum.test/pictrs/image/account.png', filename: 'account.png' });
+    }
+    if (path === '/api/v4/account/auth/totp/generate') {
+      return json(route, 200, { totp_secret_url: 'otpauth://totp/Forum:alice?secret=ABC123' });
+    }
+    if (path === '/api/v4/account/auth/totp/edit') {
+      return json(route, 200, { enabled: Boolean(body.enabled) });
+    }
+    if (path === '/api/v4/account/auth/get_captcha') {
+      return json(route, 200, { ok: { png: 'iVBORw0KGgo=', wav: 'UklGRg==', uuid: 'captcha-uuid' } });
+    }
+    if (path === '/api/v4/account/auth/register') {
+      return json(route, 200, { jwt: null, registration_created: true, verify_email_sent: false });
+    }
+    if (path === '/api/v4/account/settings/export') {
+      return json(route, 200, { display_name: 'Alice', settings: {} });
+    }
+    if (path === '/api/v4/account/data/export') {
+      return json(route, 200, { person: { name: 'alice' } });
+    }
+    if (path === '/api/v4/account/settings/import') return route.fulfill({ status: 204 });
+    if (path === '/api/v4/account/donation_dialog_shown') return route.fulfill({ status: 204 });
+    if (path === '/api/v4/account' && method === 'DELETE') {
+      state.signedIn = false;
+      return route.fulfill({ status: 204 });
     }
     if (path === '/api/v4/account/auth/verify_email' && method === 'POST') return json(route, 200, { success: true });
     if (path === '/api/v4/account/auth/password_change' && method === 'POST') return json(route, 200, { success: true });
@@ -535,7 +575,7 @@ test('updates profile and reads notifications', async ({ page }) => {
   await mockApi(page, state, { authenticated: true });
   await page.goto('/settings');
   await page.getByLabel('Display name').fill('Alice Updated');
-  await page.getByRole('button', { name: 'Save profile' }).click();
+  await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Changes saved.')).toBeVisible();
   await page.goto('/notifications');
   await expect(page.locator('.notification-list')).toContainText('bob');
@@ -754,6 +794,133 @@ test('searches comments, users, and URLs, and switches profile tabs', async ({ p
   await page.getByRole('tab', { name: 'Saved' }).click();
   await expect(page).toHaveURL(/view=saved/);
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/saved')).toBeTruthy();
+});
+
+test('saves complete account settings and applies the theme', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/settings');
+  await page.getByLabel('Display name').fill('Alice P2');
+  await page.getByLabel('Theme').selectOption('dark');
+  await page.getByLabel('Listing').selectOption('subscribed');
+  await page.getByLabel('Items per page').fill('30');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/settings/save' && call.body.display_name === 'Alice P2' && call.body.theme === 'dark' && call.body.default_listing_type === 'subscribed' && call.body.default_items_per_page === 30)).toBeTruthy();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+});
+
+test('preserves unsaved settings and sends cleared optional fields', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.failSettings = true;
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/settings');
+  await page.getByLabel('Display name').fill('Unsaved name');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Check your input and try again.' })).toBeVisible();
+  await expect(page.getByLabel('Display name')).toHaveValue('Unsaved name');
+  state.failSettings = false;
+  await page.getByLabel('Display name').fill('');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/settings/save' && call.body.display_name === null)).toBeTruthy();
+});
+
+test('uploads account images, enables TOTP, and shows login history', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/settings');
+  await page.locator('#account-avatar').setInputFiles({ name: 'avatar.png', mimeType: 'image/png', buffer: Buffer.from('avatar') });
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/avatar')).toBeTruthy();
+  await page.locator('#account-banner').setInputFiles({ name: 'banner.png', mimeType: 'image/png', buffer: Buffer.from('banner') });
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/banner')).toBeTruthy();
+  await page.getByRole('button', { name: 'Set up two-factor authentication' }).click();
+  await expect(page.getByText('otpauth://totp/Forum:alice?secret=ABC123')).toBeVisible();
+  await page.getByLabel('Authentication code').fill('123456');
+  await page.getByRole('button', { name: 'Enable two-factor authentication' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/auth/totp/edit' && call.body.enabled === true && call.body.totp_token === '123456')).toBeTruthy();
+  await expect(page.getByText('127.0.0.1')).toBeVisible();
+  await expect(page.getByText('Playwright')).toBeVisible();
+});
+
+test('exports, imports, invites, and cancels account deletion', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/settings');
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export settings' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('lemmy-settings.json');
+  await page.locator('#settings-import').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{broken') });
+  await expect(page.getByText('Check your input and try again.')).toBeVisible();
+  await page.locator('#settings-import').setInputFiles({ name: 'settings.json', mimeType: 'application/json', buffer: Buffer.from('{"display_name":"Imported"}') });
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/settings/import' && call.body.display_name === 'Imported')).toBeTruthy();
+  await expect(page.getByText('invite-token')).toBeVisible();
+  await page.getByLabel('Maximum uses').fill('2');
+  await page.getByLabel('Expires at').fill('2027-01-01T00:00:00Z');
+  await page.getByRole('button', { name: 'Create invitation' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/invite' && call.method === 'POST' && call.body.max_uses === 2)).toBeTruthy();
+  await page.getByRole('button', { name: 'Revoke' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/invite' && call.method === 'DELETE' && call.body.token === 'invite-token')).toBeTruthy();
+  await page.getByRole('button', { name: 'Delete account' }).click();
+  await expect(page.locator('#delete-account-dialog')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account' && call.method === 'DELETE')).toBeFalsy();
+  await page.getByRole('button', { name: 'Delete account' }).click();
+  await page.locator('#delete-account-dialog').getByLabel('Current password').fill('secret-password');
+  await page.locator('#delete-account-dialog').getByLabel('Also delete my posts and comments').check();
+  await page.locator('#delete-account-dialog').getByRole('button', { name: 'Delete account' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account' && call.method === 'DELETE' && call.body.password === 'secret-password' && call.body.delete_content === true)).toBeTruthy();
+  await expect(page).toHaveURL(/\/login$/);
+});
+
+test('handles registration applications, captcha, and the donation prompt', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state);
+  site.site_view.local_site.registration_mode = 'require_application';
+  site.site_view.local_site.application_question = 'Why do you want to join?';
+  site.captcha_enabled = true;
+  await page.goto('/signup');
+  await expect(page.getByText('Why do you want to join?')).toBeVisible();
+  await page.getByLabel('Username').fill('newuser');
+  await page.getByLabel('Email').fill('new@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('long-enough-password');
+  await page.getByLabel('New password').fill('long-enough-password');
+  await page.getByLabel('Why do you want to join?').fill('Because');
+  await page.getByLabel('Captcha answer').fill('1234');
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/auth/register' && call.body.answer === 'Because' && call.body.captcha_uuid === 'captcha-uuid')).toBeTruthy();
+  site.site_view.local_site.registration_mode = 'open';
+  site.site_view.local_site.application_question = null;
+  site.captcha_enabled = false;
+});
+
+test('shows and dismisses the donation prompt once', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/');
+  await expect(page.getByText('This instance relies on donations to keep running. You can support it from the site page.')).toBeVisible();
+  await page.getByRole('button', { name: 'Dismiss' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/donation_dialog_shown')).toBeTruthy();
+  await expect(page.getByText('This instance relies on donations to keep running. You can support it from the site page.')).toHaveCount(0);
+});
+
+test('handles closed and invitation registration modes', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state);
+  site.site_view.local_site.registration_mode = 'closed';
+  await page.goto('/signup');
+  await expect(page.getByText('Registration is closed on this site.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create account' })).toHaveCount(0);
+  site.site_view.local_site.registration_mode = 'require_invitation';
+  await page.goto('/signup');
+  await expect(page.getByText('Registration requires an invitation.')).toBeVisible();
+  site.site_view.local_site.registration_mode = 'open';
 });
 
 test('has no automated accessibility violations on the latest page', async ({ page }) => {

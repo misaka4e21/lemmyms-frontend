@@ -103,14 +103,14 @@ test.describe('real Lemmy backend', () => {
 
     await page.goto(base + '/settings');
     await page.getByLabel('Display name').fill('Admin E2E');
-    await page.getByRole('button', { name: 'Save profile' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByText('Changes saved.')).toBeVisible();
 
     await page.goto(base + '/notifications');
     await expect(page.getByRole('heading').first()).toBeVisible();
 
     await page.goto(base + '/signup');
-    await expect(page.getByText('Registration requires administrator approval.')).toBeVisible();
+    await expect(page.locator('#register-username')).toBeVisible();
 
     await page.goto(base + '/post/' + postId);
     const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();

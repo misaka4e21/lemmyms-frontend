@@ -126,6 +126,19 @@ app.ports.outgoing.subscribe((message) => {
     case "focus":
       requestAnimationFrame(() => document.getElementById(message.id)?.focus());
       break;
+    case "theme":
+      document.documentElement.dataset.theme = message.theme === "dark" ? "dark" : "browser";
+      break;
+    case "download": {
+      const blob = new Blob([message.content], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = message.filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      break;
+    }
     case "replace-range": {
       const element = document.getElementById(message.id);
       if (!element || typeof element.setRangeText !== "function") break;

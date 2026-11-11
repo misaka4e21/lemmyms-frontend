@@ -8,6 +8,7 @@ import App.State exposing (Model, Msg(..))
 import Browser.Navigation as Navigation
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
+import Feature.AccountSettings as AccountSettings
 import Feature.Auth.State
 import Feature.Auth.Update as Auth
 import Feature.Community as Community
@@ -71,6 +72,8 @@ init rawFlags url key =
             , authGeneration = 0
             , auth = CheckingSession
             , site = Nothing
+            , captchaEnabled = False
+            , donationPrompt = False
             , active = Nothing
             , requested = requested
             , bootFailed = False
@@ -92,6 +95,7 @@ init rawFlags url key =
             , communityCreate = CommunityCreate.initial
             , management = Feature.CommunityManage.State.initial
             , accountContent = AccountContent.initial
+            , accountSettings = AccountSettings.initial
             , accountBlocks = AccountBlocks.initial
             , report = Report.initial
             , siteAdmin = SiteAdminState.initial

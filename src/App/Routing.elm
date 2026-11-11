@@ -6,7 +6,9 @@ import App.State exposing (Model, Msg(..))
 import Browser.Navigation as Navigation
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
+import Feature.AccountSettings as AccountSettings
 import Feature.Auth.State as AuthState
+import Feature.Auth.Update as Auth
 import Feature.Community as Community
 import Feature.CommunityCreate as CommunityCreate
 import Feature.CommunityManage.State as ManageState
@@ -41,6 +43,7 @@ loadRoute model =
                 , editorPage = EditorState.initial
                 , management = ManageState.reset model.management
                 , accountContent = AccountContent.reset model.accountContent
+                , accountSettings = AccountSettings.initial
                 , accountBlocks = AccountBlocks.reset model.accountBlocks
                 , report = Report.initial
                 , siteAdmin = SiteAdminState.reset model.siteAdmin
@@ -136,15 +139,22 @@ loadRoute model =
                 Authenticated _ ->
                     let
                         ( state, command ) =
-                            Profile.loadOwn reset.profile
+                            AccountSettings.load
                     in
-                    ( { reset | profile = state }, Cmd.map (ProfileResponse epoch) command )
+                    ( { reset | accountSettings = state }, Cmd.map (AccountSettingsResponse epoch) command )
 
                 _ ->
                     ( reset, Cmd.none )
 
         Route.LoginReset ->
             ( reset, Cmd.none )
+
+        Route.Register ->
+            if model.captchaEnabled then
+                ( reset, Api.get "/account/auth/get_captcha" (AuthResponse epoch << Auth.CaptchaLoaded) )
+
+            else
+                ( reset, Cmd.none )
 
         Route.PasswordChange token ->
             ( { reset | account = AuthState.withResetToken token reset.account }, Cmd.none )
@@ -280,5 +290,5 @@ loadSession model =
     Cmd.batch
         [ Api.get "/account"
             (SessionLoaded model.authGeneration << Api.decodeResponse Domain.myUserInfo)
-        , Api.get "/site" (SiteLoaded << Api.decodeResponse (Decode.map .siteView Domain.getSiteResponse))
+        , Api.get "/site" (SiteLoaded << Api.decodeResponse Domain.getSiteResponse)
         ]
