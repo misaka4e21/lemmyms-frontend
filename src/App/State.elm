@@ -18,6 +18,7 @@ import Feature.CommunityManage.Update as Manage
 import Feature.Editor.State
 import Feature.Editor.Update as Editor
 import Feature.Feed as Feed
+import Feature.MultiCommunity as MultiCommunity
 import Feature.Notifications as Notifications
 import Feature.Post as Post
 import Feature.Profile as Profile
@@ -68,6 +69,7 @@ type alias Model =
     , profile : Profile.Model
     , searchPage : Search.Model
     , notificationsPage : Notifications.Model
+    , multiCommunity : MultiCommunity.Model
     , communityCreate : CommunityCreate.Model
     , posts : Post.Model
     , communityPage : Community.Model
@@ -82,6 +84,7 @@ type ConfirmationAction
     | RemoveSiteBanDialog
     | RemoveCommunityBanDialog
     | RemoveBlockDialog String String
+    | SetMultiCommunityDeletedDialog Bool
 
 
 type Msg
@@ -126,6 +129,8 @@ type Msg
     | SearchResponse Int Search.Msg
     | NotificationsMessage Notifications.Msg
     | NotificationsResponse Int Notifications.Msg
+    | MultiCommunityMessage MultiCommunity.Msg
+    | MultiCommunityResponse Int MultiCommunity.Msg
     | CommunityCreateMessage CommunityCreate.Msg
     | CommunityCreateResponse Int CommunityCreate.Msg
     | PostMessage Post.Msg

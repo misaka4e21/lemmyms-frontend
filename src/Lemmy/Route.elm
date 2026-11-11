@@ -32,6 +32,11 @@ type Route
     | CreatePost (Maybe Int)
     | EditPost Int
     | CreateCommunity
+    | CreatePrivateMessage Int
+    | MultiCommunities
+    | CreateMultiCommunity
+    | MultiCommunity String
+    | MultiCommunitySettings String
     | Profile String
     | Search
     | Notifications
@@ -58,6 +63,9 @@ parser =
         [ Parser.map Home top
         , Parser.map CommunitySettings (s "c" </> string </> s "settings")
         , Parser.map Community (s "c" </> string)
+        , Parser.map MultiCommunitySettings (s "m" </> string </> s "settings")
+        , Parser.map MultiCommunity (s "m" </> string)
+        , Parser.map MultiCommunities (s "multi_communities")
         , Parser.map Communities (s "communities")
         , Parser.map (\postId commentId -> Post postId (Just commentId)) (s "post" </> int </> int)
         , Parser.map (\postId -> Post postId Nothing) (s "post" </> int)
@@ -65,6 +73,8 @@ parser =
         , Parser.map Comment (s "comment" </> int)
         , Parser.map (CreatePost Nothing) (s "create_post")
         , Parser.map CreateCommunity (s "create_community")
+        , Parser.map CreateMultiCommunity (s "create_multi_community")
+        , Parser.map CreatePrivateMessage (s "create_private_message" </> int)
         , Parser.map Profile (s "u" </> string)
         , Parser.map Search (s "search")
         , Parser.map Notifications (s "notifications")
@@ -153,6 +163,21 @@ path route =
 
         CreateCommunity ->
             "/create_community"
+
+        CreatePrivateMessage recipientId ->
+            Builder.absolute [ "create_private_message", String.fromInt recipientId ] []
+
+        MultiCommunities ->
+            "/multi_communities"
+
+        CreateMultiCommunity ->
+            "/create_multi_community"
+
+        MultiCommunity name ->
+            Builder.absolute [ "m", name ] []
+
+        MultiCommunitySettings name ->
+            Builder.absolute [ "m", name, "settings" ] []
 
         Profile username ->
             Builder.absolute [ "u", username ] []
@@ -312,12 +337,6 @@ cursorUrl url cursorValue =
     url.path
         ++ Builder.toQuery
             ([ Builder.string "page_cursor" cursorValue ]
-                ++ (if parse url == Search then
-                        [ Builder.string "q" (query "q" url), Builder.string "kind" (query "kind" url) ]
-
-                    else
-                        []
-                   )
                 ++ optionalQuery "sort" url
                 ++ optionalQuery "max_depth" url
                 ++ optionalQuery "type" url
@@ -325,6 +344,8 @@ cursorUrl url cursorValue =
                 ++ optionalQuery "view" url
                 ++ optionalQuery "state" url
                 ++ optionalQuery "community_id" url
+                ++ optionalQuery "q" url
+                ++ optionalQuery "kind" url
             )
 
 

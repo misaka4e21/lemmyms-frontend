@@ -8,6 +8,7 @@ import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
 import Feature.AccountSettings as AccountSettings
 import Feature.CommunityManage.State as ManageState
+import Feature.MultiCommunity as MultiCommunity
 import Feature.Notifications as Notifications
 import Feature.Profile as Profile
 import Feature.Report as Report
@@ -32,6 +33,7 @@ clearPrivate model =
         | profile = Profile.clearPrivate model.profile
         , drawerProfile = NotAsked
         , notificationsPage = Notifications.initial
+        , multiCommunity = MultiCommunity.initial
         , management = ManageState.initial
         , accountContent = AccountContent.initial
         , accountSettings = AccountSettings.initial

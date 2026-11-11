@@ -16,6 +16,7 @@ type Flash
     | FlashRegistrationAccepted
     | FlashResetRequested
     | FlashPasswordChanged
+    | FlashMessageSent
     | FlashUploaded
     | FlashUploadFailed
 
@@ -49,6 +50,9 @@ flashText texts flash =
 
         FlashPasswordChanged ->
             Translations.passwordChanged texts
+
+        FlashMessageSent ->
+            Translations.messageSent texts
 
         FlashUploaded ->
             Translations.uploadComplete texts

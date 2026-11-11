@@ -16,6 +16,7 @@ import Feature.CommunityManage.Update as Manage
 import Feature.Editor.State as EditorState exposing (EditorMode(..), emptyEditor)
 import Feature.Editor.Update as Editor
 import Feature.Feed as Feed
+import Feature.MultiCommunity as MultiCommunity
 import Feature.Notifications as Notifications
 import Feature.Post as Post
 import Feature.Profile as Profile
@@ -40,6 +41,7 @@ loadRoute model =
                 , posts = Post.reset model.posts
                 , profile = Profile.reset model.profile
                 , notificationsPage = Notifications.initial
+                , multiCommunity = MultiCommunity.initial
                 , editorPage = EditorState.initial
                 , management = ManageState.reset model.management
                 , accountContent = AccountContent.reset model.accountContent
@@ -112,9 +114,21 @@ loadRoute model =
         Route.Notifications ->
             case model.auth of
                 Authenticated _ ->
-                    ( { reset | notificationsPage = { notifications = Loading, unreadCount = Nothing } }
+                    ( { reset | notificationsPage = Notifications.startLoading reset.notificationsPage }
                     , Cmd.map (NotificationsResponse epoch) (Notifications.load model.url)
                     )
+
+                _ ->
+                    ( reset, Cmd.none )
+
+        Route.CreatePrivateMessage recipientId ->
+            case model.auth of
+                Authenticated _ ->
+                    let
+                        ( state, command ) =
+                            Notifications.loadComposer recipientId reset.notificationsPage
+                    in
+                    ( { reset | notificationsPage = state }, Cmd.map (NotificationsResponse epoch) command )
 
                 _ ->
                     ( reset, Cmd.none )
@@ -226,6 +240,44 @@ loadRoute model =
                             Manage.load name initial reset.management
                     in
                     ( { reset | management = state }, Cmd.map (ManageResponse epoch) command )
+
+                _ ->
+                    ( reset, Cmd.none )
+
+        Route.MultiCommunities ->
+            let
+                ( state, command ) =
+                    MultiCommunity.loadDirectory model.url
+            in
+            ( { reset | multiCommunity = state }, Cmd.map (MultiCommunityResponse epoch) command )
+
+        Route.MultiCommunity name ->
+            let
+                ( state, command ) =
+                    MultiCommunity.loadDetail model.url name
+            in
+            ( { reset | multiCommunity = state }, Cmd.map (MultiCommunityResponse epoch) command )
+
+        Route.CreateMultiCommunity ->
+            case model.auth of
+                Authenticated _ ->
+                    let
+                        ( state, command ) =
+                            MultiCommunity.loadCreate
+                    in
+                    ( { reset | multiCommunity = state }, Cmd.map (MultiCommunityResponse epoch) command )
+
+                _ ->
+                    ( reset, Cmd.none )
+
+        Route.MultiCommunitySettings name ->
+            case model.auth of
+                Authenticated _ ->
+                    let
+                        ( state, command ) =
+                            MultiCommunity.loadSettings name
+                    in
+                    ( { reset | multiCommunity = state }, Cmd.map (MultiCommunityResponse epoch) command )
 
                 _ ->
                     ( reset, Cmd.none )

@@ -32,6 +32,11 @@ suite =
                     , Route.CreatePost (Just 2)
                     , Route.EditPost 10
                     , Route.CreateCommunity
+                    , Route.CreatePrivateMessage 1
+                    , Route.MultiCommunities
+                    , Route.CreateMultiCommunity
+                    , Route.MultiCommunity "news"
+                    , Route.MultiCommunitySettings "news"
                     , Route.Profile "alice"
                     , Route.Search
                     , Route.Notifications
@@ -70,6 +75,11 @@ suite =
                         , "/create_post?community_id=2"
                         , "/create_post?post_id=10"
                         , "/create_community"
+                        , "/create_private_message/1"
+                        , "/multi_communities"
+                        , "/create_multi_community"
+                        , "/m/news"
+                        , "/m/news/settings"
                         , "/u/alice"
                         , "/search"
                         , "/notifications"
@@ -112,6 +122,11 @@ suite =
                         , Route.CreatePost (Just 2)
                         , Route.EditPost 10
                         , Route.CreateCommunity
+                        , Route.CreatePrivateMessage 1
+                        , Route.MultiCommunities
+                        , Route.CreateMultiCommunity
+                        , Route.MultiCommunity "news"
+                        , Route.MultiCommunitySettings "news"
                         , Route.Profile "alice"
                         , Route.Search
                         , Route.Notifications

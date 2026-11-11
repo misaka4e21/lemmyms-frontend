@@ -826,8 +826,8 @@ reportId reportValue =
             Domain.CommunityReportView report _ _ _ ->
                 report.id
 
-            Domain.PrivateMessageReportView id _ _ _ _ _ _ ->
-                id
+            Domain.PrivateMessageReportView report _ _ _ _ ->
+                report.id
         )
 
 
@@ -844,8 +844,8 @@ reportState reportValue =
             Domain.CommunityReportView report _ _ _ ->
                 report.resolved
 
-            Domain.PrivateMessageReportView _ _ resolved _ _ _ _ ->
-                resolved
+            Domain.PrivateMessageReportView report _ _ _ _ ->
+                report.resolved
     then
         "resolved"
 
@@ -865,8 +865,8 @@ reportReason reportValue =
         Domain.CommunityReportView report _ _ _ ->
             report.reason
 
-        Domain.PrivateMessageReportView _ reason _ _ _ _ _ ->
-            reason
+        Domain.PrivateMessageReportView report _ _ _ _ ->
+            report.reason
 
 
 reportTargetKind : Domain.ReportView -> String
@@ -881,7 +881,7 @@ reportTargetKind reportValue =
         Domain.CommunityReportView _ _ _ _ ->
             "community"
 
-        Domain.PrivateMessageReportView _ _ _ _ _ _ _ ->
+        Domain.PrivateMessageReportView _ _ _ _ _ ->
             "message"
 
 
@@ -897,5 +897,5 @@ reportResolution reportValue =
         Domain.CommunityReportView report _ _ _ ->
             Maybe.withDefault "" report.conclusion
 
-        Domain.PrivateMessageReportView _ _ _ conclusion _ _ _ ->
-            Maybe.withDefault "" conclusion
+        Domain.PrivateMessageReportView report _ _ _ _ ->
+            Maybe.withDefault "" report.conclusion

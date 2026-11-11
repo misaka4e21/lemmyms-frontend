@@ -223,6 +223,12 @@ function fixtures() {
     tags: [],
     crossPosts: [],
     postCreator: null,
+    privateMessage: privateMessageView(),
+    failPrivateMessage: false,
+    multiCommunity: multiCommunityView(),
+    multiCommunities: [multiCommunityView()],
+    entryLimit: false,
+    privateReport: false,
     failSettings: false,
     calls: []
   };
@@ -290,6 +296,99 @@ function notificationView() {
   };
 }
 
+function privateMessageView() {
+  return {
+    private_message: {
+      id: 30,
+      creator_id: 2,
+      recipient_id: 1,
+      content: 'Hello **there**',
+      deleted: false,
+      deleted_by_recipient: false,
+      removed: false,
+      published_at: '2026-10-20T08:31:00Z',
+      updated_at: null,
+      ap_id: 'https://forum.test/private_message/30',
+      local: true
+    },
+    creator: replyPerson,
+    recipient: person
+  };
+}
+
+function privateMessageNotification(state) {
+  return {
+    notification: {
+      id: 2,
+      recipient_id: 1,
+      comment_id: null,
+      read: false,
+      published_at: '2026-10-20T08:31:00Z',
+      kind: 'private_message',
+      post_id: null,
+      private_message_id: 30,
+      modlog_id: null,
+      creator_id: 2
+    },
+    data: {
+      type_: 'private_message',
+      ...state.privateMessage
+    }
+  };
+}
+
+function multiCommunityView() {
+  return {
+    multi: {
+      id: 5,
+      creator_id: 1,
+      name: 'tech',
+      title: 'Tech',
+      summary: 'Grouped technology feeds',
+      sidebar: 'Tech sidebar',
+      local: true,
+      deleted: false,
+      ap_id: 'https://forum.test/m/tech',
+      subscribers: 3,
+      subscribers_local: 2,
+      communities: 1,
+      published_at: '2026-10-20T08:30:00Z',
+      updated_at: null
+    },
+    follow_state: 'accepted',
+    owner: person
+  };
+}
+
+function multiCommunityResponse(state) {
+  return {
+    multi_community_view: state.multiCommunity,
+    communities: [communityView(state)]
+  };
+}
+
+function privateMessageReportView() {
+  return {
+    type_: 'private_message',
+    private_message_report: {
+      id: 9,
+      creator_id: 1,
+      private_message_id: 30,
+      original_pm_text: 'Hello there',
+      reason: 'spam',
+      resolved: false,
+      resolver_id: null,
+      published_at: '2026-10-20T08:31:00Z',
+      updated_at: null,
+      conclusion: null
+    },
+    private_message: privateMessageView().private_message,
+    creator: person,
+    private_message_creator: replyPerson,
+    resolver: null
+  };
+}
+
 function reportView() {
   return {
     type_: 'post',
@@ -352,7 +451,49 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     if (path === '/api/v4/site') return json(route, 200, site);
     if (path === '/api/v4/account' && method === 'GET') return state.signedIn ? json(route, 200, myUser) : json(route, 401, { error: 'not_logged_in' });
     if (path === '/api/v4/account/unread_counts') return json(route, 200, { notification_count: 1 });
-    if (path === '/api/v4/account/notification/list') return json(route, 200, pageOf([notificationView()]));
+    if (path === '/api/v4/account/notification/list') {
+      if (url.searchParams.get('type_') === 'private_message') return json(route, 200, pageOf([privateMessageNotification(state)]));
+      return json(route, 200, pageOf([notificationView()]));
+    }
+    if (path === '/api/v4/private_message' && method === 'POST') {
+      if (state.failPrivateMessage) return json(route, 400, { error: 'invalid_input' });
+      state.privateMessage.private_message.content = body.content;
+      return json(route, 200, { private_message_view: state.privateMessage });
+    }
+    if (path === '/api/v4/private_message' && method === 'PUT') {
+      state.privateMessage.private_message.content = body.content;
+      return json(route, 200, { private_message_view: state.privateMessage });
+    }
+    if (path === '/api/v4/private_message' && method === 'DELETE') {
+      state.privateMessage.private_message.deleted = true;
+      return json(route, 200, { private_message_view: state.privateMessage });
+    }
+    if (path === '/api/v4/private_message/report') return route.fulfill({ status: 204 });
+    if (path === '/api/v4/multi_community/list') return json(route, 200, pageOf(state.multiCommunities));
+    if (path === '/api/v4/multi_community' && method === 'GET') return json(route, 200, multiCommunityResponse(state));
+    if (path === '/api/v4/multi_community' && method === 'POST') {
+      state.multiCommunity.multi.name = body.name || state.multiCommunity.multi.name;
+      state.multiCommunity.multi.title = body.title || null;
+      state.multiCommunity.multi.summary = body.summary || null;
+      state.multiCommunity.multi.sidebar = body.sidebar || null;
+      return json(route, 200, { multi_community_view: state.multiCommunity });
+    }
+    if (path === '/api/v4/multi_community' && method === 'PUT') {
+      state.multiCommunity.multi.title = body.title || null;
+      state.multiCommunity.multi.summary = body.summary || null;
+      state.multiCommunity.multi.sidebar = body.sidebar || null;
+      if (typeof body.deleted === 'boolean') state.multiCommunity.multi.deleted = body.deleted;
+      return json(route, 200, { multi_community_view: state.multiCommunity });
+    }
+    if (path === '/api/v4/multi_community/entry' && method === 'POST') {
+      if (state.entryLimit) return json(route, 400, { error: 'multi_community_entry_limit_reached' });
+      return json(route, 200, { community_view: communityView(state), moderators: [] });
+    }
+    if (path === '/api/v4/multi_community/entry' && method === 'DELETE') return route.fulfill({ status: 204 });
+    if (path === '/api/v4/multi_community/follow' && method === 'POST') {
+      state.multiCommunity.follow_state = body.follow ? (state.multiCommunity.multi.local ? 'accepted' : 'pending') : null;
+      return json(route, 200, { multi_community_view: state.multiCommunity });
+    }
     if (path === '/api/v4/account/notification/mark_as_read') return route.fulfill({ status: 204 });
     if (path === '/api/v4/account/notification/mark_as_read/all') return route.fulfill({ status: 204 });
     if (path === '/api/v4/account/settings/save' && method === 'PUT') {
@@ -403,6 +544,9 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     if (path === '/api/v4/account/auth/password_change' && method === 'POST') return json(route, 200, { success: true });
     if (path === '/api/v4/person') {
       if ((url.searchParams.get('username') || '').includes('carol')) return json(route, 404, { error: 'not_found' });
+      if (url.searchParams.get('person_id') === '2' || url.searchParams.get('username') === 'bob') {
+        return json(route, 200, { person_view: { person: replyPerson, is_admin: false, person_actions: null, banned: false, ban_expires_at: null } });
+      }
       return json(route, 200, { person_view: { person, is_admin: true, person_actions: null, banned: false, ban_expires_at: null } });
     }
     if (path === '/api/v4/post/list') return json(route, 200, pageOf([postView(state)]));
@@ -480,6 +624,9 @@ async function mockApi(page, state, { authenticated = false } = {}) {
       });
     }
     if (path === '/api/v4/report/list') {
+      if (state.privateReport) {
+        return json(route, 200, { items: [privateMessageReportView()], prev_page: null, next_page: null });
+      }
       const cursor = url.searchParams.get('page_cursor');
       return json(route, 200, {
         items: [reportView()],
@@ -860,7 +1007,7 @@ test('exports, imports, invites, and cancels account deletion', async ({ page })
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('lemmy-settings.json');
   await page.locator('#settings-import').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{broken') });
-  await expect(page.getByText('Check your input and try again.')).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Check your input and try again.' })).toBeVisible();
   await page.locator('#settings-import').setInputFiles({ name: 'settings.json', mimeType: 'application/json', buffer: Buffer.from('{"display_name":"Imported"}') });
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/settings/import' && call.body.display_name === 'Imported')).toBeTruthy();
   await expect(page.getByText('invite-token')).toBeVisible();
@@ -1021,11 +1168,165 @@ test('keeps the hostname in a remote ban actor URL', async ({ page }) => {
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/person' && call.search === '?username=carol%40remote.test')).toBeTruthy();
 });
 
+test('reads and acts on private messages', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/notifications?kind=messages');
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/notification/list' && call.search.includes('type_=private_message'))).toBeTruthy();
+  await expect(page.getByRole('link', { name: 'Bob', exact: true })).toBeVisible();
+  await expect(page.getByText('Hello there')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Reply' })).toHaveAttribute('href', '/create_private_message/2');
+  await page.getByRole('button', { name: 'Mark read' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/notification/mark_as_read')).toBeTruthy();
+  await page.getByRole('button', { name: 'Report message' }).click();
+  await page.getByLabel('Reason').fill('spam');
+  await page.getByRole('button', { name: 'Submit report' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/private_message/report' && call.body.private_message_id === 30 && call.body.reason === 'spam')).toBeTruthy();
+  await page.getByRole('button', { name: 'Delete message' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/private_message' && call.method === 'DELETE')).toBeTruthy();
+  await expect(page.getByText('Message deleted.')).toBeVisible();
+});
+
+test('edits a private message owned by the reader', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.privateMessage.creator = person;
+  state.privateMessage.private_message.creator_id = 1;
+  state.privateMessage.private_message.recipient_id = 2;
+  state.privateMessage.private_message.content = 'Editable message';
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/notifications?kind=messages');
+  await expect(page.getByText('Editable message')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit message' }).click();
+  await page.getByLabel('Message').fill('Edited message');
+  await page.getByRole('button', { name: 'Save message' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/private_message' && call.method === 'PUT' && call.body.private_message_id === 30 && call.body.content === 'Edited message')).toBeTruthy();
+  await expect(page.getByText('Edited message')).toBeVisible();
+});
+
+test('composes a private message and preserves a failed draft', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/create_private_message/2');
+  await expect(page.getByText('Bob')).toBeVisible();
+  await page.getByLabel('Message').fill('Hello Bob');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/private_message' && call.method === 'POST' && call.body.recipient_id === 2 && call.body.content === 'Hello Bob')).toBeTruthy();
+  await page.waitForURL(url => url.pathname === '/u/bob');
+  state.failPrivateMessage = true;
+  await page.goto('/create_private_message/2');
+  await page.getByLabel('Message').fill('Keep this draft');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Check your input and try again.' })).toBeVisible();
+  await expect(page.getByLabel('Message')).toHaveValue('Keep this draft');
+});
+
+test('offers message entry from another profile', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/u/bob');
+  await expect(page.getByRole('link', { name: 'Send message' })).toHaveAttribute('href', '/create_private_message/2');
+  await page.goto('/u/alice');
+  await expect(page.getByRole('link', { name: 'Send message' })).toHaveCount(0);
+  myUser.local_user_view.local_user.private_messages_enabled = false;
+  await page.goto('/u/bob');
+  await expect(page.getByRole('link', { name: 'Send message' })).toHaveCount(0);
+  myUser.local_user_view.local_user.private_messages_enabled = true;
+});
+
+test('browses multi-communities and follows one', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/multi_communities');
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/multi_community/list' && call.search.includes('type_=local') && call.search.includes('sort=subscribers'))).toBeTruthy();
+  await expect(page.getByRole('link', { name: 'Tech', exact: true })).toHaveAttribute('href', '/m/tech');
+  await page.getByLabel('Listing').selectOption('all');
+  await page.waitForURL(url => url.pathname === '/multi_communities' && url.searchParams.get('type') === 'all');
+  await page.getByLabel('Search communities').fill('tech');
+  await page.getByRole('button', { name: 'Search' }).click();
+  await expect(page).toHaveURL(/q=tech/);
+  await page.goto('/m/tech');
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/multi_community' && call.search.includes('name=tech'))).toBeTruthy();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/post/list' && call.search.includes('multi_community_name=tech'))).toBeTruthy();
+  await expect(page.getByText('Tech sidebar')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'News', exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Unfollow' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/multi_community/follow' && call.body.follow === false)).toBeTruthy();
+});
+
+test('creates and manages a multi-community', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/create_multi_community');
+  await page.getByLabel('Name', { exact: true }).fill('newmulti');
+  await page.getByLabel('Title', { exact: true }).fill('New multi');
+  await page.getByLabel('Summary').fill('Summary');
+  await page.getByLabel('Sidebar (Markdown)').fill('Sidebar');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/multi_community' && call.method === 'POST' && call.body.name === 'newmulti')).toBeTruthy();
+  await page.waitForURL(url => url.pathname === '/m/newmulti');
+  state.multiCommunity.multi.name = 'tech';
+  state.multiCommunity.multi.title = 'Tech';
+  await page.goto('/m/tech/settings');
+  await page.getByLabel('Title', { exact: true }).fill('Updated Tech');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/multi_community' && call.method === 'PUT' && call.body.title === 'Updated Tech')).toBeTruthy();
+  await page.waitForURL(url => url.pathname === '/m/tech');
+  await page.goto('/m/tech/settings');
+  await page.getByLabel('Search communities').fill('news');
+  await page.getByRole('button', { name: 'Search' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/list' && call.search.includes('search_term=news'))).toBeTruthy();
+  await page.getByRole('button', { name: 'Add community' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/multi_community/entry' && call.method === 'POST' && call.body.community_id === 1)).toBeTruthy();
+  state.entryLimit = true;
+  await page.getByRole('button', { name: 'Add community' }).click();
+  await expect(page.getByText('This multi-community already has the maximum of 50 communities.')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove community' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/multi_community/entry' && call.method === 'DELETE')).toBeTruthy();
+  await page.getByRole('button', { name: 'Delete multi-community' }).click();
+  await page.getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/multi_community' && call.method === 'PUT' && call.body.deleted === true)).toBeTruthy();
+  await page.waitForURL(url => url.pathname === '/multi_communities');
+});
+
+test('hides multi-community management from an ordinary reader', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  myUser.local_user_view.local_user.admin = false;
+  state.multiCommunity.multi.creator_id = 2;
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/m/tech/settings');
+  await expect(page.getByText('This action is not allowed, or your access has changed.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+  myUser.local_user_view.local_user.admin = true;
+  state.multiCommunity.multi.creator_id = 1;
+});
+
+test('resolves a private message report in the admin workspace', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.privateReport = true;
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/reports');
+  await expect(page.getByText('Bob: Hello **there**')).toBeVisible();
+  await page.getByLabel('Resolution note').fill('handled');
+  await page.getByRole('button', { name: 'Resolve', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/private_message/report/resolve' && call.body.report_id === 9 && call.body.resolved === true && call.body.conclusion === 'handled')).toBeTruthy();
+});
+
 test('has no automated accessibility violations on the latest page', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
   const state = fixtures();
-  await mockApi(page, state);
-  await page.goto('/');
-  const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
-  expect(axe.violations).toEqual([]);
+  await mockApi(page, state, { authenticated: true });
+  for (const path of ['/', '/multi_communities', '/m/tech', '/m/tech/settings']) {
+    await page.goto(path);
+    const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(axe.violations).toEqual([]);
+  }
 });

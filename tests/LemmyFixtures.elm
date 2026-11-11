@@ -1,4 +1,4 @@
-module LemmyFixtures exposing (commentJson, commentViewJson, communityJson, communityViewJson, imageJson, modlogJson, myUserJson, notificationJson, personJson, personViewJson, postJson, postViewJson, reportJson, searchJson, siteJson)
+module LemmyFixtures exposing (commentJson, commentViewJson, communityJson, communityViewJson, imageJson, modlogJson, multiCommunityJson, multiCommunityResponseJson, multiCommunityViewJson, myUserJson, notificationJson, personJson, personViewJson, postJson, postViewJson, privateMessageJson, privateMessageReportJson, privateMessageViewJson, reportJson, searchJson, siteJson)
 
 
 personJson : String
@@ -150,6 +150,60 @@ reportJson =
         ++ ",\"resolver\":null,\"post_creator\":"
         ++ personJson
         ++ ",\"creator_is_admin\":false,\"creator_is_moderator\":false,\"creator_banned\":false,\"creator_banned_from_community\":false}],\"next_page\":null,\"prev_page\":null}"
+
+
+privateMessageJson : String
+privateMessageJson =
+    """
+    {"id":30,"creator_id":1,"recipient_id":2,"content":"Hello there","deleted":false,"published_at":"2026-11-09T00:00:00Z","updated_at":null,"ap_id":"https://forum.test/private_message/30","local":true,"removed":false,"deleted_by_recipient":false,"origin_local_site_id":1}
+    """
+
+
+privateMessageViewJson : String
+privateMessageViewJson =
+    "{\"private_message\":"
+        ++ privateMessageJson
+        ++ ",\"creator\":"
+        ++ personJson
+        ++ ",\"recipient\":"
+        ++ personJson
+        ++ "}"
+
+
+multiCommunityJson : String
+multiCommunityJson =
+    """
+    {"id":5,"creator_id":1,"instance_id":1,"name":"tech","title":"Tech","summary":"Grouped technology feeds","local":true,"deleted":false,"ap_id":"https://forum.test/m/tech","last_refreshed_at":"2026-11-09T00:00:00Z","following_url":"https://forum.test/m/tech/following","published_at":"2026-11-09T00:00:00Z","updated_at":null,"subscribers":3,"subscribers_local":2,"communities":1,"sidebar":"Tech sidebar","origin_local_site_id":1}
+    """
+
+
+multiCommunityViewJson : String
+multiCommunityViewJson =
+    "{\"multi\":"
+        ++ multiCommunityJson
+        ++ ",\"follow_state\":\"accepted\",\"owner\":"
+        ++ personJson
+        ++ "}"
+
+
+multiCommunityResponseJson : String
+multiCommunityResponseJson =
+    "{\"multi_community_view\":"
+        ++ multiCommunityViewJson
+        ++ ",\"communities\":["
+        ++ communityViewJson
+        ++ "]}"
+
+
+privateMessageReportJson : String
+privateMessageReportJson =
+    "{\"items\":[{\"type_\":\"private_message\",\"private_message_report\":{\"id\":9,\"creator_id\":2,\"private_message_id\":30,\"original_pm_text\":\"Hello there\",\"reason\":\"spam\",\"resolved\":false,\"resolver_id\":null,\"published_at\":\"2026-11-09T00:00:00Z\",\"updated_at\":null,\"conclusion\":null},\"private_message\":"
+        ++ privateMessageJson
+        ++ ",\"creator\":"
+        ++ personJson
+        ++ ",\"private_message_creator\":"
+        ++ personJson
+        ++ ",\"resolver\":null}]}"
 
 
 modlogJson : String

@@ -18,6 +18,7 @@ type Target
     = PostTarget String String
     | CommentTarget String
     | CommunityTarget String
+    | PrivateMessageTarget String
 
 
 type alias Model =
@@ -193,6 +194,9 @@ reportPayload target reason =
         CommunityTarget id ->
             Encode.object [ ( "community_id", Encode.int (String.toInt id |> Maybe.withDefault 0) ), ( "reason", Encode.string reason ) ]
 
+        PrivateMessageTarget id ->
+            Encode.object [ ( "private_message_id", Encode.int (String.toInt id |> Maybe.withDefault 0) ), ( "reason", Encode.string reason ) ]
+
 
 reportEndpoint : Target -> String
 reportEndpoint target =
@@ -205,6 +209,9 @@ reportEndpoint target =
 
         CommunityTarget _ ->
             "/community/report"
+
+        PrivateMessageTarget _ ->
+            "/private_message/report"
 
 
 type alias Config msg =
@@ -279,6 +286,9 @@ targetKindLabel texts target =
         CommunityTarget _ ->
             Translations.reportCommunity texts
 
+        PrivateMessageTarget _ ->
+            Translations.reportMessage texts
+
 
 targetId : Target -> String
 targetId target =
@@ -290,4 +300,7 @@ targetId target =
             id
 
         CommunityTarget id ->
+            id
+
+        PrivateMessageTarget id ->
             id

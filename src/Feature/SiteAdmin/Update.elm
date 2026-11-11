@@ -507,8 +507,8 @@ reportId reportValue =
         Domain.CommunityReportView report _ _ _ ->
             report.id
 
-        Domain.PrivateMessageReportView id _ _ _ _ _ _ ->
-            id
+        Domain.PrivateMessageReportView report _ _ _ _ ->
+            report.id
 
 
 reportKind : Domain.ReportView -> String
@@ -523,7 +523,7 @@ reportKind reportValue =
         Domain.CommunityReportView _ _ _ _ ->
             "community"
 
-        Domain.PrivateMessageReportView _ _ _ _ _ _ _ ->
+        Domain.PrivateMessageReportView _ _ _ _ _ ->
             "private_message"
 
 

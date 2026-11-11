@@ -210,6 +210,12 @@ reportsList config model active page =
                                 , time [ A.class "chip", A.datetime (reportCreatedAt report), A.attribute "data-commune-time" "" ] [ text (reportCreatedAt report) ]
                                 ]
                             , p [ A.class "metadata" ] [ text (Translations.targetId active.texts ++ ": "), text (reportTargetId report) ]
+                            , case reportPrivateMessage report of
+                                Just content ->
+                                    p [ A.dir "auto" ] [ text content ]
+
+                                Nothing ->
+                                    text ""
                             , p [ A.dir "auto" ] [ text (reportReason report) ]
                             , if reportState report == "open" then
                                 div [ A.class "form-stack" ]
@@ -402,8 +408,8 @@ reportId reportValue =
             Domain.CommunityReportView report _ _ _ ->
                 report.id
 
-            Domain.PrivateMessageReportView id _ _ _ _ _ _ ->
-                id
+            Domain.PrivateMessageReportView report _ _ _ _ ->
+                report.id
         )
 
 
@@ -420,8 +426,8 @@ reportState reportValue =
             Domain.CommunityReportView report _ _ _ ->
                 report.resolved
 
-            Domain.PrivateMessageReportView _ _ resolved _ _ _ _ ->
-                resolved
+            Domain.PrivateMessageReportView report _ _ _ _ ->
+                report.resolved
     then
         "resolved"
 
@@ -441,8 +447,8 @@ reportReason reportValue =
         Domain.CommunityReportView report _ _ _ ->
             report.reason
 
-        Domain.PrivateMessageReportView _ reason _ _ _ _ _ ->
-            reason
+        Domain.PrivateMessageReportView report _ _ _ _ ->
+            report.reason
 
 
 reportTargetKind : Domain.ReportView -> String
@@ -457,7 +463,7 @@ reportTargetKind reportValue =
         Domain.CommunityReportView _ _ _ _ ->
             "community"
 
-        Domain.PrivateMessageReportView _ _ _ _ _ _ _ ->
+        Domain.PrivateMessageReportView _ _ _ _ _ ->
             "message"
 
 
@@ -473,8 +479,18 @@ reportTargetId reportValue =
         Domain.CommunityReportView report _ _ _ ->
             String.fromInt report.communityId
 
-        Domain.PrivateMessageReportView _ _ _ _ _ _ _ ->
-            ""
+        Domain.PrivateMessageReportView report _ _ _ _ ->
+            String.fromInt report.privateMessageId
+
+
+reportPrivateMessage : Domain.ReportView -> Maybe String
+reportPrivateMessage reportValue =
+    case reportValue of
+        Domain.PrivateMessageReportView _ message _ sender _ ->
+            Just (Domain.displayNameOf sender ++ ": " ++ message.content)
+
+        _ ->
+            Nothing
 
 
 reportCreatedAt : Domain.ReportView -> String
@@ -489,8 +505,8 @@ reportCreatedAt reportValue =
         Domain.CommunityReportView report _ _ _ ->
             report.publishedAt
 
-        Domain.PrivateMessageReportView _ _ _ _ publishedAt _ _ ->
-            publishedAt
+        Domain.PrivateMessageReportView report _ _ _ _ ->
+            report.publishedAt
 
 
 reportResolution : Domain.ReportView -> String
@@ -505,8 +521,8 @@ reportResolution reportValue =
         Domain.CommunityReportView report _ _ _ ->
             Maybe.withDefault "" report.conclusion
 
-        Domain.PrivateMessageReportView _ _ _ conclusion _ _ _ ->
-            Maybe.withDefault "" conclusion
+        Domain.PrivateMessageReportView report _ _ _ _ ->
+            Maybe.withDefault "" report.conclusion
 
 
 modlogTargetKind : Domain.ModlogView -> String

@@ -416,6 +416,13 @@ confirmationTitle active action =
         RemoveBlockDialog _ _ ->
             Translations.blockTitle active.texts
 
+        SetMultiCommunityDeletedDialog deleted ->
+            if deleted then
+                Translations.multiCommunityDelete active.texts
+
+            else
+                Translations.multiCommunityRestore active.texts
+
 
 confirmationHelp : Active -> ConfirmationAction -> String
 confirmationHelp active action =
@@ -434,6 +441,13 @@ confirmationHelp active action =
 
         RemoveBlockDialog _ _ ->
             Translations.confirmBlockHelp active.texts
+
+        SetMultiCommunityDeletedDialog deleted ->
+            if deleted then
+                Translations.confirmDeleteHelp active.texts
+
+            else
+                Translations.multiCommunityRestoreHelp active.texts
 
 
 viewDonationPrompt : Active -> Html Msg

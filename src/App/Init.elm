@@ -17,6 +17,7 @@ import Feature.CommunityManage.State
 import Feature.Editor.State
 import Feature.Editor.Update as Editor
 import Feature.Feed as Feed
+import Feature.MultiCommunity as MultiCommunity
 import Feature.Notifications as Notifications
 import Feature.Post as Post
 import Feature.Profile as Profile
@@ -90,6 +91,7 @@ init rawFlags url key =
             , communityPage = Community.initial
             , searchPage = Search.initial
             , notificationsPage = Notifications.initial
+            , multiCommunity = MultiCommunity.initial
             , profile = Profile.initial
             , editorPage = Feature.Editor.State.initial
             , communityCreate = CommunityCreate.initial

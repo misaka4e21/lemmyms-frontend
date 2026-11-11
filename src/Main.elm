@@ -3,7 +3,7 @@ module Main exposing (main)
 import Api
 import App.Access exposing (authProblem)
 import App.Browser exposing (receiveIncoming)
-import App.Features exposing (updateAccountBlocks, updateAccountContent, updateAccountSettings, updateAuth, updateCommunity, updateCommunityCreate, updateEditor, updateFeed, updateManage, updateNotifications, updatePost, updateProfile, updateReport, updateSearch, updateSiteAdmin)
+import App.Features exposing (updateAccountBlocks, updateAccountContent, updateAccountSettings, updateAuth, updateCommunity, updateCommunityCreate, updateEditor, updateFeed, updateManage, updateMultiCommunity, updateNotifications, updatePost, updateProfile, updateReport, updateSearch, updateSiteAdmin)
 import App.Feedback exposing (Flash(..))
 import App.Init exposing (init)
 import App.Localization exposing (beginStartup, resolveCatalog, selectLocale)
@@ -16,6 +16,7 @@ import Browser.Navigation as Navigation
 import Feature.AccountBlocks as AccountBlocks
 import Feature.Auth.Update as Auth
 import Feature.CommunityManage.Update as Manage
+import Feature.MultiCommunity as MultiCommunity
 import Feature.Post as Post
 import Feature.SiteAdmin.Update as SiteAdmin
 import Json.Decode as Decode
@@ -325,6 +326,16 @@ update message model =
             else
                 ( model, Cmd.none )
 
+        MultiCommunityMessage event ->
+            updateMultiCommunity event model
+
+        MultiCommunityResponse epoch event ->
+            if epoch == model.routeEpoch then
+                updateMultiCommunity event model
+
+            else
+                ( model, Cmd.none )
+
         CommunityCreateMessage event ->
             updateCommunityCreate event model
 
@@ -444,6 +455,9 @@ confirmAction action model =
         RemoveBlockDialog kind target ->
             updateAccountBlocks (AccountBlocks.RemoveBlock kind target) model
 
+        SetMultiCommunityDeletedDialog deleted ->
+            updateMultiCommunity (MultiCommunity.SetDeleted deleted) model
+
 
 confirmationTriggerId : ConfirmationAction -> String
 confirmationTriggerId action =
@@ -462,3 +476,6 @@ confirmationTriggerId action =
 
         RemoveBlockDialog kind target ->
             "block-remove-" ++ kind ++ "-" ++ target
+
+        SetMultiCommunityDeletedDialog _ ->
+            "multi-community-delete"

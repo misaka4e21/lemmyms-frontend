@@ -55,7 +55,7 @@ type NotificationKind
 type NotificationData
     = NotificationComment CommentView
     | NotificationPost PostView
-    | NotificationPrivateMessage PrivateMessage
+    | NotificationPrivateMessage PrivateMessageView
     | NotificationModAction ModlogView
 
 
@@ -235,6 +235,37 @@ type alias CommunityTag =
     , communityId : Id
     , color : String
     , deleted : Bool
+    }
+
+
+type alias MultiCommunity =
+    { id : Id
+    , creatorId : Id
+    , name : String
+    , title : Maybe String
+    , summary : Maybe String
+    , sidebar : Maybe String
+    , local : Bool
+    , deleted : Bool
+    , apId : String
+    , subscribers : Int
+    , subscribersLocal : Int
+    , communities : Int
+    , publishedAt : String
+    , updatedAt : Maybe String
+    }
+
+
+type alias MultiCommunityView =
+    { multi : MultiCommunity
+    , followState : Maybe FollowState
+    , owner : Person
+    }
+
+
+type alias MultiCommunityResponse =
+    { multiCommunityView : MultiCommunityView
+    , communities : List CommunityView
     }
 
 
@@ -521,7 +552,25 @@ type alias NotificationView =
 
 
 type alias PrivateMessage =
-    { id : Id }
+    { id : Id
+    , creatorId : Id
+    , recipientId : Id
+    , content : String
+    , deleted : Bool
+    , deletedByRecipient : Bool
+    , removed : Bool
+    , publishedAt : String
+    , updatedAt : Maybe String
+    , local : Bool
+    , apId : String
+    }
+
+
+type alias PrivateMessageView =
+    { privateMessage : PrivateMessage
+    , creator : Person
+    , recipient : Person
+    }
 
 
 type alias PostReport =
@@ -575,11 +624,25 @@ type alias CommunityReport =
     }
 
 
+type alias PrivateMessageReport =
+    { id : Id
+    , creatorId : Id
+    , privateMessageId : Id
+    , originalPmText : String
+    , reason : String
+    , resolved : Bool
+    , resolverId : Maybe Id
+    , publishedAt : String
+    , updatedAt : Maybe String
+    , conclusion : Maybe String
+    }
+
+
 type ReportView
     = PostReportView PostReport Post Community Person (Maybe Person)
     | CommentReportView CommentReport Comment Post Community Person (Maybe Person)
     | CommunityReportView CommunityReport Community Person (Maybe Person)
-    | PrivateMessageReportView Id String Bool (Maybe String) String Person (Maybe Person)
+    | PrivateMessageReportView PrivateMessageReport PrivateMessage Person Person (Maybe Person)
 
 
 type alias Modlog =
@@ -969,6 +1032,40 @@ communityTag =
         |> and (defaultField "deleted" False D.bool)
 
 
+multiCommunity : Decoder MultiCommunity
+multiCommunity =
+    D.succeed MultiCommunity
+        |> and (D.field "id" identifier)
+        |> and (D.field "creator_id" identifier)
+        |> and (D.field "name" D.string)
+        |> and (maybeField "title" D.string)
+        |> and (maybeField "summary" D.string)
+        |> and (maybeField "sidebar" D.string)
+        |> and (defaultField "local" False D.bool)
+        |> and (defaultField "deleted" False D.bool)
+        |> and (D.field "ap_id" D.string)
+        |> and (defaultField "subscribers" 0 D.int)
+        |> and (defaultField "subscribers_local" 0 D.int)
+        |> and (defaultField "communities" 0 D.int)
+        |> and (D.field "published_at" D.string)
+        |> and (maybeField "updated_at" D.string)
+
+
+multiCommunityView : Decoder MultiCommunityView
+multiCommunityView =
+    D.map3 MultiCommunityView
+        (D.field "multi" multiCommunity)
+        (maybeField "follow_state" followState)
+        (D.field "owner" person)
+
+
+multiCommunityResponse : Decoder MultiCommunityResponse
+multiCommunityResponse =
+    D.map2 MultiCommunityResponse
+        (D.field "multi_community_view" multiCommunityView)
+        (defaultField "communities" [] (D.list communityView))
+
+
 communityResponse : Decoder CommunityResponse
 communityResponse =
     D.map3 CommunityResponse
@@ -1333,7 +1430,26 @@ notification =
 
 privateMessage : Decoder PrivateMessage
 privateMessage =
-    D.map PrivateMessage (D.field "id" identifier)
+    D.succeed PrivateMessage
+        |> and (D.field "id" identifier)
+        |> and (D.field "creator_id" identifier)
+        |> and (D.field "recipient_id" identifier)
+        |> and (D.field "content" D.string)
+        |> and (defaultField "deleted" False D.bool)
+        |> and (defaultField "deleted_by_recipient" False D.bool)
+        |> and (defaultField "removed" False D.bool)
+        |> and (D.field "published_at" D.string)
+        |> and (maybeField "updated_at" D.string)
+        |> and (defaultField "local" False D.bool)
+        |> and (D.field "ap_id" D.string)
+
+
+privateMessageView : Decoder PrivateMessageView
+privateMessageView =
+    D.map3 PrivateMessageView
+        (D.field "private_message" privateMessage)
+        (D.field "creator" person)
+        (D.field "recipient" person)
 
 
 notificationData : Decoder NotificationData
@@ -1349,7 +1465,7 @@ notificationData =
                         D.map NotificationPost postView
 
                     "private_message" ->
-                        D.map NotificationPrivateMessage privateMessage
+                        D.map NotificationPrivateMessage privateMessageView
 
                     "mod_action" ->
                         D.map NotificationModAction modlogView
@@ -1420,6 +1536,21 @@ communityReport =
         |> and (maybeField "conclusion" D.string)
 
 
+privateMessageReport : Decoder PrivateMessageReport
+privateMessageReport =
+    D.succeed PrivateMessageReport
+        |> and (D.field "id" identifier)
+        |> and (D.field "creator_id" identifier)
+        |> and (D.field "private_message_id" identifier)
+        |> and (D.field "original_pm_text" D.string)
+        |> and (D.field "reason" D.string)
+        |> and (defaultField "resolved" False D.bool)
+        |> and (maybeField "resolver_id" identifier)
+        |> and (D.field "published_at" D.string)
+        |> and (maybeField "updated_at" D.string)
+        |> and (maybeField "conclusion" D.string)
+
+
 reportView : Decoder ReportView
 reportView =
     D.field "type_" D.string
@@ -1460,16 +1591,11 @@ reportView =
                             (maybeField "resolver" person)
 
                     "private_message" ->
-                        D.map7
-                            (\reportId reason resolvedValue conclusionValue publishedAt creatorValue resolverValue ->
-                                PrivateMessageReportView reportId reason resolvedValue conclusionValue publishedAt creatorValue resolverValue
-                            )
-                            (D.field "private_message_report" (D.field "id" identifier))
-                            (D.field "private_message_report" (D.field "reason" D.string))
-                            (D.field "private_message_report" (defaultField "resolved" False D.bool))
-                            (D.field "private_message_report" (maybeField "conclusion" D.string))
-                            (D.field "private_message_report" (D.field "published_at" D.string))
+                        D.map5 PrivateMessageReportView
+                            (D.field "private_message_report" privateMessageReport)
+                            (D.field "private_message" privateMessage)
                             (D.field "creator" person)
+                            (D.field "private_message_creator" person)
                             (maybeField "resolver" person)
 
                     other ->

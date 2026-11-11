@@ -6,13 +6,14 @@ import App.Shell exposing (viewBoot, viewReady)
 import App.State exposing (ConfirmationAction(..), Model, Msg(..))
 import App.View.Account exposing (pageLogin, pagePasswordReset, pagePasswordResetConfirm, pagePasswordSettings, pagePublicProfile, pageRegister, pageSettings, pageVerify)
 import App.View.Content exposing (editorConfig, pageCommentTarget, pageCommunities, pageCommunity, pageCreatePost, pageLatest, pagePost, pageSearch, postCard)
-import App.View.Participation exposing (pageManage, pageNewCommunity, pageNotifications)
+import App.View.Participation exposing (pageManage, pageMessageComposer, pageNewCommunity, pageNotifications)
 import Browser
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
 import Feature.Editor.State exposing (EditorMode(..))
 import Feature.Editor.Update as Editor
 import Feature.Editor.View
+import Feature.MultiCommunity as MultiCommunity
 import Feature.Report as Report
 import Feature.SiteAdmin.Update as SiteAdmin
 import Feature.SiteAdmin.View as SiteAdminView
@@ -103,6 +104,21 @@ routeTitle model active =
         Route.CreateCommunity ->
             Translations.createCommunity texts
 
+        Route.CreatePrivateMessage _ ->
+            Translations.createPrivateMessage texts
+
+        Route.MultiCommunities ->
+            Translations.multiCommunities texts
+
+        Route.CreateMultiCommunity ->
+            Translations.createMultiCommunity texts
+
+        Route.MultiCommunity _ ->
+            Translations.multiCommunities texts
+
+        Route.MultiCommunitySettings _ ->
+            Translations.multiCommunitySettings texts
+
         Route.CreatePost _ ->
             Translations.publishTopic texts
 
@@ -190,6 +206,21 @@ pageView model active =
 
         Route.CreateCommunity ->
             pageNewCommunity model active
+
+        Route.CreatePrivateMessage _ ->
+            pageMessageComposer model active
+
+        Route.MultiCommunities ->
+            MultiCommunity.pageDirectory (multiCommunityConfig model active) model.multiCommunity (multiCommunityViewModel model) active
+
+        Route.MultiCommunity name ->
+            MultiCommunity.pageDetail (multiCommunityConfig model active) model.multiCommunity (multiCommunityViewModel model) active name
+
+        Route.CreateMultiCommunity ->
+            MultiCommunity.pageCreate (multiCommunityConfig model active) model.multiCommunity (multiCommunityViewModel model) active
+
+        Route.MultiCommunitySettings name ->
+            MultiCommunity.pageSettings (multiCommunityConfig model active) model.multiCommunity (multiCommunityViewModel model) active name
 
         Route.CreatePost (Just id) ->
             Feature.Editor.View.pageEditor (editorConfig model) { editor = model.editorPage.editor, source = model.editorPage.source } active (CreateTopic (String.fromInt id))
@@ -327,6 +358,35 @@ siteAdminViewModel model =
     , formatted = model.formatted
     , url = model.url
     }
+
+
+multiCommunityConfig : Model -> Active -> MultiCommunity.Config Msg
+multiCommunityConfig model active =
+    { retry = RetryPage
+    , listingChanged = MultiCommunityMessage << MultiCommunity.ListingChanged
+    , sortChanged = MultiCommunityMessage << MultiCommunity.SortChanged
+    , searchChanged = MultiCommunityMessage << MultiCommunity.SearchChanged
+    , searchSubmitted = MultiCommunityMessage MultiCommunity.SearchSubmitted
+    , postSortChanged = MultiCommunityMessage << MultiCommunity.PostSortChanged
+    , timeRangeChanged = MultiCommunityMessage << MultiCommunity.TimeRangeChanged
+    , follow = MultiCommunityMessage << MultiCommunity.Follow
+    , nameChanged = MultiCommunityMessage << MultiCommunity.NameChanged
+    , titleChanged = MultiCommunityMessage << MultiCommunity.TitleChanged
+    , summaryChanged = MultiCommunityMessage << MultiCommunity.SummaryChanged
+    , sidebarAuthoring = MultiCommunityMessage << MultiCommunity.SidebarAuthoring
+    , save = MultiCommunityMessage MultiCommunity.Save
+    , setDeleted = \deleted -> OpenConfirmation (SetMultiCommunityDeletedDialog deleted)
+    , entrySearchChanged = MultiCommunityMessage << MultiCommunity.EntrySearchChanged
+    , entrySearchSubmitted = MultiCommunityMessage MultiCommunity.EntrySearchSubmitted
+    , addEntry = MultiCommunityMessage << MultiCommunity.AddEntry
+    , removeEntry = MultiCommunityMessage << MultiCommunity.RemoveEntry
+    , postCard = postCard model active
+    }
+
+
+multiCommunityViewModel : Model -> MultiCommunity.ViewModel
+multiCommunityViewModel model =
+    { auth = model.auth, url = model.url }
 
 
 reportDialog : Model -> Active -> Html Msg

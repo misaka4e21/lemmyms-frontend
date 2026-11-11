@@ -355,6 +355,12 @@ pageCommunities config model active =
     pageHeading (Translations.communitiesTitle active.texts)
         (section [ A.class "stack" ]
             [ p [ A.class "muted" ] [ text (Translations.communitiesIntro active.texts) ]
+            , div [ A.class "actions" ]
+                [ a [ A.class "outlined-button", A.href (Route.path Route.MultiCommunities) ]
+                    [ text (Translations.multiCommunities active.texts) ]
+                , a [ A.class "outlined-button", A.href (Route.path Route.CreateMultiCommunity) ]
+                    [ text (Translations.createMultiCommunity active.texts) ]
+                ]
             , viewRemote config.retry
                 active.texts
                 model.communities

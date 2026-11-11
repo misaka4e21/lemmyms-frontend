@@ -1,4 +1,4 @@
-module App.Features exposing (updateAccountBlocks, updateAccountContent, updateAccountSettings, updateAuth, updateCommunity, updateCommunityCreate, updateEditor, updateFeed, updateManage, updateNotifications, updatePost, updateProfile, updateReport, updateSearch, updateSiteAdmin)
+module App.Features exposing (updateAccountBlocks, updateAccountContent, updateAccountSettings, updateAuth, updateCommunity, updateCommunityCreate, updateEditor, updateFeed, updateManage, updateMultiCommunity, updateNotifications, updatePost, updateProfile, updateReport, updateSearch, updateSiteAdmin)
 
 import Api
 import App.Access exposing (authProblem, clearPrivate)
@@ -16,6 +16,7 @@ import Feature.CommunityCreate as CommunityCreate
 import Feature.CommunityManage.Update as Manage
 import Feature.Editor.Update as Editor
 import Feature.Feed as Feed
+import Feature.MultiCommunity as MultiCommunity
 import Feature.Notifications as Notifications
 import Feature.Post as Post
 import Feature.Profile as Profile
@@ -451,6 +452,30 @@ updateNotifications message model =
 
                 Nothing ->
                     model
+
+        navigation =
+            case outcome.navigation of
+                Just target ->
+                    Navigation.pushUrl model.key target
+
+                Nothing ->
+                    Cmd.none
+
+        page =
+            case outcome.sessionProblem of
+                Just _ ->
+                    case message of
+                        Notifications.Loaded _ ->
+                            state
+
+                        _ ->
+                            { state
+                                | notifications = base.notificationsPage.notifications
+                                , unreadCount = base.notificationsPage.unreadCount
+                            }
+
+                Nothing ->
+                    state
     in
     ( { base
         | flash =
@@ -459,31 +484,44 @@ updateNotifications message model =
 
             else
                 outcome.flash
-        , notificationsPage =
-            (\notificationsPageState ->
-                { notificationsPageState
-                    | notifications =
-                        if outcome.sessionProblem == Nothing then
-                            state.notifications
-
-                        else
-                            case message of
-                                Notifications.Loaded _ ->
-                                    state.notifications
-
-                                _ ->
-                                    base.notificationsPage.notifications
-                    , unreadCount =
-                        if outcome.sessionProblem == Nothing then
-                            state.unreadCount
-
-                        else
-                            base.notificationsPage.unreadCount
-                }
-            )
-                base.notificationsPage
+        , notificationsPage = page
       }
-    , Cmd.map (NotificationsResponse model.routeEpoch) command
+    , Cmd.batch [ Cmd.map (NotificationsResponse model.routeEpoch) command, navigation ]
+    )
+
+
+updateMultiCommunity : MultiCommunity.Msg -> Model -> ( Model, Cmd Msg )
+updateMultiCommunity message model =
+    let
+        ( state, command, outcome ) =
+            MultiCommunity.update "" model.url message model.multiCommunity
+
+        base =
+            case outcome.sessionProblem of
+                Just problem ->
+                    authProblem model problem
+
+                Nothing ->
+                    model
+
+        navigation =
+            case outcome.navigation of
+                Just target ->
+                    Navigation.pushUrl model.key target
+
+                Nothing ->
+                    Cmd.none
+    in
+    ( { base
+        | flash =
+            if outcome.flash == NoFlash then
+                base.flash
+
+            else
+                outcome.flash
+        , multiCommunity = state
+      }
+    , Cmd.batch [ Cmd.map (MultiCommunityResponse model.routeEpoch) command, navigation ]
     )
 
 

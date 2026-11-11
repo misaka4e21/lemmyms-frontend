@@ -477,6 +477,10 @@ h2 { margin-block: 0 0.5rem; }
 .attachment-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.65rem; }
 .attachment-list li,
 .roster-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; align-items: center; }
+.message-card h2 { overflow-wrap: anywhere; }
+.message-card article { display: grid; gap: 0.5rem; }
+.entry-picker { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.5rem; }
+.entry-option { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 48px; overflow-wrap: anywhere; }
 .profile-card .avatar { display: block; max-width: 8rem; max-height: 8rem; border-radius: 50%; }
 .conflict-panel { padding: 1rem; border-inline-start: 4px solid var(--md-error); background: var(--md-surface-container-high); }
 .conflict-panel pre { overflow: auto; white-space: pre-wrap; }

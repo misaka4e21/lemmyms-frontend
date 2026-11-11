@@ -352,11 +352,33 @@ pagePublicProfile config model active username =
             (\profile ->
                 div [ A.class "stack" ]
                     [ profileCard active profile
+                    , messageAction active model.auth profile
                     , profileTabs config model active username
                     , profileContent config model active
                     ]
             )
         )
+
+
+messageAction : Active -> AuthState -> Domain.PersonView -> Html msg
+messageAction active auth profile =
+    case auth of
+        Authenticated account ->
+            if
+                account.localUserView.person.id
+                    == profile.person.id
+                    || not account.localUserView.localUser.privateMessagesEnabled
+            then
+                text ""
+
+            else
+                div [ A.class "actions" ]
+                    [ a [ A.class "outlined-button", A.href (Route.path (Route.CreatePrivateMessage profile.person.id)) ]
+                        [ text (Translations.sendMessage active.texts) ]
+                    ]
+
+        _ ->
+            text ""
 
 
 profileTabs : Config msg -> ViewModel -> Active -> String -> Html msg

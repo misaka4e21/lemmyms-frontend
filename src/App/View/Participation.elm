@@ -1,4 +1,4 @@
-module App.View.Participation exposing (pageManage, pageNewCommunity, pageNotifications)
+module App.View.Participation exposing (pageManage, pageMessageComposer, pageNewCommunity, pageNotifications)
 
 import App.Context exposing (Active)
 import App.State exposing (ConfirmationAction(..), Model, Msg(..))
@@ -7,6 +7,7 @@ import Feature.CommunityManage.State exposing (ManagePostAction(..))
 import Feature.CommunityManage.Update as Manage
 import Feature.CommunityManage.View
 import Feature.Notifications as Notifications
+import Feature.Report as Report
 import Html exposing (Html)
 
 
@@ -61,7 +62,19 @@ pageManage model active id =
 
 pageNotifications : Model -> Active -> Html Msg
 pageNotifications model active =
-    Notifications.pageNotifications (notificationsViewConfig model) { unreadCount = model.notificationsPage.unreadCount, notifications = model.notificationsPage.notifications, auth = model.auth, formatted = model.formatted, url = model.url } active
+    Notifications.pageNotifications
+        (notificationsViewConfig model)
+        { unreadCount = model.notificationsPage.unreadCount
+        , notifications = model.notificationsPage.notifications
+        , auth = model.auth
+        , formatted = model.formatted
+        , url = model.url
+        , composer = model.notificationsPage.composer
+        , editingMessage = model.notificationsPage.editingMessage
+        , messageBusy = model.notificationsPage.messageBusy
+        , messageProblem = model.notificationsPage.messageProblem
+        }
+        active
 
 
 notificationsViewConfig : Model -> Notifications.Config Msg
@@ -69,7 +82,32 @@ notificationsViewConfig model =
     { retry = RetryPage
     , markNoticeRead = NotificationsMessage << Notifications.MarkNoticeRead
     , markAllNoticesRead = NotificationsMessage Notifications.MarkAllNoticesRead
+    , authoring = NotificationsMessage << Notifications.ComposerAuthoring
+    , sendMessage = NotificationsMessage Notifications.SendMessage
+    , startEditMessage = \id content -> NotificationsMessage (Notifications.StartMessageEdit id content)
+    , messageEditChanged = NotificationsMessage << Notifications.MessageEditChanged
+    , cancelMessageEdit = NotificationsMessage Notifications.CancelMessageEdit
+    , saveMessage = NotificationsMessage << Notifications.SaveMessage
+    , deleteMessage = NotificationsMessage << Notifications.DeleteMessage
+    , reportMessage = \id -> ReportMessage (Report.Open (Report.PrivateMessageTarget id))
     }
+
+
+pageMessageComposer : Model -> Active -> Html Msg
+pageMessageComposer model active =
+    Notifications.pageComposer
+        (notificationsViewConfig model)
+        { unreadCount = model.notificationsPage.unreadCount
+        , notifications = model.notificationsPage.notifications
+        , auth = model.auth
+        , formatted = model.formatted
+        , url = model.url
+        , composer = model.notificationsPage.composer
+        , editingMessage = model.notificationsPage.editingMessage
+        , messageBusy = model.notificationsPage.messageBusy
+        , messageProblem = model.notificationsPage.messageProblem
+        }
+        active
 
 
 pageNewCommunity : Model -> Active -> Html Msg

@@ -119,4 +119,55 @@ test.describe('real Lemmy backend', () => {
     await page.getByRole('button', { name: 'Log out' }).click();
     await expect(page).toHaveURL(/\/login$/);
   });
+
+  test('creates a multi-community and reads a private message', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+    const suffix = Date.now().toString(36);
+    const multiName = 'multi' + suffix;
+    const messageText = 'Real message ' + suffix;
+
+    await page.goto(base + '/login');
+    await page.getByLabel('Username or email').fill(adminUser);
+    await page.getByLabel('Password').fill(adminPassword);
+    await page.getByRole('button', { name: 'Log in', exact: true }).click();
+    await expect(page.locator('#navigation-drawer')).toContainText('@' + adminUser);
+
+    const accountResponse = await page.request.get(base + '/api/v4/account');
+    expect(accountResponse.ok()).toBeTruthy();
+    const account = await accountResponse.json();
+    const personId = account.local_user_view.person.id;
+
+    await page.goto(base + '/create_multi_community');
+    await page.getByLabel('Name', { exact: true }).fill(multiName);
+    await page.getByLabel('Title', { exact: true }).fill('Real multi ' + suffix);
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/m/' + multiName);
+    await expect(page.getByRole('heading', { level: 1, name: 'Real multi ' + suffix })).toBeVisible();
+
+    const communityResponse = await page.request.get(base + '/api/v4/community/list?limit=1');
+    expect(communityResponse.ok()).toBeTruthy();
+    const communityPage = await communityResponse.json();
+    expect(communityPage.items.length).toBeGreaterThan(0);
+    const community = communityPage.items[0].community;
+
+    await page.goto(base + '/m/' + multiName + '/settings');
+    await page.getByLabel('Search communities').fill(community.name);
+    await page.getByRole('button', { name: 'Search' }).click();
+    await page.getByRole('button', { name: 'Add community' }).click();
+    await expect(page.locator('.entry-picker').last().getByText(community.name, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Remove community' }).click();
+
+    await page.goto(base + '/m/' + multiName);
+    await page.getByRole('button', { name: 'Unfollow' }).click();
+    await page.getByRole('button', { name: 'Follow', exact: true }).click();
+    await expect(page.getByText('Following')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Posts' })).toBeVisible();
+
+    const messageResponse = await page.request.post(base + '/api/v4/private_message', {
+      data: { content: messageText, recipient_id: personId }
+    });
+    expect(messageResponse.ok()).toBeTruthy();
+    await page.goto(base + '/notifications?kind=messages');
+    await expect(page.getByText(messageText)).toBeVisible();
+  });
 });

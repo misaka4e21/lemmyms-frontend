@@ -366,4 +366,46 @@ suite =
 
                     Err error ->
                         Expect.fail (Decode.errorToString error)
+        , test "decodes private message views" <|
+            \_ ->
+                case decode Domain.privateMessageView Fixtures.privateMessageViewJson of
+                    Ok view ->
+                        Expect.equal
+                            { id = 30, content = "Hello there", creator = "alice", recipient = 2, deleted = False }
+                            { id = view.privateMessage.id
+                            , content = view.privateMessage.content
+                            , creator = view.creator.name
+                            , recipient = view.privateMessage.recipientId
+                            , deleted = view.privateMessage.deleted
+                            }
+
+                    Err error ->
+                        Expect.fail (Decode.errorToString error)
+        , test "decodes multi-community detail and follow state" <|
+            \_ ->
+                case decode Domain.multiCommunityResponse Fixtures.multiCommunityResponseJson of
+                    Ok response ->
+                        Expect.equal
+                            { name = "tech", subscribers = 3, followState = Just Domain.AcceptedFollow, communities = 1 }
+                            { name = response.multiCommunityView.multi.name
+                            , subscribers = response.multiCommunityView.multi.subscribers
+                            , followState = response.multiCommunityView.followState
+                            , communities = List.length response.communities
+                            }
+
+                    Err error ->
+                        Expect.fail (Decode.errorToString error)
+        , test "decodes private message reports" <|
+            \_ ->
+                case decode (Domain.page Domain.reportView) Fixtures.privateMessageReportJson of
+                    Ok page ->
+                        case page.items of
+                            (Domain.PrivateMessageReportView report message _ _ _) :: _ ->
+                                Expect.equal ( 9, 30, "spam" ) ( report.id, message.id, report.reason )
+
+                            _ ->
+                                Expect.fail "expected a private message report"
+
+                    Err error ->
+                        Expect.fail (Decode.errorToString error)
         ]
