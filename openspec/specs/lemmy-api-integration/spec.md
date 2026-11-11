@@ -115,6 +115,22 @@ Search SHALL send `type_` values for all, comments, posts, communities, and user
 #### Scenario: Person content query
 - **WHEN** a profile tab requests comments
 - **THEN** the request includes the username and `type_=comments` and replaces the list with the returned page
+
+### Requirement: Person lookup handle selection
+The application SHALL send a local person's single username to `GET /person` and `GET /person/content`. It SHALL send `name@domain` for a remote person. The application SHALL NOT append the local hostname to a local username and SHALL NOT strip the domain from a remote handle. When resolving an actor URL for an administrator ban, the application SHALL convert a local URL to the single username and a remote URL to `name@domain`.
+
+#### Scenario: Local person request
+- **WHEN** the application reads a local author or profile
+- **THEN** the `username` query contains only the account name
+
+#### Scenario: Remote person request
+- **WHEN** the application reads a remote author or profile
+- **THEN** the `username` query contains `name@domain`
+
+#### Scenario: Local ban actor URL
+- **WHEN** an administrator enters a local actor URL for a ban
+- **THEN** the resolution request uses the actor's single username
+
 ### Requirement: Complete account settings transport
 The application SHALL decode the account settings fields returned by `GET /account` and SHALL send supported optional fields to `PUT /account/settings/save`. Clearing an optional text field SHALL be represented explicitly. The application SHALL use the avatar and banner upload and delete endpoints for account images and SHALL NOT place image bytes or credentials in browser storage.
 

@@ -123,6 +123,29 @@ The application SHALL provide public profiles through the v4 person endpoint by 
 - **WHEN** an authenticated reader marks all notifications read
 - **THEN** the application calls the v4 mark-all endpoint and refreshes the unread counts without inventing a snapshot cursor
 
+### Requirement: Drawer profile entry
+For an authenticated reader, the drawer identity header SHALL link to the reader's own profile. The header SHALL keep showing the reader's avatar, display name, username, and role text. The drawer account destinations SHALL NOT include a separate Profile destination. The application bar SHALL NOT include a profile control.
+
+#### Scenario: Open own profile from the drawer header
+- **WHEN** an authenticated reader activates the identity header at the top of the drawer
+- **THEN** the application opens the reader's own profile route
+
+#### Scenario: Modal drawer closes on profile navigation
+- **WHEN** an authenticated reader activates the drawer identity header while the drawer is modal
+- **THEN** the own profile opens and the modal drawer closes
+
+#### Scenario: Drawer has no Profile destination
+- **WHEN** an authenticated reader opens the drawer
+- **THEN** the account destinations contain My content, Blocks, Settings, and Log out without a duplicate Profile link
+
+#### Scenario: Application bar has no profile control
+- **WHEN** an authenticated reader loads a page
+- **THEN** the application bar keeps its menu button and wordmark without a profile control
+
+#### Scenario: Anonymous drawer header
+- **WHEN** an anonymous reader opens the drawer
+- **THEN** the identity header links to login instead of a profile route
+
 ### Requirement: Community creation and management
 The application SHALL support community creation with `name`, `title`, `sidebar`, `summary`, `nsfw`, `posting_restricted_to_mods`, `visibility`, discussion languages, and vote modes. Authorized managers SHALL edit those fields, manage moderators, manage community bans, approve or reject pending follows, and open community-scoped reports and modlog entries. Management authority SHALL not imply membership or posting permission. The application SHALL use `can_mod` and the authenticated account's moderator/admin records to gate actions.
 
