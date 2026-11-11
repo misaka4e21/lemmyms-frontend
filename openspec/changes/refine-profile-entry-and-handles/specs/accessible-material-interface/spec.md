@@ -2,7 +2,7 @@
 
 ### Requirement: Navigation drawer structure
 
-The navigation drawer SHALL be 360 CSS pixels wide where the viewport allows, SHALL begin below the application bar, and SHALL scroll its own content when that content exceeds the viewport height. It SHALL present, in order: a profile header, the primary destinations Latest, Communities, Search, and Notifications, a separator, any role-gated current-site management destination, the account destinations, and a footer containing the language selector and localization status. The drawer SHALL expose a navigation landmark named by the localized main navigation label.
+The navigation drawer SHALL be 360 CSS pixels wide where the viewport allows, SHALL begin below the application bar, and SHALL scroll its own content when that content exceeds the viewport height. It SHALL present, in order: a profile header that links to the reader's own profile when signed in and to login when anonymous, the primary destinations Latest, Communities, Search, and Notifications, a separator, any role-gated current-site management destination, the account destinations, and a footer containing the language selector and localization status. The drawer SHALL expose a navigation landmark named by the localized main navigation label.
 
 Each destination SHALL render as a control at least 48 CSS pixels tall with a decorative icon and a visible localized label. The current destination SHALL show an indicator surface and at least one non-color cue. The notification destination SHALL display the unread count as a trailing badge, and its accessible name SHALL retain the full localized notification phrase including the count, including when the count is zero. When the unread count is zero, the trailing badge SHALL remain visible with a neutral surface treatment and SHALL NOT use the error color.
 
@@ -48,15 +48,15 @@ Each destination SHALL render as a control at least 48 CSS pixels tall with a de
 
 ## ADDED Requirements
 
-### Requirement: Top-bar profile control
-The application bar profile control SHALL be a link or button with a localized accessible name identifying the reader's profile. It SHALL provide a target of at least 48 by 48 CSS pixels and SHALL show a decorative avatar with the display name visible where space allows. The avatar SHALL NOT replace the accessible name on compact viewports.
+### Requirement: Drawer profile header link
+The signed-in drawer profile header SHALL be a link with a localized accessible name that identifies the profile and includes the displayed identity. It SHALL provide a target of at least 48 by 48 CSS pixels and SHALL show a decorative avatar, the display name, the username, and any role text.
 
 #### Scenario: Keyboard profile entry
 
-- **WHEN** a keyboard user focuses and activates the top-bar profile control
-- **THEN** the own profile opens and the control has a visible focus indicator and localized accessible name
+- **WHEN** a keyboard user focuses and activates the drawer profile header
+- **THEN** the own profile opens and the link has a visible focus indicator and a localized accessible name that includes the display name
 
-#### Scenario: Compact profile entry
+#### Scenario: Narrow identity header
 
-- **WHEN** the application bar renders at a compact width
-- **THEN** the avatar remains available, the accessible name remains the localized profile label, and the control does not crowd out the menu or wordmark
+- **WHEN** the drawer renders at a narrow width
+- **THEN** the avatar remains visible, the accessible name remains available, and the identity text does not introduce page-level horizontal scrolling

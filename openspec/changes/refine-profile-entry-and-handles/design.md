@@ -1,12 +1,13 @@
 ## Context
 
-The drawer contains a Profile link in `drawerAccount`, while `viewTopBar` currently exposes only the menu button and wordmark. Person links and lookups mostly use `person.name`, even for remote people. The v4 person resolver treats an identifier containing `@` as remote and a bare identifier as local. See `proposal.md` for motivation.
+The drawer already renders the signed-in identity through `viewDrawerProfile`, but that block is a static `div`; `drawerAccount` also carries a separate Profile link. Person links and lookups mostly use `person.name`, even for remote people. The v4 person resolver treats an identifier containing `@` as remote and a bare identifier as local. See `proposal.md` for motivation.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Move profile navigation into the application bar.
+- Make the drawer identity header the profile entry.
+- Remove the duplicate Profile destination from the drawer account list.
 - Use one handle rule for links and API reads.
 - Keep local usernames free of the local hostname.
 - Keep `/u/:username` compatible with both handle forms.
@@ -14,16 +15,17 @@ The drawer contains a Profile link in `drawerAccount`, while `viewTopBar` curren
 **Non-Goals:**
 
 - Changing the person API contract.
+- Adding a profile control to the application bar.
 - Adding a separate profile menu or hover card.
-- Reworking the drawer identity header into a second navigation entry.
+- Changing the anonymous drawer header's login behavior.
 
 ## Decisions
 
-### Top-bar profile control
+### Drawer identity header
 
-`viewTopBar` gains a right-side profile link when the session is authenticated. It shows the avatar always and the display name on wide screens. It links to `/u/<handle>` for the signed-in person. The drawer Profile destination is removed from `drawerAccount`; the drawer profile header remains a non-navigation identity summary.
+`viewDrawerProfile` returns a link for authenticated readers, pointing to `/u/<handle>` for the signed-in person. The link wraps the existing avatar, display name, username, and role text, so the identity block does not gain a second profile control. `drawerAccount` drops the Profile destination. The anonymous branch keeps its existing login link.
 
-The application bar keeps its menu button and wordmark. The profile control uses the localized profile label as its accessible name, so hiding the visible display name on compact widths does not remove the control name.
+The authenticated link uses a localized accessible name that names the profile and includes the displayed identity. The link receives the drawer's extra attributes so the modal drawer closes when the profile route opens. `viewTopBar` keeps its menu button and wordmark and gains no profile control.
 
 ### Profile handle rule
 
@@ -42,14 +44,15 @@ No route shape changes. `/u/:username` continues to use a single path segment. `
 ## Risks / Trade-offs
 
 - **A remote profile may be uncached and fail anonymously** → Show the localized unavailable state; do not silently rewrite the handle to a local name.
-- **The top bar can get crowded on narrow screens** → Hide the display name first, keep the avatar and accessible label, and preserve the menu and wordmark.
+- **The identity header can still look static** → Give the whole header a hover and focus-visible treatment and keep its target at least 48 CSS pixels tall.
+- **The modal drawer can stay open after navigation** → Pass the drawer's close attributes to the header link and test the closed state after activation.
 - **Own-profile comparison can drift** → Centralize local-name and local-acct matching in one domain helper and test both forms.
 - **Ban actor URLs can target another instance** → Preserve the host in the normalized handle instead of assuming local.
 
 ## Migration Plan
 
 1. Add the handle and own-profile helpers with unit tests.
-2. Add the top-bar profile control and remove the drawer Profile link.
+2. Make the drawer identity header a profile link, close the modal drawer on activation, and remove the separate Profile destination.
 3. Replace profile link and person query call sites.
 4. Normalize local and remote ban actor URLs.
 5. Update accessibility, route, browser, and real-backend tests.
