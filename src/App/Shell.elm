@@ -155,7 +155,7 @@ viewModalDrawer model active =
 
 drawerContent : Model -> Active -> List (Html.Attribute Msg) -> List (Html Msg)
 drawerContent model active extras =
-    viewDrawerProfile model active
+    viewDrawerProfile model active extras
         :: [ nav
                 [ A.class "drawer-nav"
                 , A.attribute "aria-label" (Translations.mainNavigation active.texts)
@@ -173,8 +173,8 @@ drawerContent model active extras =
            ]
 
 
-viewDrawerProfile : Model -> Active -> Html Msg
-viewDrawerProfile model active =
+viewDrawerProfile : Model -> Active -> List (Html.Attribute Msg) -> Html Msg
+viewDrawerProfile model active extras =
     case model.auth of
         Authenticated account ->
             let
@@ -211,8 +211,13 @@ viewDrawerProfile model active =
                                 " · " ++ String.join " · " roles
                            )
             in
-            div [ A.class "drawer-profile" ]
-                [ if String.isEmpty avatarUrl then
+            a
+                (A.href (Route.path (Route.Profile (Domain.profileHandle account.localUserView.person)))
+                    :: A.class "drawer-profile"
+                    :: extras
+                )
+                [ span [ A.class "sr-only" ] [ text (Translations.navProfile active.texts) ]
+                , if String.isEmpty avatarUrl then
                     span
                         [ A.class "drawer-avatar drawer-avatar-placeholder"
                         , A.attribute "aria-hidden" "true"
@@ -319,8 +324,7 @@ drawerAccount model active extras =
     in
     case model.auth of
         Authenticated account ->
-            [ drawerLink model active (Route.Profile (Domain.personName account)) Icon.Person (Translations.navProfile texts) extras
-            , drawerLink model active (Route.AccountContent SavedContent) (Icon.Bookmark False) (Translations.navMyContent texts) extras
+            [ drawerLink model active (Route.AccountContent SavedContent) (Icon.Bookmark False) (Translations.navMyContent texts) extras
             , drawerLink model active Route.AccountBlocks Icon.Block (Translations.navBlocks texts) extras
             , drawerLink model active Route.Settings Icon.Settings (Translations.navSettings texts) extras
             , button

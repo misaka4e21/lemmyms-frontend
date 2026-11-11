@@ -48,7 +48,7 @@ type Action
 
 
 type alias Context =
-    { csrf : String, url : Url }
+    { csrf : String, url : Url, siteHost : String }
 
 
 type alias Outcome =
@@ -344,7 +344,7 @@ resolveBan context state ban =
     else
         ( { state | model = { model | banBusy = True, banProblem = Nothing } }
         , Api.get
-            ("/person?username=" ++ Url.percentEncode (actorToUsername model.banActor))
+            ("/person?username=" ++ Url.percentEncode (actorToUsername context.siteHost model.banActor))
             (BanResolved ban << Api.decodeResponse (Decode.field "person_view" Domain.personView |> Decode.map (.person >> .id)))
         )
 
@@ -378,19 +378,35 @@ sendBan context state personId ban =
     )
 
 
-actorToUsername : String -> String
-actorToUsername actor =
+actorToUsername : String -> String -> String
+actorToUsername siteHost actor =
     let
         value =
             String.trim actor
     in
     if String.startsWith "http://" value || String.startsWith "https://" value then
-        case String.split "/" value of
-            _ :: _ :: host :: rest ->
-                Maybe.withDefault value (List.head (List.reverse rest)) ++ "@" ++ host
+        case Url.fromString value of
+            Just parsed ->
+                let
+                    name =
+                        parsed.path
+                            |> String.split "/"
+                            |> List.filter (not << String.isEmpty)
+                            |> List.reverse
+                            |> List.head
+                            |> Maybe.withDefault value
+                in
+                if String.toLower parsed.host == String.toLower siteHost then
+                    name
 
-            _ ->
+                else
+                    name ++ "@" ++ parsed.host
+
+            Nothing ->
                 value
+
+    else if String.startsWith "@" value then
+        String.dropLeft 1 value
 
     else
         value

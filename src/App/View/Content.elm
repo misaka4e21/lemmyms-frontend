@@ -190,7 +190,7 @@ personCard active personView =
             personView.person
     in
     article [ A.class "card" ]
-        [ h2 [] [ a [ A.href (Route.path (Route.Profile person.name)) ] [ text (Domain.displayNameOf person) ] ]
+        [ h2 [] [ a [ A.href (Route.path (Route.Profile (Domain.profileHandle person))) ] [ text (Domain.displayNameOf person) ] ]
         , p [ A.class "metadata" ] [ bdi [] [ text person.apId ] ]
         , Maybe.withDefault "" person.bio |> Lemmy.Markdown.render
         ]

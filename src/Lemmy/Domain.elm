@@ -1514,6 +1514,27 @@ acctOf value =
     value.name ++ "@" ++ hostOf value.apId
 
 
+profileHandle : Person -> String
+profileHandle value =
+    if value.local then
+        value.name
+
+    else
+        acctOf value
+
+
+isOwnProfile : MyUserInfo -> String -> Bool
+isOwnProfile user handle =
+    let
+        viewer =
+            user.localUserView.person
+
+        candidate =
+            String.toLower handle
+    in
+    candidate == String.toLower viewer.name || candidate == String.toLower (acctOf viewer)
+
+
 displayNameOf : Person -> String
 displayNameOf value =
     Maybe.withDefault value.name value.displayName

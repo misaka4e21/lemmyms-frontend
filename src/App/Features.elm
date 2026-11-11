@@ -248,7 +248,19 @@ updateSiteAdmin : SiteAdmin.Msg -> Model -> ( Model, Cmd Msg )
 updateSiteAdmin message model =
     let
         ( state, command, outcome ) =
-            SiteAdmin.update { csrf = "", url = model.url } message model.siteAdmin
+            SiteAdmin.update
+                { csrf = ""
+                , url = model.url
+                , siteHost =
+                    case model.site of
+                        Just site ->
+                            site.localSite.hostname
+
+                        Nothing ->
+                            model.url.host
+                }
+                message
+                model.siteAdmin
 
         base =
             case outcome.sessionProblem of

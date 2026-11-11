@@ -121,16 +121,16 @@ loadRoute model =
 
         Route.Profile username ->
             let
-                viewerName =
+                viewer =
                     case model.auth of
                         Authenticated account ->
-                            Just (Domain.personName account)
+                            Just account
 
                         _ ->
                             Nothing
 
                 ( state, command ) =
-                    Profile.loadPublic model.url username (Route.query "view" model.url) viewerName reset.profile
+                    Profile.loadPublic model.url username (Route.query "view" model.url) viewer reset.profile
             in
             ( { reset | profile = state }, Cmd.map (ProfileResponse epoch) command )
 

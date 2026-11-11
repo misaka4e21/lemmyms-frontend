@@ -82,7 +82,10 @@ commentCard config texts view =
         , A.tabindex -1
         , A.attribute "aria-labelledby" ("comment-heading-" ++ commentId)
         ]
-        [ h2 [ A.id ("comment-heading-" ++ commentId), A.dir "auto" ] [ bdi [] [ text (Translations.authorLabel authorText texts) ] ]
+        [ h2 [ A.id ("comment-heading-" ++ commentId), A.dir "auto" ]
+            [ a [ A.href (Route.path (Route.Profile (Domain.profileHandle view.creator))) ]
+                [ bdi [] [ text (Translations.authorLabel authorText texts) ] ]
+            ]
         , p [ A.class "metadata" ]
             [ time [ A.datetime comment.publishedAt, A.attribute "data-commune-time" "" ] [ text comment.publishedAt ]
             ]

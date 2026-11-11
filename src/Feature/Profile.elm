@@ -368,7 +368,7 @@ profileTabs config model active username =
         own =
             case model.auth of
                 Authenticated account ->
-                    Domain.personName account == username
+                    Domain.isOwnProfile account username
 
                 _ ->
                     False
@@ -588,11 +588,16 @@ clearPrivate model =
     { model | ownProfile = NotAsked, profileForm = emptyProfileForm, content = NotAsked }
 
 
-loadPublic : Url.Url -> String -> String -> Maybe String -> Model -> ( Model, Cmd Msg )
-loadPublic url username requestedView viewerName model =
+loadPublic : Url.Url -> String -> String -> Maybe Domain.MyUserInfo -> Model -> ( Model, Cmd Msg )
+loadPublic url username requestedView viewer model =
     let
         own =
-            viewerName == Just username
+            case viewer of
+                Just account ->
+                    Domain.isOwnProfile account username
+
+                Nothing ->
+                    False
 
         view =
             normalizedProfileView own requestedView

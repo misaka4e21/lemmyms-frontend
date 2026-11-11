@@ -127,6 +127,7 @@ const comment = {
 };
 
 const replyPerson = { ...person, id: 2, name: 'bob', display_name: 'Bob', ap_id: 'https://forum.test/u/bob' };
+const remotePerson = { ...person, id: 3, name: 'carol', display_name: 'Carol', local: false, ap_id: 'https://remote.test/u/carol' };
 
 const myUser = {
   local_user_view: {
@@ -221,6 +222,7 @@ function fixtures() {
     community,
     tags: [],
     crossPosts: [],
+    postCreator: null,
     failSettings: false,
     calls: []
   };
@@ -230,7 +232,7 @@ function postView(state) {
   const value = state.posts[1];
   return {
     post: value,
-    creator: person,
+    creator: state.postCreator || person,
     community: state.community,
     community_actions: communityActions,
     tags: state.tags,
@@ -399,7 +401,10 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     }
     if (path === '/api/v4/account/auth/verify_email' && method === 'POST') return json(route, 200, { success: true });
     if (path === '/api/v4/account/auth/password_change' && method === 'POST') return json(route, 200, { success: true });
-    if (path === '/api/v4/person') return json(route, 200, { person_view: { person, is_admin: true, person_actions: null, banned: false, ban_expires_at: null } });
+    if (path === '/api/v4/person') {
+      if ((url.searchParams.get('username') || '').includes('carol')) return json(route, 404, { error: 'not_found' });
+      return json(route, 200, { person_view: { person, is_admin: true, person_actions: null, banned: false, ban_expires_at: null } });
+    }
     if (path === '/api/v4/post/list') return json(route, 200, pageOf([postView(state)]));
     if (path === '/api/v4/post' && method === 'GET') return json(route, 200, { post_view: postView(state), community_view: communityView(state), cross_posts: state.crossPosts, moderators: [{ community, moderator: person }] });
     if (path === '/api/v4/person/content') {
@@ -777,7 +782,8 @@ test('searches comments, users, and URLs, and switches profile tabs', async ({ p
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/search' && call.search.includes('type_=comments'))).toBeTruthy();
 
   await page.goto('/search?kind=users&q=alice');
-  await expect(page.getByRole('link', { name: 'Alice' })).toBeVisible();
+  const userCard = page.locator('#main-content article').filter({ hasText: 'https://forum.test/u/alice' });
+  await expect(userCard.getByRole('link')).toHaveAttribute('href', '/u/alice');
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/search' && call.search.includes('type_=users'))).toBeTruthy();
 
   await page.goto('/search?kind=url&q=https%3A%2F%2Fexample.test%2Fpost');
@@ -921,6 +927,98 @@ test('handles closed and invitation registration modes', async ({ page }) => {
   await page.goto('/signup');
   await expect(page.getByText('Registration requires an invitation.')).toBeVisible();
   site.site_view.local_site.registration_mode = 'open';
+});
+
+test('opens own profile from the drawer identity header', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/');
+  await expect(page.locator('#top-bar-profile')).toHaveCount(0);
+  await expect(page.locator('.top-bar-profile')).toHaveCount(0);
+  const drawer = page.locator('#navigation-drawer');
+  const profileHeader = drawer.locator('.drawer-profile');
+  await expect(profileHeader).toHaveAttribute('href', '/u/alice');
+  await expect(profileHeader).toHaveAccessibleName(/Profile Alice @alice/);
+  await expect(profileHeader).toContainText('Alice');
+  await expect(profileHeader).toContainText('@alice');
+  await expect(profileHeader).toContainText('Site administrator');
+  await expect(drawer.locator('nav').getByRole('link', { name: 'Profile', exact: true })).toHaveCount(0);
+  const labels = await drawer.locator('nav > .drawer-item').evaluateAll(nodes =>
+    nodes.map(node => node.querySelector('.drawer-label')?.textContent?.trim() ?? '')
+  );
+  expect(labels).toEqual([
+    'Latest discussions',
+    'Communities',
+    'Search',
+    'Notifications',
+    'Manage site',
+    'My content',
+    'Blocks',
+    'Profile settings',
+    'Log out'
+  ]);
+  await profileHeader.focus();
+  await expect(profileHeader).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/u\/alice$/);
+  await expect(page.getByRole('tab', { name: 'Saved' })).toBeVisible();
+  await page.goto('/u/alice@forum.test');
+  await expect(page.getByRole('tab', { name: 'Saved' })).toBeVisible();
+  expect(state.calls.some(call => call.path === '/api/v4/person' && call.search.includes('alice%40forum.test'))).toBeTruthy();
+});
+
+test('closes the modal drawer after opening the profile from its header', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  await page.setViewportSize({ width: 360, height: 800 });
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/');
+  await page.locator('#menu-button').click();
+  const drawer = page.locator('dialog#navigation-drawer');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.locator('.drawer-profile')).toHaveAccessibleName(/Profile Alice @alice/);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  await drawer.locator('.drawer-profile').click();
+  await expect(page).toHaveURL(/\/u\/alice$/);
+  await expect(page.locator('dialog#navigation-drawer')).toHaveCount(0);
+});
+
+test('uses local and remote profile handles in author links', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state);
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: 'Alice (alice@forum.test)' })).toHaveAttribute('href', '/u/alice');
+  state.postCreator = remotePerson;
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: 'Carol (carol@remote.test)' })).toHaveAttribute('href', '/u/carol@remote.test');
+  await page.goto('/u/carol@remote.test');
+  await expect(page.getByText('This content is unavailable.')).toBeVisible();
+  expect(state.calls.some(call => call.path === '/api/v4/person' && call.search.includes('carol'))).toBeTruthy();
+});
+
+test('normalizes a local ban actor URL to the single username', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/admin/bans');
+  await page.getByLabel('Actor URI').fill('http://forum.test/u/admin');
+  await page.getByLabel('Ban reason').fill('test');
+  await page.getByRole('button', { name: 'Create ban' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/person' && call.search === '?username=admin')).toBeTruthy();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/ban')).toBeTruthy();
+});
+
+test('keeps the hostname in a remote ban actor URL', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/admin/bans');
+  await page.getByLabel('Actor URI').fill('https://remote.test/u/carol');
+  await page.getByLabel('Ban reason').fill('test');
+  await page.getByRole('button', { name: 'Create ban' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/person' && call.search === '?username=carol%40remote.test')).toBeTruthy();
 });
 
 test('has no automated accessibility violations on the latest page', async ({ page }) => {

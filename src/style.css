@@ -562,8 +562,9 @@ h2 { margin-block: 0 0.5rem; }
   text-decoration: none;
 }
 
+.drawer-profile:hover { filter: brightness(1.08); }
 .drawer-profile-anonymous { min-height: 64px; }
-.drawer-profile:focus-visible { outline-color: var(--md-on-top-bar); }
+.drawer-profile:focus-visible { outline-color: var(--md-on-top-bar); outline-offset: -3px; }
 
 .drawer-avatar {
   display: grid;

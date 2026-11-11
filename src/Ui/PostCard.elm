@@ -108,7 +108,7 @@ postCard config texts view =
             [ a [ A.href (Route.path (Route.Post post.id Nothing)) ] [ text post.name ] ]
         , p [ A.class "metadata" ]
             [ bdi []
-                [ a [ A.href (Route.path (Route.Profile view.creator.name)) ] [ text authorText ] ]
+                [ a [ A.href (Route.path (Route.Profile (Domain.profileHandle view.creator))) ] [ text authorText ] ]
             , text " · "
             , a [ A.href (Route.path (Route.Community view.community.name)) ]
                 [ text (Maybe.withDefault view.community.name view.community.title) ]

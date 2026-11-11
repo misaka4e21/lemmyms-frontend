@@ -540,7 +540,7 @@ moderatorsPanel active moderators =
                 (List.map
                     (\moderator ->
                         li []
-                            [ a [ A.href (Route.path (Route.Profile moderator.moderator.name)) ]
+                            [ a [ A.href (Route.path (Route.Profile (Domain.profileHandle moderator.moderator))) ]
                                 [ text (Domain.displayNameOf moderator.moderator) ]
                             ]
                     )

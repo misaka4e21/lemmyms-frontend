@@ -341,4 +341,29 @@ suite =
                             )
                         )
                     |> Expect.equal (Ok ( False, 20, Nothing ))
+        , test "selects local and remote profile handles" <|
+            \_ ->
+                case decode Domain.person Fixtures.personJson of
+                    Ok person ->
+                        Expect.equal
+                            ( "alice", "alice@forum.test" )
+                            ( Domain.profileHandle person
+                            , Domain.profileHandle { person | local = False }
+                            )
+
+                    Err error ->
+                        Expect.fail (Decode.errorToString error)
+        , test "recognizes both own local handle forms" <|
+            \_ ->
+                case decode Domain.myUserInfo Fixtures.myUserJson of
+                    Ok user ->
+                        Expect.equal
+                            ( True, True, False )
+                            ( Domain.isOwnProfile user "alice"
+                            , Domain.isOwnProfile user "alice@forum.test"
+                            , Domain.isOwnProfile user "bob"
+                            )
+
+                    Err error ->
+                        Expect.fail (Decode.errorToString error)
         ]
