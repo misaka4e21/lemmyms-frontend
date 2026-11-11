@@ -5,7 +5,6 @@ import App.State exposing (Model, Msg(..))
 import Feature.Auth.Update as Auth
 import Feature.Auth.View
 import Feature.Profile as Profile
-import Feature.Report as Report
 import Html exposing (Html)
 
 
@@ -86,5 +85,4 @@ profileViewConfig model =
     , profileClearAvatar = ProfileMessage Profile.ProfileClearAvatar
     , profileSave = ProfileMessage Profile.ProfileSave
     , avatarFileSelected = ProfileMessage << Profile.AvatarFileSelected
-    , reportPerson = \actor -> ReportMessage (Report.Open (Report.PersonTarget actor))
     }

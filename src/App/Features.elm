@@ -22,6 +22,7 @@ import Feature.Report as Report
 import Feature.Search as Search
 import Feature.SiteAdmin.Update as SiteAdmin
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import Ports exposing (closeDialog, focus, openDialog)
 import Remote exposing (Remote(..))
 import Url
@@ -77,6 +78,18 @@ updateManage message model =
 
                         _ ->
                             Nothing
+                , communityId =
+                    case model.management.manage of
+                        Just manage ->
+                            case manage.community of
+                                Ready community ->
+                                    community.community.id
+
+                                _ ->
+                                    0
+
+                        Nothing ->
+                            0
                 }
                 message
                 model.management
@@ -222,7 +235,7 @@ updateSiteAdmin message model =
             if outcome.refreshModlog then
                 let
                     ( _, refreshCommand ) =
-                        SiteAdmin.loadModlog model.url state
+                        SiteAdmin.loadModlog model.route model.url state
                 in
                 Cmd.batch
                     [ refreshCommand |> Cmd.map (SiteAdminResponse model.routeEpoch)
@@ -287,13 +300,30 @@ updateAuth message model =
                         ( changed
                         , case outcome.navigation of
                             Just target ->
-                                Navigation.pushUrl model.key target
+                                if tokenRoute model.route then
+                                    Navigation.replaceUrl model.key target
+
+                                else
+                                    Navigation.pushUrl model.key target
 
                             Nothing ->
                                 Cmd.none
                         )
     in
     ( session, Cmd.batch [ Cmd.map (AuthResponse model.routeEpoch) command, navigation ] )
+
+
+tokenRoute : Route.Route -> Bool
+tokenRoute route =
+    case route of
+        Route.VerifyEmail _ ->
+            True
+
+        Route.PasswordChange _ ->
+            True
+
+        _ ->
+            False
 
 
 updateProfile : Profile.Msg -> Model -> ( Model, Cmd Msg )
@@ -498,8 +528,16 @@ updatePost message model =
 
             else
                 Cmd.none
+
+        focusTarget =
+            case outcome.focusTarget of
+                Just id ->
+                    focus id
+
+                Nothing ->
+                    Cmd.none
     in
-    ( applied, Cmd.batch [ Cmd.map (PostResponse model.routeEpoch) command, navigation, reload ] )
+    ( applied, Cmd.batch [ Cmd.map (PostResponse model.routeEpoch) command, navigation, reload, focusTarget ] )
 
 
 updateFeed : Feed.Msg -> Model -> ( Model, Cmd Msg )

@@ -16,10 +16,12 @@ type alias Model =
     , reports : Remote (Domain.Page Domain.ReportView)
     , reportState : String
     , reportCommunity : String
+    , reportCursor : Maybe String
     , reportNotes : Dict String String
     , reportBusy : Set String
     , modlog : Remote (Domain.Page Domain.ModlogView)
     , modlogCommunity : String
+    , modlogCursor : Maybe String
     , banActor : String
     , banReason : String
     , banExpires : String
@@ -38,10 +40,12 @@ initial =
     , reports = NotAsked
     , reportState = "open"
     , reportCommunity = ""
+    , reportCursor = Nothing
     , reportNotes = Dict.empty
     , reportBusy = Set.empty
     , modlog = NotAsked
     , modlogCommunity = ""
+    , modlogCursor = Nothing
     , banActor = ""
     , banReason = ""
     , banExpires = ""

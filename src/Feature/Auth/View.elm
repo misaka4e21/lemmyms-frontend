@@ -8,7 +8,7 @@ import Html exposing (Html, a, button, div, form, input, label, p, section, text
 import Html.Attributes as A
 import Html.Events as Events
 import Lemmy.Domain as Domain
-import Route
+import Lemmy.Route as Route
 import Ui.Feedback exposing (loginRequired, problemText, viewFormProblemWithId)
 import Ui.Formatting exposing (boolText)
 import Ui.Layout exposing (pageHeading)
@@ -96,7 +96,7 @@ pageLogin config auth model active =
                             , text " "
                             , a [ A.href (Route.path Route.Register) ] [ text (Translations.registerTitle active.texts) ]
                             , text " · "
-                            , a [ A.href (Route.path Route.PasswordReset) ] [ text (Translations.resetPasswordTitle active.texts) ]
+                            , a [ A.href (Route.path Route.LoginReset) ] [ text (Translations.resetPasswordTitle active.texts) ]
                             ]
                         ]
             ]

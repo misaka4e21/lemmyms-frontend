@@ -6,7 +6,7 @@ import Html.Attributes as A
 import Html.Events as Events
 import Lemmy.Domain as Domain
 import Lemmy.Markdown as Markdown
-import Route
+import Lemmy.Route as Route
 import Ui.Formatting exposing (Formatting, boolText, formattedCount, repliesLabel)
 import Ui.Icon
 import Ui.VoteControl
@@ -77,7 +77,7 @@ postCard config texts view =
     in
     article [ A.class "card post-card", A.attribute "aria-labelledby" ("post-" ++ postId) ]
         [ h2 [ A.id ("post-" ++ postId), A.dir "auto" ]
-            [ a [ A.href (Route.path (Route.Post postId)) ] [ text post.name ] ]
+            [ a [ A.href (Route.path (Route.Post post.id Nothing)) ] [ text post.name ] ]
         , p [ A.class "metadata" ]
             [ bdi [] [ text (Translations.authorLabel authorText texts) ]
             , text " · "
@@ -144,7 +144,7 @@ postCard config texts view =
             , if owner || view.canMod then
                 a
                     [ A.class "icon-button"
-                    , A.href (Route.path (Route.EditPost postId))
+                    , A.href (Route.path (Route.EditPost post.id))
                     , A.attribute "aria-label" (Translations.editPost texts)
                     , A.attribute "title" (Translations.editPost texts)
                     ]

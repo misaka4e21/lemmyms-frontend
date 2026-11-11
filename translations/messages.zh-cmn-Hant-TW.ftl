@@ -204,7 +204,6 @@ hide-for-me = 為我隱藏
 unhide-for-me = 取消為我隱藏
 report-post = 檢舉貼文
 report-community = 檢舉社群
-report-person = 檢舉使用者
 reply-sort = 回覆排序
 sort-new = 最新
 sort-old = 最早

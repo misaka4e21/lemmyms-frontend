@@ -2,7 +2,7 @@ module RouteTest exposing (suite)
 
 import AccountSource exposing (AccountContentSource(..))
 import Expect
-import Route
+import Lemmy.Route as Route
 import Test exposing (Test, describe, test)
 import Url
 
@@ -16,94 +16,191 @@ parse value =
 
 suite : Test
 suite =
-    describe "application routes"
-        [ test "parses stable collection and object routes" <|
+    describe "canonical Lemmy routes"
+        [ test "parses canonical and application paths" <|
             \_ ->
                 Expect.equal
-                    [ Route.Latest
+                    [ Route.Home
                     , Route.Communities
-                    , Route.Community "c1"
-                    , Route.Post "p1"
-                    , Route.EditPost "p1"
-                    , Route.Comment "20"
-                    , Route.EditComment "20"
+                    , Route.Community "news"
+                    , Route.CommunitySettings "news"
+                    , Route.Post 10 Nothing
+                    , Route.Post 10 (Just 20)
+                    , Route.Comment 20
+                    , Route.EditComment 20
+                    , Route.CreatePost Nothing
+                    , Route.CreatePost (Just 2)
+                    , Route.EditPost 10
+                    , Route.CreateCommunity
+                    , Route.Profile "alice"
+                    , Route.Search
                     , Route.Notifications
-                    , Route.Manage "c1"
-                    ]
-                    (List.map parse [ "/", "/communities", "/communities/c1", "/posts/p1", "/posts/p1/edit", "/comment/20", "/comment/20/edit", "/notifications", "/communities/c1/manage" ])
-        , test "keeps search query and pagination" <|
-            \_ ->
-                let
-                    url =
-                        Url.fromString "https://forum.test/search?kind=posts&q=%E4%B8%AD%E6%96%87&offset=40"
-                in
-                Expect.equal ( "posts", "中文", 40 )
-                    (url |> Maybe.map (\value -> ( Route.query "kind" value, Route.query "q" value, Route.offset value )) |> Maybe.withDefault ( "", "", -1 ))
-        , test "builds page URLs without losing search context" <|
-            \_ ->
-                Url.fromString "https://forum.test/search?kind=communities&q=news&offset=20"
-                    |> Maybe.map (\url -> Route.pageUrl url 40 == "/search?offset=40&q=news&kind=communities")
-                    |> Maybe.withDefault False
-                    |> Expect.equal True
-        , test "parses account, password, and administration routes" <|
-            \_ ->
-                Expect.equal
-                    [ Route.AccountContent SavedContent
+                    , Route.Settings
+                    , Route.Settings
+                    , Route.PasswordSettings
+                    , Route.AccountContent SavedContent
                     , Route.AccountContent ReadContent
                     , Route.AccountContent HiddenContent
                     , Route.AccountContent LikedContent
                     , Route.AccountBlocks
-                    , Route.PasswordReset
-                    , Route.PasswordResetConfirm
-                    , Route.PasswordSettings
-                    , Route.AdminOverview
-                    , Route.AdminReports
-                    , Route.AdminModlog
+                    , Route.Admin
+                    , Route.Reports
+                    , Route.Modlog Nothing
+                    , Route.Modlog (Just 2)
+                    , Route.Reports
+                    , Route.Modlog Nothing
                     , Route.AdminBans
                     , Route.AdminSettings
+                    , Route.Login
+                    , Route.Register
+                    , Route.VerifyEmail "token"
+                    , Route.PasswordChange "token"
+                    , Route.LoginReset
                     ]
                     (List.map parse
-                        [ "/account/saved"
+                        [ "/"
+                        , "/communities"
+                        , "/c/news"
+                        , "/c/news/settings"
+                        , "/post/10"
+                        , "/post/10/20"
+                        , "/comment/20"
+                        , "/comment/20/edit"
+                        , "/create_post"
+                        , "/create_post?community_id=2"
+                        , "/create_post?post_id=10"
+                        , "/create_community"
+                        , "/u/alice"
+                        , "/search"
+                        , "/notifications"
+                        , "/settings"
+                        , "/settings/profile"
+                        , "/settings/password"
+                        , "/account/saved"
                         , "/account/read"
                         , "/account/hidden"
                         , "/account/liked"
                         , "/account/blocks"
-                        , "/reset-password"
-                        , "/reset-password/confirm"
-                        , "/settings/password"
                         , "/admin"
+                        , "/reports"
+                        , "/modlog"
+                        , "/modlog/2"
                         , "/admin/reports"
                         , "/admin/modlog"
                         , "/admin/bans"
                         , "/admin/settings"
+                        , "/login"
+                        , "/signup"
+                        , "/verify_email/token"
+                        , "/password_change/token"
+                        , "/login_reset"
                         ]
                     )
-        , test "round trips new route paths" <|
+        , test "round trips generated paths" <|
             \_ ->
                 let
                     routes =
-                        [ Route.AccountContent SavedContent
+                        [ Route.Home
+                        , Route.Communities
+                        , Route.Community "news"
+                        , Route.CommunitySettings "news"
+                        , Route.Post 10 Nothing
+                        , Route.Post 10 (Just 20)
+                        , Route.Comment 20
+                        , Route.EditComment 20
+                        , Route.CreatePost Nothing
+                        , Route.CreatePost (Just 2)
+                        , Route.EditPost 10
+                        , Route.CreateCommunity
+                        , Route.Profile "alice"
+                        , Route.Search
+                        , Route.Notifications
+                        , Route.Settings
+                        , Route.PasswordSettings
+                        , Route.AccountContent SavedContent
                         , Route.AccountContent ReadContent
                         , Route.AccountContent HiddenContent
                         , Route.AccountContent LikedContent
                         , Route.AccountBlocks
-                        , Route.PasswordReset
-                        , Route.PasswordResetConfirm
-                        , Route.PasswordSettings
-                        , Route.AdminOverview
-                        , Route.AdminReports
-                        , Route.AdminModlog
+                        , Route.Admin
+                        , Route.Reports
+                        , Route.Modlog Nothing
+                        , Route.Modlog (Just 2)
                         , Route.AdminBans
                         , Route.AdminSettings
-                        , Route.Comment "20"
-                        , Route.EditComment "20"
+                        , Route.Login
+                        , Route.Register
+                        , Route.VerifyEmail "token"
+                        , Route.PasswordChange "token"
+                        , Route.LoginReset
                         ]
                 in
                 Expect.equal routes (List.map (Route.path >> parse) routes)
-        , test "builds reply sort and depth URLs" <|
+        , test "rejects former Commune paths" <|
             \_ ->
-                Url.fromString "https://forum.test/posts/p1?offset=20"
-                    |> Maybe.map (\url -> Route.replyPageUrl url "top" 4 40)
-                    |> Maybe.withDefault ""
-                    |> Expect.equal "/posts/p1?offset=40&sort=top&max_depth=4"
+                Expect.equal
+                    (List.repeat 8 Route.NotFound)
+                    (List.map parse
+                        [ "/communities/1"
+                        , "/communities/1/manage"
+                        , "/posts/1"
+                        , "/posts/1/edit"
+                        , "/profiles/alice"
+                        , "/register"
+                        , "/verify-email"
+                        , "/reset-password"
+                        ]
+                    )
+        , test "reads cursor, sort, and listing state" <|
+            \_ ->
+                Url.fromString "https://forum.test/c/news?type=local&sort=top&page_cursor=abc"
+                    |> Maybe.map
+                        (\url ->
+                            ( Route.cursor url
+                            , Route.sort "active" url
+                            , Route.listing "local" url
+                            )
+                        )
+                    |> Maybe.withDefault ( Nothing, "", "" )
+                    |> Expect.equal ( Just "abc", "top", "local" )
+        , test "builds cursor URLs without losing context" <|
+            \_ ->
+                Expect.equal
+                    [ "/c/news?page_cursor=next&sort=top&type=local"
+                    , "/search?page_cursor=next&q=news&kind=posts"
+                    , "/post/10?page_cursor=next&sort=top&max_depth=4"
+                    ]
+                    [ Url.fromString "https://forum.test/c/news?type=local&sort=top"
+                        |> Maybe.map (\url -> Route.cursorUrl url "next")
+                        |> Maybe.withDefault ""
+                    , Url.fromString "https://forum.test/search?q=news&kind=posts"
+                        |> Maybe.map (\url -> Route.cursorUrl url "next")
+                        |> Maybe.withDefault ""
+                    , Url.fromString "https://forum.test/post/10?sort=top&max_depth=4"
+                        |> Maybe.map (\url -> Route.cursorUrl url "next")
+                        |> Maybe.withDefault ""
+                    ]
+        , test "builds collection URLs" <|
+            \_ ->
+                Expect.equal
+                    [ "/c/news?type=local&sort=top&page_cursor=abc"
+                    , "/search?kind=posts&q=news&page_cursor=next"
+                    , "/post/10?sort=top&max_depth=4"
+                    , "/post/10?sort=top&max_depth=4&page_cursor=next"
+                    , "/modlog/2?page_cursor=next"
+                    ]
+                    [ Route.communityPostsUrl "news" "local" "top" (Just "abc")
+                    , Route.searchUrl "posts" "news" (Just "next")
+                    , Route.postCommentsUrl 10 "top" 4 Nothing
+                    , Route.postCommentsUrl 10 "top" 4 (Just "next")
+                    , Route.modlogUrl (Just 2) (Just "next")
+                    ]
+        , test "does not generate an offset parameter" <|
+            \_ ->
+                let
+                    url =
+                        Url.fromString "https://forum.test/post/10?sort=top&max_depth=4&offset=40"
+                            |> Maybe.withDefault (Url.fromString "https://forum.test/" |> Maybe.withDefault { protocol = Url.Https, host = "forum.test", port_ = Nothing, path = "/", query = Nothing, fragment = Nothing })
+                in
+                Expect.equal False (String.contains "offset" (Route.postCommentsUrl 10 (Route.query "sort" url) 4 (Route.cursor url)))
         ]

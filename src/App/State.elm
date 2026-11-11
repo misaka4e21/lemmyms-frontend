@@ -28,10 +28,10 @@ import Generated.I18n as Translations
 import Http
 import Json.Decode as Decode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import Locale exposing (Locale(..))
 import Localization
 import Remote exposing (Remote)
-import Route
 import Ui.Formatting exposing (Formatting)
 import Url exposing (Url)
 
@@ -67,6 +67,7 @@ type alias Model =
     , communityCreate : CommunityCreate.Model
     , posts : Post.Model
     , communityPage : Community.Model
+    , commentTarget : Remote ()
     , feed : Feed.Model
     }
 
@@ -123,6 +124,7 @@ type Msg
     | CommunityCreateResponse Int CommunityCreate.Msg
     | PostMessage Post.Msg
     | PostResponse Int Post.Msg
+    | CommentTargetLoaded Int Api.Response
     | FeedResponse Int Feed.Msg
     | CommunityMessage Community.Msg
     | CommunityResponse Int Community.Msg

@@ -7,8 +7,8 @@ import Feature.CommunityManage.State exposing (..)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import Remote exposing (Remote(..))
-import Route
 import Set exposing (Set)
 import Url
 
@@ -65,7 +65,7 @@ type Action
 
 
 type alias Context =
-    { csrf : String, route : Route.Route, viewerId : Maybe Int }
+    { csrf : String, route : Route.Route, viewerId : Maybe Int, communityId : Int }
 
 
 type alias Outcome =
@@ -86,15 +86,23 @@ update context message state =
 
 
 load : String -> ManageState -> Model -> ( Model, Cmd Msg )
-load id manage state =
+load name manage state =
     ( { state | manage = Just manage }
-    , Cmd.batch
-        [ Api.get ("/community?id=" ++ urlEncode id) (Loaded (LoadManageCommunity id))
-        , Api.get ("/community/pending_follows/list?community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadFollowRequests id manage.followRequestOffset))
-        , Api.get ("/report/list?unresolved_only=true&community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadReports id))
-        , Api.get ("/modlog?community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadModlog id manage.modlogOffset))
-        ]
+    , Api.get ("/community?name=" ++ urlEncode name) (Loaded (LoadManageCommunity name))
     )
+
+
+communityChildren : Int -> Cmd Msg
+communityChildren id =
+    let
+        value =
+            String.fromInt id
+    in
+    Cmd.batch
+        [ Api.get ("/community/pending_follows/list?community_id=" ++ value ++ "&limit=20") (Loaded (LoadFollowRequests value 0))
+        , Api.get ("/report/list?unresolved_only=true&community_id=" ++ value ++ "&limit=20") (Loaded (LoadReports value))
+        , Api.get ("/modlog?community_id=" ++ value ++ "&limit=20") (Loaded (LoadModlog value 0))
+        ]
 
 
 authProblem : Working -> Api.Problem -> Working
@@ -169,7 +177,7 @@ updateWorking context message model =
                         "/community"
                         (Encode.encode 0
                             (Encode.object
-                                [ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
+                                [ ( "community_id", Encode.int context.communityId )
                                 , ( "title", Encode.string manage.title )
                                 , ( "sidebar", Encode.string manage.sidebar )
                                 , ( "summary", Encode.string manage.summary )
@@ -211,7 +219,7 @@ updateWorking context message model =
                             "/community/transfer"
                             (Encode.encode 0
                                 (Encode.object
-                                    [ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
+                                    [ ( "community_id", Encode.int context.communityId )
                                     , ( "person_id", Encode.int (String.toInt manage.actor |> Maybe.withDefault 0) )
                                     ]
                                 )
@@ -270,7 +278,7 @@ updateWorking context message model =
                 "/community/pending_follows/approve"
                 (Encode.encode 0
                     (Encode.object
-                        [ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
+                        [ ( "community_id", Encode.int context.communityId )
                         , ( "follower_id", Encode.int personId )
                         , ( "approve", Encode.bool (stateValue == "accepted") )
                         ]
@@ -326,9 +334,9 @@ updateWorking context message model =
                             { model | flash = FlashSaved }
                     in
                     case context.route of
-                        Route.Manage id ->
+                        Route.CommunitySettings name ->
                             loadManageState 0
-                                id
+                                name
                                 (Maybe.withDefault emptyManage (model.manage |> Maybe.map (\manage -> { manage | problem = Nothing })))
                                 changed
 
@@ -355,9 +363,9 @@ updateWorking context message model =
                             { model | flash = FlashSaved }
                     in
                     case context.route of
-                        Route.Manage id ->
+                        Route.CommunitySettings name ->
                             loadManageState 0
-                                id
+                                name
                                 (Maybe.withDefault emptyManage (model.manage |> Maybe.map (\manage -> { manage | problem = Nothing })))
                                 changed
 
@@ -434,70 +442,80 @@ updateWorking context message model =
                         Err problem ->
                             updateManageRecord model (failed problem)
             in
-            ( case kind of
-                LoadManageCommunity _ ->
-                    case Api.decodeResponse Domain.communityResponse response of
-                        Ok data ->
-                            updateManageRecord model
-                                (\manage ->
-                                    { manage
-                                        | community = Ready data.communityView
-                                        , managers = Ready { items = data.moderators, nextPage = Nothing, prevPage = Nothing }
-                                        , readPolicy = visibilityText data.communityView.community.visibility
-                                        , postPolicy =
-                                            if data.communityView.community.postingRestrictedToMods then
-                                                "managers"
+            let
+                ( updated, command ) =
+                    case kind of
+                        LoadManageCommunity _ ->
+                            case Api.decodeResponse Domain.communityResponse response of
+                                Ok data ->
+                                    ( updateManageRecord model
+                                        (\manage ->
+                                            { manage
+                                                | community = Ready data.communityView
+                                                , managers = Ready { items = data.moderators, nextPage = Nothing, prevPage = Nothing }
+                                                , readPolicy = visibilityText data.communityView.community.visibility
+                                                , postPolicy =
+                                                    if data.communityView.community.postingRestrictedToMods then
+                                                        "managers"
 
-                                            else
-                                                "eligible_users"
-                                        , followPolicy =
-                                            if data.communityView.community.visibility == Domain.PrivateCommunity then
-                                                "approval"
+                                                    else
+                                                        "eligible_users"
+                                                , followPolicy =
+                                                    if data.communityView.community.visibility == Domain.PrivateCommunity then
+                                                        "approval"
 
-                                            else
-                                                "open"
-                                        , title = Maybe.withDefault "" data.communityView.community.title
-                                        , sidebar = Maybe.withDefault "" data.communityView.community.sidebar
-                                        , summary = Maybe.withDefault "" data.communityView.community.summary
-                                        , nsfw = data.communityView.community.nsfw
-                                        , visibility = visibilityText data.communityView.community.visibility
-                                        , postingRestricted = data.communityView.community.postingRestrictedToMods
-                                        , discussionLanguages = String.join "," (List.map String.fromInt data.discussionLanguages)
-                                        , postUpvotes = voteModeText data.communityView.community.postUpvotes
-                                        , postDownvotes = voteModeText data.communityView.community.postDownvotes
-                                        , commentUpvotes = voteModeText data.communityView.community.commentUpvotes
-                                        , commentDownvotes = voteModeText data.communityView.community.commentDownvotes
-                                    }
-                                )
+                                                    else
+                                                        "open"
+                                                , title = Maybe.withDefault "" data.communityView.community.title
+                                                , sidebar = Maybe.withDefault "" data.communityView.community.sidebar
+                                                , summary = Maybe.withDefault "" data.communityView.community.summary
+                                                , nsfw = data.communityView.community.nsfw
+                                                , visibility = visibilityText data.communityView.community.visibility
+                                                , postingRestricted = data.communityView.community.postingRestrictedToMods
+                                                , discussionLanguages = String.join "," (List.map String.fromInt data.discussionLanguages)
+                                                , postUpvotes = voteModeText data.communityView.community.postUpvotes
+                                                , postDownvotes = voteModeText data.communityView.community.postDownvotes
+                                                , commentUpvotes = voteModeText data.communityView.community.commentUpvotes
+                                                , commentDownvotes = voteModeText data.communityView.community.commentDownvotes
+                                            }
+                                        )
+                                    , communityChildren data.communityView.community.id
+                                    )
 
-                        Err problem ->
-                            updateManageRecord model (\manage -> { manage | community = Failed problem, problem = Just problem })
+                                Err problem ->
+                                    ( updateManageRecord model (\manage -> { manage | community = Failed problem, problem = Just problem }), Cmd.none )
 
-                LoadMembers _ _ ->
-                    setRoster True (Api.decodeResponse (Domain.page Domain.communityModeratorView) response)
+                        LoadMembers _ _ ->
+                            ( setRoster True (Api.decodeResponse (Domain.page Domain.communityModeratorView) response), Cmd.none )
 
-                LoadManagers _ _ ->
-                    setRoster False (Api.decodeResponse (Domain.page Domain.communityModeratorView) response)
+                        LoadManagers _ _ ->
+                            ( setRoster False (Api.decodeResponse (Domain.page Domain.communityModeratorView) response), Cmd.none )
 
-                LoadFollowRequests _ _ ->
-                    setPage
-                        (\page -> \manage -> { manage | followRequests = Ready page })
-                        (\problem -> \manage -> { manage | followRequests = Failed problem, problem = Just problem })
-                        (Api.decodeResponse (Domain.page Domain.pendingFollow) response)
+                        LoadFollowRequests _ _ ->
+                            ( setPage
+                                (\page -> \manage -> { manage | followRequests = Ready page })
+                                (\problem -> \manage -> { manage | followRequests = Failed problem, problem = Just problem })
+                                (Api.decodeResponse (Domain.page Domain.pendingFollow) response)
+                            , Cmd.none
+                            )
 
-                LoadReports _ ->
-                    setPage
-                        (\page -> \manage -> { manage | reports = Ready page })
-                        (\problem -> \manage -> { manage | reports = Failed problem, problem = Just problem })
-                        (Api.decodeResponse (Domain.page Domain.reportView) response)
+                        LoadReports _ ->
+                            ( setPage
+                                (\page -> \manage -> { manage | reports = Ready page })
+                                (\problem -> \manage -> { manage | reports = Failed problem, problem = Just problem })
+                                (Api.decodeResponse (Domain.page Domain.reportView) response)
+                            , Cmd.none
+                            )
 
-                LoadModlog _ _ ->
-                    setPage
-                        (\page -> \manage -> { manage | modlog = Ready page })
-                        (\problem -> \manage -> { manage | modlog = Failed problem, problem = Just problem })
-                        (Api.decodeResponse (Domain.page Domain.modlogView) response)
-            , Cmd.none
-            )
+                        LoadModlog _ _ ->
+                            ( setPage
+                                (\page -> \manage -> { manage | modlog = Ready page })
+                                (\problem -> \manage -> { manage | modlog = Failed problem, problem = Just problem })
+                                (Api.decodeResponse (Domain.page Domain.modlogView) response)
+                            , Cmd.none
+                            )
+            in
+            ( updated, command )
 
 
 manageRequest : Context -> Working -> String -> String -> String -> String -> ( Working, Cmd Msg )
@@ -539,7 +557,7 @@ manageActorRequestWith context model key method section actor =
             "/community/mod"
             (Encode.encode 0
                 (Encode.object
-                    [ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
+                    [ ( "community_id", Encode.int context.communityId )
                     , ( "person_id", Encode.int (String.toInt actor |> Maybe.withDefault 0) )
                     , ( "added", Encode.bool (method == "POST") )
                     ]
@@ -565,7 +583,7 @@ communityBanRequest context model method =
                     "/community/ban_user"
                     (Encode.encode 0
                         (Encode.object
-                            ([ ( "community_id", Encode.int (String.toInt (communityId context.route) |> Maybe.withDefault 0) )
+                            ([ ( "community_id", Encode.int context.communityId )
                              , ( "person_id", Encode.int (String.toInt (String.trim manage.banActor) |> Maybe.withDefault 0) )
                              , ( "ban", Encode.bool (method == "POST") )
                              , ( "reason", Encode.string (String.trim manage.banReason) )
@@ -597,8 +615,8 @@ managePage context model members delta =
                         { manage | managerOffset = max 0 (manage.managerOffset + delta) }
             in
             case context.route of
-                Route.Manage id ->
-                    loadManageState 0 id updated model
+                Route.CommunitySettings name ->
+                    loadManageState 0 name updated model
 
                 _ ->
                     ( model, Cmd.none )
@@ -623,8 +641,8 @@ manageSectionPage context model section delta =
                         { manage | modlogOffset = max 0 (manage.modlogOffset + delta) }
             in
             case context.route of
-                Route.Manage id ->
-                    loadManageState 0 id updated model
+                Route.CommunitySettings name ->
+                    loadManageState 0 name updated model
 
                 _ ->
                     ( model, Cmd.none )
@@ -711,14 +729,9 @@ updateManageRecord model transform =
 
 
 loadManageState : Int -> String -> ManageState -> Working -> ( Working, Cmd Msg )
-loadManageState epoch id manage model =
+loadManageState _ name manage model =
     ( { model | manage = Just manage }
-    , Cmd.batch
-        [ Api.get ("/community?id=" ++ urlEncode id) (Loaded (LoadManageCommunity id))
-        , Api.get ("/community/pending_follows/list?community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadFollowRequests id manage.followRequestOffset))
-        , Api.get ("/report/list?unresolved_only=true&community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadReports id))
-        , Api.get ("/modlog?community_id=" ++ urlEncode id ++ "&limit=20") (Loaded (LoadModlog id manage.modlogOffset))
-        ]
+    , Api.get ("/community?name=" ++ urlEncode name) (Loaded (LoadManageCommunity name))
     )
 
 

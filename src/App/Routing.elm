@@ -23,8 +23,8 @@ import Feature.SiteAdmin.State as SiteAdminState
 import Feature.SiteAdmin.Update as SiteAdmin
 import Json.Decode as Decode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import Remote exposing (Remote(..))
-import Route
 import Url exposing (Url)
 
 
@@ -44,13 +44,14 @@ loadRoute model =
                 , accountBlocks = AccountBlocks.reset model.accountBlocks
                 , report = Report.initial
                 , siteAdmin = SiteAdminState.reset model.siteAdmin
+                , commentTarget = NotAsked
             }
 
         epoch =
             model.routeEpoch
     in
     case model.route of
-        Route.Latest ->
+        Route.Home ->
             let
                 ( state, command ) =
                     Feed.load model.url
@@ -63,30 +64,38 @@ loadRoute model =
         Route.Community _ ->
             loadCommunity reset
 
-        Route.Post id ->
+        Route.Post id commentId ->
             let
                 ( state, command ) =
-                    Post.load id model.url reset.posts
+                    Post.load id commentId model.url reset.posts
             in
             ( { reset | posts = state }, Cmd.map (PostResponse epoch) command )
 
-        Route.NewCommunity ->
+        Route.Comment commentId ->
+            ( { reset | commentTarget = Loading }
+            , Api.get ("/comment?id=" ++ String.fromInt commentId) (CommentTargetLoaded model.routeEpoch)
+            )
+
+        Route.CreateCommunity ->
             ( { reset | communityCreate = CommunityCreate.initial }, Cmd.none )
 
-        Route.NewTopic id ->
-            loadCommunity { reset | editorPage = { editor = Just (emptyEditor (CreateTopic id)), source = NotAsked } }
+        Route.CreatePost (Just id) ->
+            loadCommunity { reset | editorPage = { editor = Just (emptyEditor (CreateTopic (String.fromInt id))), source = NotAsked } }
+
+        Route.CreatePost Nothing ->
+            ( reset, Cmd.none )
 
         Route.EditPost id ->
             let
                 ( state, command ) =
-                    Editor.load id reset.editorPage
+                    Editor.load (String.fromInt id) reset.editorPage
             in
             ( { reset | editorPage = state }, Cmd.map (EditorResponse epoch) command )
 
         Route.EditComment id ->
             let
                 ( state, command ) =
-                    Editor.loadComment id reset.editorPage
+                    Editor.loadComment (String.fromInt id) reset.editorPage
             in
             ( { reset | editorPage = state }, Cmd.map (EditorResponse epoch) command )
 
@@ -126,34 +135,14 @@ loadRoute model =
                 _ ->
                     ( reset, Cmd.none )
 
-        Route.PasswordReset ->
+        Route.LoginReset ->
             ( reset, Cmd.none )
 
-        Route.PasswordResetConfirm ->
-            let
-                token =
-                    model.url.fragment |> Maybe.withDefault ""
+        Route.PasswordChange token ->
+            ( { reset | account = AuthState.withResetToken token reset.account }, Cmd.none )
 
-                withToken =
-                    if String.isEmpty token then
-                        reset
-
-                    else
-                        { reset | account = AuthState.withResetToken token reset.account }
-
-                clean =
-                    model.url
-
-                cleanUrl =
-                    Url.toString { clean | fragment = Nothing }
-            in
-            ( withToken
-            , if String.isEmpty token then
-                Cmd.none
-
-              else
-                Navigation.replaceUrl model.key cleanUrl
-            )
+        Route.VerifyEmail token ->
+            ( { reset | account = AuthState.withVerificationToken token reset.account }, Cmd.none )
 
         Route.PasswordSettings ->
             ( reset, Cmd.none )
@@ -182,22 +171,22 @@ loadRoute model =
                 _ ->
                     ( reset, Cmd.none )
 
-        Route.AdminOverview ->
-            adminRoute model reset Route.AdminOverview
+        Route.Admin ->
+            adminRoute model reset Route.Admin
 
         Route.AdminSettings ->
             adminRoute model reset Route.AdminSettings
 
-        Route.AdminReports ->
-            adminRoute model reset Route.AdminReports
+        Route.Reports ->
+            adminRoute model reset Route.Reports
 
-        Route.AdminModlog ->
-            adminRoute model reset Route.AdminModlog
+        Route.Modlog _ ->
+            adminRoute model reset (Route.Modlog Nothing)
 
         Route.AdminBans ->
             adminRoute model reset Route.AdminBans
 
-        Route.Manage id ->
+        Route.CommunitySettings name ->
             case model.auth of
                 Authenticated _ ->
                     let
@@ -216,7 +205,7 @@ loadRoute model =
                             }
 
                         ( state, command ) =
-                            Manage.load id initial reset.management
+                            Manage.load name initial reset.management
                     in
                     ( { reset | management = state }, Cmd.map (ManageResponse epoch) command )
 
@@ -238,11 +227,11 @@ adminRoute original reset route =
                             Route.AdminSettings ->
                                 SiteAdmin.loadSettings reset.siteAdmin
 
-                            Route.AdminReports ->
+                            Route.Reports ->
                                 SiteAdmin.loadReports original.url reset.siteAdmin
 
-                            Route.AdminModlog ->
-                                SiteAdmin.loadModlog original.url reset.siteAdmin
+                            Route.Modlog _ ->
+                                SiteAdmin.loadModlog original.route original.url reset.siteAdmin
 
                             Route.AdminBans ->
                                 SiteAdmin.loadBans reset.siteAdmin

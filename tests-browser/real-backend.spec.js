@@ -28,7 +28,7 @@ test.describe('real Lemmy backend', () => {
     await page.getByRole('button', { name: 'Log in', exact: true }).click();
     await expect(page.locator('#navigation-drawer')).toContainText('@' + adminUser);
 
-    await page.goto(base + '/communities/new');
+    await page.goto(base + '/create_community');
     await page.getByLabel('Community name').fill(communityName);
     await page.getByLabel('Community title').fill(communityTitle);
     await page.getByLabel('Sidebar (Markdown)').fill('Sidebar ' + suffix);
@@ -37,19 +37,18 @@ test.describe('real Lemmy backend', () => {
     await page.getByLabel('Post upvotes').selectOption('all');
     await page.getByLabel('Post downvotes').selectOption('all');
     await page.getByRole('button', { name: 'Create', exact: true }).click();
-    await page.waitForURL(url => /\/communities\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith('/new'));
-    const communityId = page.url().split('/').pop();
+    await page.waitForURL(url => url.pathname === '/c/' + communityName);
     await expect(page.getByRole('heading', { level: 1, name: communityTitle })).toBeVisible();
 
     await page.goto(base + '/communities');
     await expect(page.getByRole('link', { name: communityTitle })).toBeVisible();
-    await page.goto(base + '/communities/' + communityId);
+    await page.goto(base + '/c/' + communityName);
 
     await page.getByRole('link', { name: 'Publish topic' }).click();
     await page.getByLabel('Topic title').fill(topicTitle);
     await page.getByLabel('Message').fill('Real backend body');
     await page.getByRole('button', { name: 'Publish topic' }).click();
-    await expect(page).toHaveURL(/\/posts\/[^/]+$/);
+    await expect(page).toHaveURL(/\/post\/[^/]+$/);
     const postId = page.url().split('/').pop();
     await expect(page.getByRole('heading', { level: 1, name: topicTitle })).toBeVisible();
 
@@ -86,7 +85,7 @@ test.describe('real Lemmy backend', () => {
     await page.reload();
     await expect(page.getByText(editedReply)).toHaveCount(0);
 
-    await page.goto(base + '/communities/' + communityId + '/manage');
+    await page.goto(base + '/c/' + communityName + '/settings');
     await expect(page.getByRole('heading', { name: 'Manage community' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Managers' })).toBeVisible();
     await expect(page.getByText('http://localhost/u/' + adminUser)).toBeVisible();
@@ -94,15 +93,15 @@ test.describe('real Lemmy backend', () => {
 
     await page.goto(base + '/admin');
     await expect(page.getByRole('heading').first()).toBeVisible();
-    await page.goto(base + '/admin/reports');
+    await page.goto(base + '/reports');
     await expect(page.getByRole('heading').first()).toBeVisible();
-    await page.goto(base + '/admin/modlog');
+    await page.goto(base + '/modlog');
     await expect(page.getByRole('heading').first()).toBeVisible();
 
     await page.goto(base + '/search?kind=posts&q=' + encodeURIComponent(editedTitle));
     await expect(page.getByRole('link', { name: editedTitle })).toBeVisible();
 
-    await page.goto(base + '/settings/profile');
+    await page.goto(base + '/settings');
     await page.getByLabel('Display name').fill('Admin E2E');
     await page.getByRole('button', { name: 'Save profile' }).click();
     await expect(page.getByText('Changes saved.')).toBeVisible();
@@ -110,10 +109,10 @@ test.describe('real Lemmy backend', () => {
     await page.goto(base + '/notifications');
     await expect(page.getByRole('heading').first()).toBeVisible();
 
-    await page.goto(base + '/register');
+    await page.goto(base + '/signup');
     await expect(page.getByText('Registration requires administrator approval.')).toBeVisible();
 
-    await page.goto(base + '/posts/' + postId);
+    await page.goto(base + '/post/' + postId);
     const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(axe.violations).toEqual([]);
 

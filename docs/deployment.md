@@ -2,7 +2,7 @@
 
 Serve frontend assets and the Lemmy v4 API under the same HTTPS authority. The session cookie is HttpOnly, SameSite=Lax, host-scoped, and Secure on HTTPS; splitting the browser origin from the API breaks those guarantees.
 
-The sample `deploy/nginx.conf` routes `/api/`, federation paths, `.well-known`, media paths, and health checks to the backend. `/communities/:id` is shared by the Elm detail page and ActivityPub Group resource, so content negotiation sends `application/activity+json` and `application/ld+json` requests upstream while HTML requests receive the SPA. Deep frontend routes use the SPA document. `/assets/i18n/` uses `try_files $uri =404`, so a missing hashed catalog cannot return HTML that a client might mistake for translation data.
+The sample `deploy/nginx.conf` routes `/api/`, federation paths, `.well-known`, media paths, and health checks to the backend. The frontend generates `/c/:name`, `/post/:post_id/:comment_id?`, and `/u/:username` for its detail pages. The backend `/communities/:id` ActivityPub Group resource remains a federation path and is not a frontend route. Content negotiation sends `application/activity+json` and `application/ld+json` requests upstream while HTML requests receive the SPA. Deep frontend routes use the SPA document. `/assets/i18n/` uses `try_files $uri =404`, so a missing hashed catalog cannot return HTML that a client might mistake for translation data.
 
 ## Release layout
 

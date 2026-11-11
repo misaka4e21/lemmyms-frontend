@@ -204,7 +204,6 @@ hide-for-me = Hide for me
 unhide-for-me = Unhide for me
 report-post = Report post
 report-community = Report community
-report-person = Report person
 reply-sort = Reply order
 sort-new = Newest
 sort-old = Oldest

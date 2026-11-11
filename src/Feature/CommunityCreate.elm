@@ -11,7 +11,7 @@ import Html.Events as Events
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
-import Route
+import Lemmy.Route as Route
 import Ui.CommunityPolicy exposing (policyFields)
 import Ui.Feedback exposing (loginRequired, viewFormProblem)
 import Ui.Layout exposing (pageHeading)
@@ -238,7 +238,7 @@ updateWorking csrf message model =
         Created response ->
             case Api.decodeResponse (Decode.field "community_view" Domain.communityView) response of
                 Ok community ->
-                    ( { model | createCommunity = emptyCommunityForm, flash = FlashCreated, navigation = Just (Route.path (Route.Community (String.fromInt community.community.id))) }, Cmd.none )
+                    ( { model | createCommunity = emptyCommunityForm, flash = FlashCreated, navigation = Just (Route.path (Route.Community community.community.name)) }, Cmd.none )
 
                 Err problem ->
                     ( { model | createCommunity = (\form -> { form | busy = False, problem = Just problem }) model.createCommunity }, Cmd.none )

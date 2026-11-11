@@ -370,7 +370,7 @@ updateWorking csrf message model =
                 VerifyAction ->
                     case Api.decodeUnit response of
                         Ok () ->
-                            ( { model | verifyBusy = False, verifyPassword = "", verificationToken = "", verified = True, flash = FlashVerificationSuccess }, Cmd.none )
+                            ( { model | verifyBusy = False, verifyPassword = "", verificationToken = "", verified = True, flash = FlashVerificationSuccess, navigation = Just "/login" }, Cmd.none )
 
                         Err problem ->
                             ( { model | verifyBusy = False, verifyProblem = Just problem }, Cmd.none )

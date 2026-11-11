@@ -4,7 +4,6 @@ import Api
 import Dict exposing (Dict)
 import Lemmy.Domain as Domain
 import Remote exposing (Remote(..))
-import Route
 import Set exposing (Set)
 
 
@@ -137,20 +136,14 @@ manageActionKey action =
             "backfill"
 
 
-communityId : Route.Route -> String
-communityId route =
-    case route of
-        Route.Community id ->
-            id
-
-        Route.NewTopic id ->
-            id
-
-        Route.Manage id ->
-            id
+loadedCommunityId : ManageState -> Int
+loadedCommunityId manage =
+    case manage.community of
+        Ready community ->
+            community.community.id
 
         _ ->
-            ""
+            0
 
 
 type alias Model =

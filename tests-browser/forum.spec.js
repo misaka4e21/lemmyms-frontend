@@ -352,6 +352,8 @@ async function mockApi(page, state, { authenticated = false } = {}) {
       myUser.local_user_view.person.bio = body.bio || '';
       return json(route, 200, { success: true });
     }
+    if (path === '/api/v4/account/auth/verify_email' && method === 'POST') return json(route, 200, { success: true });
+    if (path === '/api/v4/account/auth/password_change' && method === 'POST') return json(route, 200, { success: true });
     if (path === '/api/v4/person') return json(route, 200, { person_view: { person, is_admin: true, person_actions: null, banned: false, ban_expires_at: null } });
     if (path === '/api/v4/post/list') return json(route, 200, pageOf([postView(state)]));
     if (path === '/api/v4/post' && method === 'GET') return json(route, 200, { post_view: postView(state), community_view: communityView(state), cross_posts: [], moderators: [{ community, moderator: person }] });
@@ -367,7 +369,10 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     }
     if (path === '/api/v4/post/save' || path === '/api/v4/post/mark_as_read' || path === '/api/v4/post/hide') return json(route, 200, { post_view: postView(state) });
     if (path === '/api/v4/comment/list') return json(route, 200, pageOf([commentView(state)]));
-    if (path === '/api/v4/comment' && method === 'GET') return json(route, 200, { comment_view: commentView(state) });
+    if (path === '/api/v4/comment' && method === 'GET') {
+      if (url.searchParams.get('id') === '999') return json(route, 404, { error: 'could_not_find_comment' });
+      return json(route, 200, { comment_view: commentView(state) });
+    }
     if (path === '/api/v4/comment' && method === 'POST') {
       state.comments[10] = { ...comment, content: body.content };
       return json(route, 200, { comment_view: commentView(state) });
@@ -385,6 +390,7 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     }
     if (path === '/api/v4/community' && method === 'PUT') return json(route, 200, { community_view: communityView(state), moderators: [{ community, moderator: person }], discussion_languages: [0] });
     if (path === '/api/v4/community/follow') return route.fulfill({ status: 204 });
+    if (path === '/api/v4/community/mod' || path === '/api/v4/community/ban_user') return route.fulfill({ status: 204 });
     if (path === '/api/v4/community/pending_follows/list') return json(route, 200, pageOf([]));
     if (path === '/api/v4/search') {
       return json(route, 200, {
@@ -397,7 +403,14 @@ async function mockApi(page, state, { authenticated = false } = {}) {
         next_page: null
       });
     }
-    if (path === '/api/v4/report/list') return json(route, 200, pageOf([reportView()]));
+    if (path === '/api/v4/report/list') {
+      const cursor = url.searchParams.get('page_cursor');
+      return json(route, 200, {
+        items: [reportView()],
+        prev_page: cursor ? 'first' : null,
+        next_page: cursor ? null : 'next-report'
+      });
+    }
     if (path.endsWith('/report/resolve')) return route.fulfill({ status: 204 });
     if (path === '/api/v4/modlog') return json(route, 200, pageOf([modlogView()]));
     if (path === '/api/v4/admin/ban') return route.fulfill({ status: 204 });
@@ -439,6 +452,12 @@ test('browses latest, community, post and search', async ({ page }) => {
   expect(communitySort).not.toBe('top');
   await page.getByRole('link', { name: 'News' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'News' })).toBeVisible();
+  const renderedLinks = await page.locator('a').evaluateAll(nodes => nodes.map(node => node.getAttribute('href') || ''));
+  expect(renderedLinks.some(href => /^\/communities\/\d+/.test(href) || /^\/posts\//.test(href) || /^\/profiles\//.test(href))).toBe(false);
+  await page.goBack();
+  await expect(page.getByRole('link', { name: 'News' })).toBeVisible();
+  await page.goForward();
+  await expect(page.getByRole('heading', { level: 1, name: 'News' })).toBeVisible();
   await page.goto('/search?kind=posts&q=Hello');
   await expect(page.getByRole('link', { name: 'Hello world' })).toBeVisible();
 });
@@ -452,7 +471,7 @@ test('logs in, posts, replies and edits a comment', async ({ page }) => {
   await page.getByLabel('Password').fill('long-enough-password');
   await page.getByRole('button', { name: 'Log in', exact: true }).click();
   await expect(page.locator('#navigation-drawer')).toContainText('@alice');
-  await page.goto('/communities/1/new');
+  await page.goto('/create_post?community_id=1');
   await page.getByLabel('Topic title').fill('New topic');
   await page.getByLabel('Message').fill('New body');
   await page.getByRole('button', { name: 'Publish topic' }).click();
@@ -471,7 +490,7 @@ test('votes, saves and hides a post', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
   const state = fixtures();
   await mockApi(page, state, { authenticated: true });
-  await page.goto('/posts/1');
+  await page.goto('/post/1');
   const postArticle = page.getByRole('article').filter({ hasText: 'Hello world' }).first();
   await postArticle.getByRole('button', { name: /^Upvote/ }).click();
   await expect(postArticle.getByRole('button', { name: /^Clear vote/ })).toBeVisible();
@@ -483,7 +502,7 @@ test('updates profile and reads notifications', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
   const state = fixtures();
   await mockApi(page, state, { authenticated: true });
-  await page.goto('/settings/profile');
+  await page.goto('/settings');
   await page.getByLabel('Display name').fill('Alice Updated');
   await page.getByRole('button', { name: 'Save profile' }).click();
   await expect(page.getByText('Changes saved.')).toBeVisible();
@@ -495,10 +514,85 @@ test('admin report and modlog pages render', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
   const state = fixtures();
   await mockApi(page, state, { authenticated: true });
-  await page.goto('/admin/reports');
+  await page.goto('/reports');
   await expect(page.getByText('spam')).toBeVisible();
-  await page.goto('/admin/modlog');
+  await page.goto('/modlog');
   await expect(page.getByText('mod_ban_from_community')).toBeVisible();
+});
+
+test('resolves comment permalinks and canonical account routes', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/comment/10');
+  await expect(page).toHaveURL(/\/post\/1\/10$/);
+  await expect(page.locator('#comment-10')).toBeFocused();
+  await page.goto('/post/1/10');
+  await expect(page.locator('#comment-10')).toBeFocused();
+  await page.goto('/u/alice');
+  await expect(page.getByText('Bio')).toBeVisible();
+  await page.goto('/settings');
+  const displayName = await page.getByLabel('Display name').inputValue();
+  await page.goto('/settings/profile');
+  await expect(page.getByLabel('Display name')).toHaveValue(displayName);
+});
+
+test('rejects former Commune routes and missing comment targets', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state);
+  for (const path of ['/communities/1', '/posts/1', '/profiles/alice', '/register']) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { name: 'This content is unavailable.' })).toBeVisible();
+  }
+  await page.goto('/comment/999');
+  await expect(page.getByText('This content is unavailable.')).toBeVisible();
+  await expect(page.getByRole('article')).toHaveCount(0);
+});
+
+test('keeps token paths until submission and replaces them after success', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state);
+  await page.goto('/verify_email/token-123');
+  await expect(page).toHaveURL(/\/verify_email\/token-123$/);
+  await page.getByLabel('Password').fill('long-enough-password');
+  await page.getByRole('button', { name: 'Finish registration' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.goto('/password_change/token-456');
+  await expect(page).toHaveURL(/\/password_change\/token-456$/);
+  await page.getByLabel('New password').fill('long-enough-password');
+  await page.getByRole('button', { name: 'Set new password' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+});
+
+test('preserves report filters across cursor pagination', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/reports');
+  await page.getByLabel('Report state').selectOption('open');
+  await page.getByLabel('Community ID').fill('1');
+  await page.getByRole('button', { name: 'Apply filter' }).click();
+  await expect(page).toHaveURL(/state=open/);
+  await expect(page).toHaveURL(/community_id=1/);
+  await page.getByRole('link', { name: 'Next page' }).click();
+  await expect(page).toHaveURL(/page_cursor=next-report/);
+  await expect(page).toHaveURL(/state=open/);
+  await expect(page).toHaveURL(/community_id=1/);
+  const reportCalls = state.calls.filter(call => call.path === '/api/v4/report/list');
+  expect(reportCalls.some(call => call.search.includes('page_cursor=next-report'))).toBeTruthy();
+});
+
+test('loads community management by name and uses the resolved id', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/c/news/settings');
+  await expect(page.getByRole('heading', { name: 'Manage community' })).toBeVisible();
+  await page.getByLabel('Person ID').fill('2');
+  await page.getByRole('button', { name: 'Add manager' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/mod' && call.body.community_id === 1)).toBeTruthy();
 });
 
 test('has no automated accessibility violations on the latest page', async ({ page }) => {

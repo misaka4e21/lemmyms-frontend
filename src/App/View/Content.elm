@@ -1,4 +1,4 @@
-module App.View.Content exposing (editorConfig, pageCommunities, pageCommunity, pageLatest, pagePost, pageSearch, postCard)
+module App.View.Content exposing (editorConfig, pageCommentTarget, pageCommunities, pageCommunity, pageCreatePost, pageLatest, pagePost, pageSearch, postCard)
 
 import App.Context exposing (Active)
 import App.Session exposing (AuthState(..))
@@ -12,13 +12,15 @@ import Feature.Post as Post
 import Feature.Report as Report
 import Feature.Search as Search
 import Generated.I18n as Translations
-import Html exposing (Html, a, text)
+import Html exposing (Html, a, p, text)
 import Html.Attributes as A
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import List
-import Route
+import Remote exposing (Remote(..))
 import Set exposing (Set)
 import Ui.CommentCard
+import Ui.Layout exposing (pageHeading)
 import Ui.PostCard
 
 
@@ -120,9 +122,33 @@ pagePost model active postId =
     Post.pagePost (postViewConfig model active) { post = model.posts.post, replies = model.posts.replies, url = model.url } active postId
 
 
+pageCreatePost : Model -> Active -> Html Msg
+pageCreatePost _ active =
+    pageHeading (Translations.publishTopic active.texts)
+        (p []
+            [ a [ A.href (Route.path Route.Communities) ]
+                [ text (Translations.communitiesTitle active.texts) ]
+            ]
+        )
+
+
+pageCommentTarget : Model -> Active -> Html Msg
+pageCommentTarget model active =
+    pageHeading (Translations.repliesTitle active.texts)
+        (case model.commentTarget of
+            Failed _ ->
+                p [ A.id "comment-target-error", A.class "card field-error", A.attribute "role" "alert" ]
+                    [ text (Translations.notFound active.texts) ]
+
+            _ ->
+                p [ A.class "muted", A.attribute "role" "status" ]
+                    [ text (Translations.loadingMessage active.texts) ]
+        )
+
+
 viewNested : Active -> String -> Model -> Html Msg
 viewNested active parent _ =
-    a [ A.class "outlined-button", A.href (Route.path (Route.Comment parent)) ]
+    a [ A.class "outlined-button", A.href (Route.path (Route.Comment (String.toInt parent |> Maybe.withDefault 0))) ]
         [ text (Translations.repliesTitle active.texts) ]
 
 

@@ -1,6 +1,8 @@
 # Architecture
 
-The application uses Elm's `Browser.application` and explicit feature state. `src/Main.elm` wires the program, coordinates navigation and shell events, and validates asynchronous responses before dispatching them. `src/Route.elm` owns bookmarkable URLs and query parameters. `src/Domain.elm` decodes backend DTOs. `src/Api.elm` centralizes same-origin requests, JSON body transport, multipart uploads, and HTTP status-to-problem conversion.
+The application uses Elm's `Browser.application` and explicit feature state. `src/Main.elm` wires the program, coordinates navigation and shell events, and validates asynchronous responses before dispatching them. `src/Lemmy/Route.elm` owns bookmarkable URLs and query parameters. `src/Lemmy/Domain.elm` decodes backend DTOs. `src/Api.elm` centralizes same-origin requests, JSON body transport, multipart uploads, and HTTP status-to-problem conversion.
+
+Canonical Lemmy paths are the only generated routes: `/c/:name`, `/post/:post_id/:comment_id?`, `/u/:username`, `/settings`, `/reports`, and `/modlog/:community_id?` replace the former Commune shapes. Community pages resolve the name first and use the returned identifier for listings and management requests. `/comment/:comment_id` resolves the containing post and replaces the history entry with the post discussion. The verification and reset tokens are read from their path segments rather than rewritten by the bootstrap.
 
 Remote reads and mutation responses carry the current route epoch. Main discards mismatched epochs, except for login/logout results, which must still complete after navigation. Session reads carry a separate authentication generation. Successful login/logout advance both generations; 401 session cleanup advances the authentication generation. Localization uses its own Pending request identifiers independently of page epochs. Mutations never retry automatically; 403 preserves permission feedback, and editor 409 recovery preserves the draft and fetches the latest source.
 
@@ -30,14 +32,14 @@ Remote reads and mutation responses carry the current route epoch. Main discards
 | `Feature.AccountBlocks` | Account-scoped person, community, and instance block management. |
 | `Feature.Editor` | Topic/reply/edit modes, drafts, exact source versions, attachments, uploads, saves, and conflict recovery. |
 | `Feature.Authoring` | Shared source-first Markdown value, selection, formatting commands, mention candidate state, debounce, and insertion outcomes used by Editor and Profile. |
-| `Feature.CommunityManage` | Community policies, rosters, follow requests, scoped reports and history, bans, moderation fields, and busy actions. |
+| `Feature.CommunityManage` | Community policies, manager roster, follow requests, scoped reports and history, bans, moderation fields, and busy actions. |
 | `Feature.Profile` | Public/own profile reads, settings form, avatar keep/clear/replace states, uploads and saving. |
-| `Feature.Report` | Shared post, community, and person report target, validation, submission, and accessible dialog state. |
+| `Feature.Report` | Shared post, comment, and community report target, validation, submission, and accessible dialog state. |
 | `Feature.Search` | URL-backed search kind/query, result variants, loading, submission and pagination. |
 | `Feature.SiteAdmin` | Current-site vote settings, report review, moderation history, site bans, and role-gated route state. |
 | `Feature.Notifications` | Notification snapshot, unread count, read actions and snapshot cursor. |
-| `Feature.Post` | Post detail, recursive reply trees, votes, likes, save/read/hide state, deletion, reply ordering, and mutation state. |
-| `Feature.Feed` | Latest topic page and offset-based loading. |
+| `Feature.Post` | Post detail, recursive reply trees, comment permalink focus, votes, likes, save/read/hide state, deletion, reply ordering, and mutation state. |
+| `Feature.Feed` | Latest topic page and cursor-based loading. |
 | `Feature.Community` | Community discovery/details/topics and permission-aware presentation. |
 | `Feature.CommunityCreate` | Creation form, policy normalization and creation outcome. |
 
@@ -47,7 +49,7 @@ Site administration is explicitly current-site scoped. The client does not expos
 
 ## State lifecycle and response boundaries
 
-`App.Routing.loadRoute` resets remote content reads, expanded replies, profile reads, notifications/counts, source/editor and management state. Authentication forms and profile drafts survive this shared reset. Entering NewCommunity resets that form; NewTopic starts a new draft; EditPost waits for source. Notifications, settings, and management only start protected reads for authenticated sessions. There is no new page cache.
+`App.Routing.loadRoute` resets remote content reads, expanded replies, profile reads, notifications/counts, source/editor and management state. Authentication forms and profile drafts survive this shared reset. Entering CreateCommunity resets that form; CreatePost starts a new draft; EditPost waits for source. Notifications, settings, and management only start protected reads for authenticated sessions. There is no new page cache.
 
 `App.Access.clearPrivate` clears own profile/form, notifications/count, management state and all mutation busy keys, preserving the original cleanup boundary. Feature outcomes determine when a 401 invokes this cleanup. Existing profile save/upload and community-creation failures remain local form errors and preserve drafts; they do not independently change authentication state. Route read failures and the existing session-aware action paths retain their original cleanup behavior. See the change's migration checklist and regression evidence for the comparison with the original implementation.
 
@@ -59,7 +61,7 @@ Main wraps asynchronous feature commands with route epochs using `Cmd.map`. Inpu
 
 Session cookies remain HttpOnly. The JavaScript bootstrap does not read the JWT or a CSRF value. The server remains authoritative for permissions and membership. JavaScript is otherwise limited to browser preferences, dynamic catalog decoding, Intl formatting, focus requests, native dialog control, and IME composition protection.
 
-Post display renders the server's sanitized HTML through an allowlisted Elm parser. Editing uses the shared source-first Markdown authoring surface and sends the exact expected version as a JSON number. The browser bridge formats semantic `<time datetime>` elements as localized absolute date/time values in the viewer's time zone; it does not append a relative phrase or change stored timestamps.
+Post and comment bodies are rendered from Markdown through the shared allowlisted renderer. Editing uses the shared source-first Markdown authoring surface and sends the exact expected version as a JSON number. The browser bridge formats semantic `<time datetime>` elements as localized absolute date/time values in the viewer's time zone; it does not append a relative phrase or change stored timestamps.
 
 Translations are generated from Fluent catalogs by Travelm Agency. Only selected JSON catalogs load at runtime. See `localization.md` for resource identity and failure behavior.
 

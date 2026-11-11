@@ -12,9 +12,9 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
 import Lemmy.Markdown as Markdown
+import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
-import Route
 import Set exposing (Set)
 import Ui.CommunityCard exposing (communityCard)
 import Ui.Feedback exposing (problemText, viewRemote)
@@ -28,6 +28,7 @@ type alias Model =
     { communities : Remote (Domain.Page Domain.CommunityView)
     , community : Remote Domain.CommunityView
     , communityTopics : Remote (Domain.Page Domain.PostView)
+    , topicsCursor : Maybe String
     , busy : Set String
     , problem : Maybe Api.Problem
     }
@@ -35,7 +36,7 @@ type alias Model =
 
 initial : Model
 initial =
-    { communities = NotAsked, community = NotAsked, communityTopics = NotAsked, busy = Set.empty, problem = Nothing }
+    { communities = NotAsked, community = NotAsked, communityTopics = NotAsked, topicsCursor = Nothing, busy = Set.empty, problem = Nothing }
 
 
 type Msg
@@ -122,10 +123,25 @@ update csrf message model =
         CommunityLoaded response ->
             case Api.decodeResponse (Decode.field "community_view" Domain.communityView) response of
                 Ok community ->
-                    ( { model | community = Ready community }, Cmd.none, { flash = NoFlash, sessionProblem = Nothing } )
+                    let
+                        ( topics, command ) =
+                            if model.communityTopics == Loading then
+                                ( Loading
+                                , Api.get
+                                    ("/post/list?type=local&sort=active&limit=20&community_id="
+                                        ++ String.fromInt community.community.id
+                                        ++ cursorQueryFrom model.topicsCursor
+                                    )
+                                    TopicsLoaded
+                                )
+
+                            else
+                                ( model.communityTopics, Cmd.none )
+                    in
+                    ( { model | community = Ready community, communityTopics = topics }, command, { flash = NoFlash, sessionProblem = Nothing } )
 
                 Err problem ->
-                    ( { model | community = Failed problem }
+                    ( { model | community = Failed problem, communityTopics = NotAsked }
                     , Cmd.none
                     , { flash = NoFlash
                       , sessionProblem =
@@ -162,16 +178,15 @@ load route url model =
         Route.Communities ->
             ( { model | communities = Loading }, Api.get ("/community/list?type=local&sort=active_monthly&limit=20" ++ cursorQuery url) CommunitiesLoaded )
 
-        Route.Community id ->
-            ( { model | community = Loading, communityTopics = Loading }
-            , Cmd.batch
-                [ Api.get ("/community?id=" ++ Url.percentEncode id) CommunityLoaded
-                , Api.get ("/post/list?type=local&sort=active&limit=20&community_id=" ++ Url.percentEncode id ++ cursorQuery url) TopicsLoaded
-                ]
+        Route.Community name ->
+            ( { model | community = Loading, communityTopics = Loading, topicsCursor = Route.cursor url }
+            , Api.get ("/community?name=" ++ Url.percentEncode name) CommunityLoaded
             )
 
-        Route.NewTopic id ->
-            ( { model | community = Loading }, Api.get ("/community?id=" ++ Url.percentEncode id) CommunityLoaded )
+        Route.CreatePost (Just id) ->
+            ( { model | community = Loading, communityTopics = NotAsked, topicsCursor = Nothing }
+            , Api.get ("/community?id=" ++ String.fromInt id) CommunityLoaded
+            )
 
         _ ->
             ( model, Cmd.none )
@@ -179,7 +194,12 @@ load route url model =
 
 cursorQuery : Url -> String
 cursorQuery url =
-    case Route.cursor url of
+    cursorQueryFrom (Route.cursor url)
+
+
+cursorQueryFrom : Maybe String -> String
+cursorQueryFrom cursorValue =
+    case cursorValue of
         Just cursor ->
             "&page_cursor=" ++ Url.percentEncode cursor
 
@@ -282,13 +302,13 @@ pageCommunity config model active id =
                             Markdown.render description
                         , div [ A.class "actions" ]
                             [ if not value.postingRestrictedToMods || community.canMod then
-                                a [ A.class "filled-button", A.href (Route.path (Route.NewTopic (String.fromInt value.id))) ]
+                                a [ A.class "filled-button", A.href (Route.path (Route.CreatePost (Just value.id))) ]
                                     [ text (Translations.publishTopic active.texts) ]
 
                               else
                                 text ""
                             , if community.canMod then
-                                a [ A.class "outlined-button", A.href (Route.path (Route.Manage (String.fromInt value.id))) ]
+                                a [ A.class "outlined-button", A.href (Route.path (Route.CommunitySettings value.name)) ]
                                     [ text (Translations.manageTitle active.texts) ]
 
                               else

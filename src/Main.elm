@@ -20,10 +20,10 @@ import Feature.Post as Post
 import Feature.SiteAdmin.Update as SiteAdmin
 import Json.Decode as Decode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import Locale exposing (Locale(..))
 import Ports exposing (closeDialog, focus, incoming, openDialog)
 import Remote exposing (Remote(..))
-import Route
 import Ui.PostCard exposing (deleteTriggerId)
 import Url
 
@@ -69,8 +69,16 @@ update message model =
 
                 ( loaded, command ) =
                     loadRoute changed
+
+                focusCommand =
+                    case changed.route of
+                        Route.Post _ (Just _) ->
+                            Cmd.none
+
+                        _ ->
+                            focus "main-heading"
             in
-            ( loaded, Cmd.batch [ command, unreadCommand loaded, closeDialog "navigation-drawer", focus "main-heading" ] )
+            ( loaded, Cmd.batch [ command, unreadCommand loaded, closeDialog "navigation-drawer", focusCommand ] )
 
         LanguageSelected raw ->
             selectLocale raw model
@@ -323,6 +331,28 @@ update message model =
             else
                 ( model, Cmd.none )
 
+        CommentTargetLoaded epoch response ->
+            if epoch == model.routeEpoch then
+                case Api.decodeResponse (Decode.field "comment_view" Domain.commentView) response of
+                    Ok comment ->
+                        if comment.comment.deleted || comment.post.deleted || comment.post.removed then
+                            ( { model | commentTarget = Failed { status = 404, detail = "unavailable" } }, focus "comment-target-error" )
+
+                        else
+                            ( { model | commentTarget = Ready () }
+                            , Navigation.replaceUrl model.key (Route.path (Route.Post comment.post.id (Just comment.comment.id)))
+                            )
+
+                    Err problem ->
+                        let
+                            base =
+                                authProblem model problem
+                        in
+                        ( { base | commentTarget = Failed problem }, focus "comment-target-error" )
+
+            else
+                ( model, Cmd.none )
+
         FeedResponse epoch event ->
             if epoch == model.routeEpoch then
                 updateFeed event model
@@ -367,10 +397,10 @@ confirmAction action model =
 
         ResolveReportDialog id stateValue ->
             case model.route of
-                Route.AdminReports ->
+                Route.Reports ->
                     updateSiteAdmin (SiteAdmin.ResolveReport id stateValue) model
 
-                Route.Manage _ ->
+                Route.CommunitySettings _ ->
                     updateManage (Manage.ManageResolveReport id stateValue) model
 
                 _ ->

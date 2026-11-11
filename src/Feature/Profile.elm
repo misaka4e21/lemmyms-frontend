@@ -16,8 +16,8 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
 import Lemmy.Markdown as Markdown
+import Lemmy.Route as Route
 import Remote exposing (Remote(..))
-import Route
 import Ui.Feedback exposing (loginRequired, viewFormProblem, viewRemote)
 import Ui.Layout exposing (entityHeading, pageHeading)
 import Ui.Rich
@@ -248,7 +248,6 @@ type alias Config msg =
     , profileClearAvatar : msg
     , profileSave : msg
     , avatarFileSelected : Maybe File -> msg
-    , reportPerson : String -> msg
     }
 
 
@@ -268,19 +267,7 @@ pagePublicProfile config model active username =
             model.publicProfile
             (\profile ->
                 div [ A.class "stack" ]
-                    [ profileCard active profile
-                    , case model.auth of
-                        Authenticated _ ->
-                            button
-                                [ A.type_ "button"
-                                , A.class "outlined-button"
-                                , Events.onClick (config.reportPerson profile.person.apId)
-                                ]
-                                [ text (Translations.reportPerson active.texts) ]
-
-                        _ ->
-                            text ""
-                    ]
+                    [ profileCard active profile ]
             )
         )
 

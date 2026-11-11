@@ -11,9 +11,9 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.CommentTree as CommentTree
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
-import Route
 import Set exposing (Set)
 import Ui.Feedback exposing (viewRemote)
 import Ui.Layout exposing (entityHeading)
@@ -26,12 +26,13 @@ type alias Model =
     , replies : Remote (Domain.Page (CommentTree.Threaded Domain.CommentView))
     , expandedReplies : Set String
     , busy : Set String
+    , focusComment : Maybe String
     }
 
 
 initial : Model
 initial =
-    { post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty }
+    { post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty, focusComment = Nothing }
 
 
 likeKey : String -> String
@@ -88,6 +89,7 @@ type alias Outcome =
     , navigation : Maybe String
     , refreshed : Maybe Domain.PostView
     , reloadRoute : Bool
+    , focusTarget : Maybe String
     }
 
 
@@ -96,11 +98,13 @@ type alias Working =
     , replies : Remote (Domain.Page (CommentTree.Threaded Domain.CommentView))
     , expandedReplies : Set String
     , busy : Set String
+    , focusComment : Maybe String
     , flash : Flash
     , sessionProblem : Maybe Api.Problem
     , navigation : Maybe String
     , refreshed : Maybe Domain.PostView
     , reloadRoute : Bool
+    , focusTarget : Maybe String
     }
 
 
@@ -115,17 +119,20 @@ update csrf url message state =
                 , replies = state.replies
                 , expandedReplies = state.expandedReplies
                 , busy = state.busy
+                , focusComment = state.focusComment
                 , flash = NoFlash
                 , sessionProblem = Nothing
                 , navigation = Nothing
                 , refreshed = Nothing
                 , reloadRoute = False
+                , focusTarget = Nothing
                 }
     in
     ( { post = next.post
       , replies = next.replies
       , expandedReplies = next.expandedReplies
       , busy = next.busy
+      , focusComment = state.focusComment
       }
     , command
     , { flash = next.flash
@@ -133,6 +140,7 @@ update csrf url message state =
       , navigation = next.navigation
       , refreshed = next.refreshed
       , reloadRoute = next.reloadRoute
+      , focusTarget = next.focusTarget
       }
     )
 
@@ -189,7 +197,7 @@ updateWorking csrf url message model =
             case Api.decodeUnit response of
                 Ok () ->
                     case Route.parse url of
-                        Route.Post id ->
+                        Route.Post id _ ->
                             let
                                 sort =
                                     Route.query "sort" url
@@ -210,7 +218,7 @@ updateWorking csrf url message model =
                             ( { model | replies = Loading }
                             , Api.get
                                 ("/comment/list?post_id="
-                                    ++ urlEncode id
+                                    ++ urlEncode (String.fromInt id)
                                     ++ "&limit=20&sort="
                                     ++ sort
                                     ++ "&max_depth="
@@ -247,7 +255,12 @@ updateWorking csrf url message model =
                 depth =
                     Route.query "max_depth" url |> String.toInt |> Maybe.withDefault 6 |> clamp 1 8
             in
-            ( { model | navigation = Just (Route.replyPageUrl url sort depth (Route.offset url)) }, Cmd.none )
+            case Route.parse url of
+                Route.Post postId _ ->
+                    ( { model | navigation = Just (Route.postCommentsUrl postId sort depth Nothing) }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
         DepthChanged depth ->
             let
@@ -261,7 +274,12 @@ updateWorking csrf url message model =
                                     "old"
                            )
             in
-            ( { model | navigation = Just (Route.replyPageUrl url sort (clamp 1 8 depth) (Route.offset url)) }, Cmd.none )
+            case Route.parse url of
+                Route.Post postId _ ->
+                    ( { model | navigation = Just (Route.postCommentsUrl postId sort (clamp 1 8 depth) Nothing) }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
         ConfirmDelete id ->
             ( { model | busy = Set.insert ("delete-" ++ id) model.busy }
@@ -337,10 +355,41 @@ updateWorking csrf url message model =
         RepliesLoaded response ->
             case Api.decodeResponse Domain.threadedPage response of
                 Ok page ->
-                    ( { model | replies = Ready page }, Cmd.none )
+                    let
+                        target =
+                            case model.focusComment of
+                                Just id ->
+                                    if commentExists id page.items then
+                                        Just ("comment-" ++ id)
+
+                                    else
+                                        Just "main-heading"
+
+                                Nothing ->
+                                    Nothing
+                    in
+                    ( { model | replies = Ready page, focusTarget = target }, Cmd.none )
 
                 Err problem ->
-                    ( problemState { model | replies = Failed problem } problem, Cmd.none )
+                    let
+                        updated =
+                            { model
+                                | replies = Failed problem
+                                , focusTarget =
+                                    if model.focusComment /= Nothing then
+                                        Just "main-heading"
+
+                                    else
+                                        Nothing
+                            }
+                    in
+                    ( problemState updated problem, Cmd.none )
+
+
+commentExists : String -> List (CommentTree.Threaded Domain.CommentView) -> Bool
+commentExists id threads =
+    CommentTree.flatten threads
+        |> List.any (\comment -> String.fromInt comment.comment.id == id)
 
 
 postMutation : String -> Working -> Mutation -> ( Working, Cmd Msg )
@@ -582,7 +631,7 @@ viewThreaded config active model (CommentTree.Threaded node) =
 
 reset : Model -> Model
 reset model =
-    { model | post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty }
+    { model | post = NotAsked, replies = NotAsked, expandedReplies = Set.empty, busy = Set.empty, focusComment = Nothing }
 
 
 idValue : String -> Int
@@ -633,10 +682,10 @@ reloadReplies url model =
     in
     ( { model | replies = Loading }
     , case Route.parse url of
-        Route.Post postId ->
+        Route.Post postId _ ->
             Api.get
                 ("/comment/list?post_id="
-                    ++ urlEncode postId
+                    ++ urlEncode (String.fromInt postId)
                     ++ "&limit=20&sort="
                     ++ sort
                     ++ "&max_depth="
@@ -649,8 +698,8 @@ reloadReplies url model =
     )
 
 
-load : String -> Url -> Model -> ( Model, Cmd Msg )
-load id url model =
+load : Int -> Maybe Int -> Url -> Model -> ( Model, Cmd Msg )
+load id commentId url model =
     let
         sort =
             Route.query "sort" url
@@ -668,12 +717,12 @@ load id url model =
                 |> Maybe.withDefault 6
                 |> clamp 1 8
     in
-    ( { model | post = Loading, replies = Loading, expandedReplies = Set.empty }
+    ( { model | post = Loading, replies = Loading, expandedReplies = Set.empty, focusComment = Maybe.map String.fromInt commentId }
     , Cmd.batch
-        [ Api.get ("/post?id=" ++ urlEncode id) PostLoaded
+        [ Api.get ("/post?id=" ++ urlEncode (String.fromInt id)) PostLoaded
         , Api.get
             ("/comment/list?post_id="
-                ++ urlEncode id
+                ++ urlEncode (String.fromInt id)
                 ++ "&limit=20&sort="
                 ++ sort
                 ++ "&max_depth="

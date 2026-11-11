@@ -6,7 +6,7 @@ import Html.Attributes as A
 import Html.Events as Events
 import Lemmy.Domain as Domain
 import Lemmy.Markdown as Markdown
-import Route
+import Lemmy.Route as Route
 import Ui.Formatting exposing (Formatting, boolText, formattedCount, repliesLabel)
 import Ui.Icon
 import Ui.VoteControl
@@ -62,8 +62,13 @@ commentCard config texts view =
         owner =
             config.viewerActor == Just view.creator.apId
     in
-    article [ A.class "card comment-card", A.attribute "aria-labelledby" ("comment-" ++ commentId) ]
-        [ h2 [ A.id ("comment-" ++ commentId), A.dir "auto" ] [ bdi [] [ text (Translations.authorLabel authorText texts) ] ]
+    article
+        [ A.id ("comment-" ++ commentId)
+        , A.class "card comment-card"
+        , A.tabindex -1
+        , A.attribute "aria-labelledby" ("comment-heading-" ++ commentId)
+        ]
+        [ h2 [ A.id ("comment-heading-" ++ commentId), A.dir "auto" ] [ bdi [] [ text (Translations.authorLabel authorText texts) ] ]
         , p [ A.class "metadata" ]
             [ time [ A.datetime comment.publishedAt, A.attribute "data-commune-time" "" ] [ text comment.publishedAt ]
             ]
@@ -132,7 +137,7 @@ commentCard config texts view =
             , if owner || view.canMod then
                 a
                     [ A.class "icon-button"
-                    , A.href (Route.path (Route.EditComment commentId))
+                    , A.href (Route.path (Route.EditComment comment.id))
                     , A.attribute "aria-label" (Translations.editComment texts)
                     , A.attribute "title" (Translations.editComment texts)
                     ]

@@ -4,7 +4,7 @@ import Generated.I18n as Translations
 import Html exposing (Html, a, div, p, text)
 import Html.Attributes as A
 import Lemmy.Domain as Domain
-import Route
+import Lemmy.Route as Route
 import Url exposing (Url)
 
 

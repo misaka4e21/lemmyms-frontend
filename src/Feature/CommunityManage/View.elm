@@ -10,9 +10,9 @@ import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
-import Route
 import Ui.CommunityPolicy exposing (policyFields)
 import Ui.Feedback exposing (loginRequired, viewFormProblem, viewRemote)
 import Ui.Formatting exposing (modeLabel, policyLabel)
@@ -70,7 +70,7 @@ pageManage config model active communityIdValue =
                     , case model.auth of
                         Authenticated identity ->
                             if Domain.isAdmin identity then
-                                a [ A.class "outlined-button", A.href (Route.path Route.AdminOverview) ]
+                                a [ A.class "outlined-button", A.href (Route.path Route.Admin) ]
                                     [ text (Translations.adminTitle active.texts) ]
 
                             else

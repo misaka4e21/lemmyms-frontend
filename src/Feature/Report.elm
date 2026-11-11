@@ -18,7 +18,6 @@ type Target
     = PostTarget String String
     | CommentTarget String
     | CommunityTarget String
-    | PersonTarget String
 
 
 type alias Model =
@@ -132,9 +131,6 @@ updateWorking csrf message model =
 
         Submit ->
             case model.target of
-                Just (PersonTarget _) ->
-                    ( model, Cmd.none )
-
                 Just target ->
                     let
                         reason =
@@ -197,9 +193,6 @@ reportPayload target reason =
         CommunityTarget id ->
             Encode.object [ ( "community_id", Encode.int (String.toInt id |> Maybe.withDefault 0) ), ( "reason", Encode.string reason ) ]
 
-        PersonTarget _ ->
-            Encode.object [ ( "reason", Encode.string reason ) ]
-
 
 reportEndpoint : Target -> String
 reportEndpoint target =
@@ -212,9 +205,6 @@ reportEndpoint target =
 
         CommunityTarget _ ->
             "/community/report"
-
-        PersonTarget _ ->
-            "/post/report"
 
 
 type alias Config msg =
@@ -289,9 +279,6 @@ targetKindLabel texts target =
         CommunityTarget _ ->
             Translations.reportCommunity texts
 
-        PersonTarget _ ->
-            Translations.reportPerson texts
-
 
 targetId : Target -> String
 targetId target =
@@ -304,6 +291,3 @@ targetId target =
 
         CommunityTarget id ->
             id
-
-        PersonTarget actor ->
-            actor

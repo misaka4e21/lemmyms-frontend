@@ -1,5 +1,19 @@
-module Lemmy.Route exposing (Route(..), communityPostsUrl, cursor, listing, modlogUrl, parse, path, postCommentsUrl, query, searchUrl, sort)
+module Lemmy.Route exposing
+    ( Route(..)
+    , communityPostsUrl
+    , cursor
+    , cursorUrl
+    , listing
+    , modlogUrl
+    , parse
+    , path
+    , postCommentsUrl
+    , query
+    , searchUrl
+    , sort
+    )
 
+import AccountSource exposing (AccountContentSource(..))
 import Url exposing (Url)
 import Url.Builder as Builder
 import Url.Parser as Parser exposing ((</>), Parser, int, s, string, top)
@@ -12,16 +26,22 @@ type Route
     | CommunitySettings String
     | Post Int (Maybe Int)
     | Comment Int
-    | CreatePost
+    | EditComment Int
+    | CreatePost (Maybe Int)
     | EditPost Int
     | CreateCommunity
     | Profile String
     | Search
     | Notifications
     | Settings
+    | PasswordSettings
+    | AccountContent AccountContentSource
+    | AccountBlocks
     | Admin
     | Reports
     | Modlog (Maybe Int)
+    | AdminBans
+    | AdminSettings
     | Login
     | Register
     | VerifyEmail String
@@ -39,13 +59,25 @@ parser =
         , Parser.map Communities (s "communities")
         , Parser.map (\postId commentId -> Post postId (Just commentId)) (s "post" </> int </> int)
         , Parser.map (\postId -> Post postId Nothing) (s "post" </> int)
+        , Parser.map EditComment (s "comment" </> int </> s "edit")
         , Parser.map Comment (s "comment" </> int)
-        , Parser.map CreatePost (s "create_post")
+        , Parser.map (CreatePost Nothing) (s "create_post")
         , Parser.map CreateCommunity (s "create_community")
         , Parser.map Profile (s "u" </> string)
         , Parser.map Search (s "search")
         , Parser.map Notifications (s "notifications")
+        , Parser.map PasswordSettings (s "settings" </> s "password")
+        , Parser.map Settings (s "settings" </> s "profile")
         , Parser.map Settings (s "settings")
+        , Parser.map (AccountContent SavedContent) (s "account" </> s "saved")
+        , Parser.map (AccountContent ReadContent) (s "account" </> s "read")
+        , Parser.map (AccountContent HiddenContent) (s "account" </> s "hidden")
+        , Parser.map (AccountContent LikedContent) (s "account" </> s "liked")
+        , Parser.map AccountBlocks (s "account" </> s "blocks")
+        , Parser.map AdminBans (s "admin" </> s "bans")
+        , Parser.map AdminSettings (s "admin" </> s "settings")
+        , Parser.map Reports (s "admin" </> s "reports")
+        , Parser.map (Modlog Nothing) (s "admin" </> s "modlog")
         , Parser.map Admin (s "admin")
         , Parser.map Reports (s "reports")
         , Parser.map (\communityId -> Modlog (Just communityId)) (s "modlog" </> int)
@@ -61,13 +93,18 @@ parser =
 parse : Url -> Route
 parse url =
     case Parser.parse parser url of
-        Just CreatePost ->
+        Just (CreatePost Nothing) ->
             case String.toInt (query "post_id" url) of
                 Just postId ->
                     EditPost postId
 
                 Nothing ->
-                    CreatePost
+                    case String.toInt (query "community_id" url) of
+                        Just communityId ->
+                            CreatePost (Just communityId)
+
+                        Nothing ->
+                            CreatePost Nothing
 
         Just route ->
             route
@@ -100,8 +137,14 @@ path route =
         Comment commentId ->
             Builder.absolute [ "comment", String.fromInt commentId ] []
 
-        CreatePost ->
+        EditComment commentId ->
+            Builder.absolute [ "comment", String.fromInt commentId, "edit" ] []
+
+        CreatePost Nothing ->
             "/create_post"
+
+        CreatePost (Just communityId) ->
+            Builder.absolute [ "create_post" ] [ Builder.int "community_id" communityId ]
 
         EditPost postId ->
             Builder.absolute [ "create_post" ] [ Builder.int "post_id" postId ]
@@ -121,6 +164,28 @@ path route =
         Settings ->
             "/settings"
 
+        PasswordSettings ->
+            "/settings/password"
+
+        AccountContent source ->
+            "/account/"
+                ++ (case source of
+                        SavedContent ->
+                            "saved"
+
+                        ReadContent ->
+                            "read"
+
+                        HiddenContent ->
+                            "hidden"
+
+                        LikedContent ->
+                            "liked"
+                   )
+
+        AccountBlocks ->
+            "/account/blocks"
+
         Admin ->
             "/admin"
 
@@ -132,6 +197,12 @@ path route =
 
         Modlog (Just communityId) ->
             Builder.absolute [ "modlog", String.fromInt communityId ] []
+
+        AdminBans ->
+            "/admin/bans"
+
+        AdminSettings ->
+            "/admin/settings"
 
         Login ->
             "/login"
@@ -182,6 +253,35 @@ cursor url =
 
         value ->
             Just value
+
+
+cursorUrl : Url -> String -> String
+cursorUrl url cursorValue =
+    url.path
+        ++ Builder.toQuery
+            ([ Builder.string "page_cursor" cursorValue ]
+                ++ (if parse url == Search then
+                        [ Builder.string "q" (query "q" url), Builder.string "kind" (query "kind" url) ]
+
+                    else
+                        []
+                   )
+                ++ optionalQuery "sort" url
+                ++ optionalQuery "max_depth" url
+                ++ optionalQuery "type" url
+                ++ optionalQuery "state" url
+                ++ optionalQuery "community_id" url
+            )
+
+
+optionalQuery : String -> Url -> List Builder.QueryParameter
+optionalQuery name url =
+    case query name url of
+        "" ->
+            []
+
+        value ->
+            [ Builder.string name value ]
 
 
 sort : String -> Url -> String

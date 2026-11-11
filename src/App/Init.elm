@@ -23,17 +23,16 @@ import Feature.Report as Report
 import Feature.Search as Search
 import Feature.SiteAdmin.State as SiteAdminState
 import Json.Decode as Decode
+import Lemmy.Route as Route
 import Locale exposing (Locale(..))
 import Localization exposing (LoadKind(..))
 import Remote exposing (Remote(..))
-import Route
 import Url exposing (Url)
 
 
 type alias Flags =
     { languages : List String
     , savedLocale : Maybe String
-    , verificationToken : String
     , wideLayout : Bool
     }
 
@@ -50,10 +49,24 @@ init rawFlags url key =
         ( loading, request ) =
             Localization.start Startup requested Localization.initial
 
+        route =
+            Route.parse url
+
+        account =
+            Feature.Auth.State.initial (verificationToken route)
+
+        accountWithReset =
+            case route of
+                Route.PasswordChange token ->
+                    Feature.Auth.State.withResetToken token account
+
+                _ ->
+                    account
+
         model =
             { key = key
             , url = url
-            , route = Route.parse url
+            , route = route
             , routeEpoch = 0
             , authGeneration = 0
             , auth = CheckingSession
@@ -68,7 +81,7 @@ init rawFlags url key =
             , dialog = Nothing
             , flash = NoFlash
             , formatted = Nothing
-            , account = Feature.Auth.State.initial flags.verificationToken
+            , account = accountWithReset
             , posts = Post.initial
             , feed = Feed.initial
             , communityPage = Community.initial
@@ -82,6 +95,7 @@ init rawFlags url key =
             , accountBlocks = AccountBlocks.initial
             , report = Report.initial
             , siteAdmin = SiteAdminState.initial
+            , commentTarget = NotAsked
             }
     in
     ( model, Cmd.batch [ loadCatalog request, loadSession model ] )
@@ -89,10 +103,9 @@ init rawFlags url key =
 
 flagsDecoder : Decode.Decoder Flags
 flagsDecoder =
-    Decode.map4 Flags
+    Decode.map3 Flags
         (Decode.field "languages" (Decode.list Decode.string))
         (Decode.field "savedLocale" (Decode.nullable Decode.string))
-        (Decode.field "verificationToken" Decode.string)
         (Decode.field "wideLayout" Decode.bool)
 
 
@@ -100,6 +113,15 @@ defaultFlags : Flags
 defaultFlags =
     { languages = [ "en-US" ]
     , savedLocale = Nothing
-    , verificationToken = ""
     , wideLayout = False
     }
+
+
+verificationToken : Route.Route -> String
+verificationToken route =
+    case route of
+        Route.VerifyEmail token ->
+            token
+
+        _ ->
+            ""

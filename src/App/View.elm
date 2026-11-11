@@ -5,7 +5,7 @@ import App.Context exposing (Active)
 import App.Shell exposing (viewBoot, viewReady)
 import App.State exposing (ConfirmationAction(..), Model, Msg(..))
 import App.View.Account exposing (pageLogin, pagePasswordReset, pagePasswordResetConfirm, pagePasswordSettings, pagePublicProfile, pageRegister, pageSettings, pageVerify)
-import App.View.Content exposing (editorConfig, pageCommunities, pageCommunity, pageLatest, pagePost, pageSearch, postCard)
+import App.View.Content exposing (editorConfig, pageCommentTarget, pageCommunities, pageCommunity, pageCreatePost, pageLatest, pagePost, pageSearch, postCard)
 import App.View.Participation exposing (pageManage, pageNewCommunity, pageNotifications)
 import Browser
 import Feature.AccountBlocks as AccountBlocks
@@ -19,8 +19,8 @@ import Feature.SiteAdmin.View as SiteAdminView
 import Generated.I18n as Translations
 import Html exposing (Html, p, text)
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import Remote exposing (Remote(..))
-import Route
 import Ui.Layout exposing (pageHeading)
 
 
@@ -68,7 +68,7 @@ routeTitle model active =
             active.texts
     in
     case model.route of
-        Route.Latest ->
+        Route.Home ->
             Translations.latestTitle texts
 
         Route.Communities ->
@@ -82,7 +82,7 @@ routeTitle model active =
                 _ ->
                     Translations.communitiesTitle texts
 
-        Route.Post _ ->
+        Route.Post _ _ ->
             case model.posts.post of
                 Ready post ->
                     if String.isEmpty post.post.name then
@@ -100,10 +100,10 @@ routeTitle model active =
         Route.EditComment _ ->
             Translations.editComment texts
 
-        Route.NewCommunity ->
+        Route.CreateCommunity ->
             Translations.createCommunity texts
 
-        Route.NewTopic _ ->
+        Route.CreatePost _ ->
             Translations.publishTopic texts
 
         Route.EditPost _ ->
@@ -115,7 +115,7 @@ routeTitle model active =
         Route.Register ->
             Translations.registerTitle texts
 
-        Route.Verify ->
+        Route.VerifyEmail _ ->
             Translations.verifyTitle texts
 
         Route.Search ->
@@ -130,10 +130,10 @@ routeTitle model active =
         Route.Settings ->
             Translations.settingsTitle texts
 
-        Route.PasswordReset ->
+        Route.LoginReset ->
             Translations.resetPasswordTitle texts
 
-        Route.PasswordResetConfirm ->
+        Route.PasswordChange _ ->
             Translations.resetPasswordTitle texts
 
         Route.PasswordSettings ->
@@ -145,13 +145,13 @@ routeTitle model active =
         Route.AccountBlocks ->
             Translations.blockTitle texts
 
-        Route.AdminOverview ->
+        Route.Admin ->
             Translations.adminTitle texts
 
-        Route.AdminReports ->
+        Route.Reports ->
             Translations.reportsTitle texts
 
-        Route.AdminModlog ->
+        Route.Modlog _ ->
             Translations.modlogTitle texts
 
         Route.AdminBans ->
@@ -160,7 +160,7 @@ routeTitle model active =
         Route.AdminSettings ->
             Translations.voteSettingsTitle texts
 
-        Route.Manage _ ->
+        Route.CommunitySettings _ ->
             Translations.manageTitle texts
 
         Route.NotFound ->
@@ -170,32 +170,35 @@ routeTitle model active =
 pageView : Model -> Active -> Html Msg
 pageView model active =
     case model.route of
-        Route.Latest ->
+        Route.Home ->
             pageLatest model active
 
         Route.Communities ->
             pageCommunities model active
 
-        Route.Community id ->
-            pageCommunity model active id
+        Route.Community name ->
+            pageCommunity model active name
 
-        Route.Post id ->
-            pagePost model active id
+        Route.Post id _ ->
+            pagePost model active (String.fromInt id)
 
-        Route.Comment id ->
-            pagePost model active id
+        Route.Comment _ ->
+            pageCommentTarget model active
 
         Route.EditComment id ->
-            Feature.Editor.View.pageEditor (editorConfig model) { editor = model.editorPage.editor, source = model.editorPage.source } active (EditComment id)
+            Feature.Editor.View.pageEditor (editorConfig model) { editor = model.editorPage.editor, source = model.editorPage.source } active (EditComment (String.fromInt id))
 
-        Route.NewCommunity ->
+        Route.CreateCommunity ->
             pageNewCommunity model active
 
-        Route.NewTopic id ->
-            Feature.Editor.View.pageEditor (editorConfig model) { editor = model.editorPage.editor, source = model.editorPage.source } active (CreateTopic id)
+        Route.CreatePost (Just id) ->
+            Feature.Editor.View.pageEditor (editorConfig model) { editor = model.editorPage.editor, source = model.editorPage.source } active (CreateTopic (String.fromInt id))
+
+        Route.CreatePost Nothing ->
+            pageCreatePost model active
 
         Route.EditPost id ->
-            Feature.Editor.View.pageEditor (editorConfig model) { editor = model.editorPage.editor, source = model.editorPage.source } active (EditPost id)
+            Feature.Editor.View.pageEditor (editorConfig model) { editor = model.editorPage.editor, source = model.editorPage.source } active (EditPost (String.fromInt id))
 
         Route.Login ->
             pageLogin model active
@@ -203,7 +206,7 @@ pageView model active =
         Route.Register ->
             pageRegister model active
 
-        Route.Verify ->
+        Route.VerifyEmail _ ->
             pageVerify model active
 
         Route.Search ->
@@ -218,10 +221,10 @@ pageView model active =
         Route.Settings ->
             pageSettings model active
 
-        Route.PasswordReset ->
+        Route.LoginReset ->
             pagePasswordReset model active
 
-        Route.PasswordResetConfirm ->
+        Route.PasswordChange _ ->
             pagePasswordResetConfirm model active
 
         Route.PasswordSettings ->
@@ -246,13 +249,13 @@ pageView model active =
                 }
                 active
 
-        Route.AdminOverview ->
+        Route.Admin ->
             SiteAdminView.pageOverview (siteAdminConfig model) (siteAdminViewModel model) active
 
-        Route.AdminReports ->
+        Route.Reports ->
             SiteAdminView.pageReports (siteAdminConfig model) (siteAdminViewModel model) active
 
-        Route.AdminModlog ->
+        Route.Modlog _ ->
             SiteAdminView.pageModlog (siteAdminConfig model) (siteAdminViewModel model) active
 
         Route.AdminBans ->
@@ -261,8 +264,8 @@ pageView model active =
         Route.AdminSettings ->
             SiteAdminView.pageSettings (siteAdminConfig model) (siteAdminViewModel model) active
 
-        Route.Manage id ->
-            pageManage model active id
+        Route.CommunitySettings name ->
+            pageManage model active name
 
         Route.NotFound ->
             pageHeading (Translations.notFound active.texts)

@@ -10,10 +10,10 @@ import Html exposing (label)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import List
 import Ports exposing (focus)
 import Remote exposing (Remote(..))
-import Route
 import Url exposing (Url)
 
 
@@ -211,7 +211,7 @@ updateWorking csrf message model =
                 Ok postId ->
                     ( { model
                         | editor = Nothing
-                        , navigation = Just (Route.path (Route.Post (String.fromInt postId)))
+                        , navigation = Just (Route.path (Route.Post postId Nothing))
                       }
                     , Cmd.none
                     )

@@ -10,9 +10,9 @@ import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
-import Route
 import Set
 import Ui.Feedback exposing (loginRequired, viewFormProblem, viewRemote)
 import Ui.Formatting exposing (Formatting, boolText)
@@ -82,10 +82,10 @@ pageWrapper model active title content =
 adminNav : Active -> Html msg
 adminNav active =
     navLinks
-        [ ( Route.AdminOverview, Translations.adminOverview active.texts )
+        [ ( Route.Admin, Translations.adminOverview active.texts )
         , ( Route.AdminSettings, Translations.adminVoteSettings active.texts )
-        , ( Route.AdminReports, Translations.adminReports active.texts )
-        , ( Route.AdminModlog, Translations.adminModlog active.texts )
+        , ( Route.Reports, Translations.adminReports active.texts )
+        , ( Route.Modlog Nothing, Translations.adminModlog active.texts )
         , ( Route.AdminBans, Translations.adminBans active.texts )
         ]
 
@@ -112,8 +112,8 @@ pageOverview config model active =
             , navLinks
                 [ ( Route.Communities, Translations.communitiesTitle active.texts )
                 , ( Route.AdminSettings, Translations.adminVoteSettings active.texts )
-                , ( Route.AdminReports, Translations.adminReports active.texts )
-                , ( Route.AdminModlog, Translations.adminModlog active.texts )
+                , ( Route.Reports, Translations.adminReports active.texts )
+                , ( Route.Modlog Nothing, Translations.adminModlog active.texts )
                 , ( Route.AdminBans, Translations.adminBans active.texts )
                 ]
             ]

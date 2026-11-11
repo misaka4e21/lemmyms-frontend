@@ -4,7 +4,7 @@ import Generated.I18n as Translations
 import Html exposing (Html, a, article, h2, p, span, text)
 import Html.Attributes as A
 import Lemmy.Domain as Domain
-import Route
+import Lemmy.Route as Route
 import Ui.Formatting exposing (modeLabel, policyLabel)
 
 
@@ -33,7 +33,7 @@ communityCard texts view =
                     Maybe.withDefault "" community.sidebar
     in
     article [ A.class "card" ]
-        [ h2 [] [ a [ A.href (Route.path (Route.Community (String.fromInt community.id))) ] [ text (Maybe.withDefault community.name community.title) ] ]
+        [ h2 [] [ a [ A.href (Route.path (Route.Community community.name)) ] [ text (Maybe.withDefault community.name community.title) ] ]
         , if String.isEmpty description then
             text ""
 

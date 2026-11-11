@@ -8,9 +8,9 @@ import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
-import Route
 import Ui.CommunityCard exposing (communityCard)
 import Ui.Feedback exposing (viewRemote)
 import Ui.Layout exposing (pageHeading)

@@ -36,5 +36,6 @@ clearPrivate model =
         , accountBlocks = AccountBlocks.initial
         , report = Report.initial
         , siteAdmin = SiteAdminState.initial
+        , commentTarget = NotAsked
         , posts = (\postsState -> { postsState | busy = Set.empty }) model.posts
     }

@@ -12,11 +12,11 @@ import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import List
 import Locale exposing (Locale(..))
 import Localization
 import Remote exposing (Remote(..))
-import Route
 import Ui.Formatting exposing (boolText)
 import Ui.Icon as Icon
 
@@ -245,7 +245,7 @@ drawerLinks model active extras =
         texts =
             active.texts
     in
-    [ drawerLink model active Route.Latest Icon.Home (Translations.navLatest texts) extras
+    [ drawerLink model active Route.Home Icon.Home (Translations.navLatest texts) extras
     , drawerLink model active Route.Communities Icon.Communities (Translations.navCommunities texts) extras
     , drawerLink model active Route.Search Icon.Search (Translations.navSearch texts) extras
     , drawerNotificationLink model active extras
@@ -336,7 +336,7 @@ drawerManagement model active extras =
     case model.auth of
         Authenticated identity ->
             if Domain.isAdmin identity then
-                [ drawerLink model active Route.AdminOverview Icon.Admin (Translations.navAdmin active.texts) extras ]
+                [ drawerLink model active Route.Admin Icon.Admin (Translations.navAdmin active.texts) extras ]
 
             else
                 []

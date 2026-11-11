@@ -1,4 +1,4 @@
-module Feature.Auth.State exposing (Model, initial, withResetToken)
+module Feature.Auth.State exposing (Model, initial, withResetToken, withVerificationToken)
 
 import Api
 
@@ -67,3 +67,8 @@ initial token =
 withResetToken : String -> Model -> Model
 withResetToken token model =
     { model | resetToken = token, resetComplete = False }
+
+
+withVerificationToken : String -> Model -> Model
+withVerificationToken token model =
+    { model | verificationToken = token, verifyProblem = Nothing, verified = False }

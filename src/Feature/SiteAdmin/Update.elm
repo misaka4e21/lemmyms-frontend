@@ -7,9 +7,9 @@ import Feature.SiteAdmin.State exposing (..)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
-import Route
 import Set exposing (Set)
 import Url exposing (Url)
 
@@ -431,15 +431,15 @@ urlEncode =
 
 reportsPath : String -> String -> String
 reportsPath state community =
-    "/admin/reports"
+    "/reports"
         ++ query
             [ ( "state", state )
             , ( "community_id", community )
             ]
 
 
-reportsApiPath : String -> String -> String
-reportsApiPath state community =
+reportsApiPath : String -> String -> Maybe String -> String
+reportsApiPath state community cursorValue =
     "/report/list"
         ++ query
             [ ( "unresolved_only"
@@ -451,6 +451,7 @@ reportsApiPath state community =
               )
             , ( "community_id", community )
             , ( "limit", "20" )
+            , ( "page_cursor", Maybe.withDefault "" cursorValue )
             ]
 
 
@@ -512,12 +513,12 @@ reportKind reportValue =
 
 modlogPath : String -> String
 modlogPath community =
-    "/admin/modlog" ++ query [ ( "community_id", community ) ]
+    "/modlog" ++ query [ ( "community_id", community ) ]
 
 
-modlogApiPath : String -> String
-modlogApiPath community =
-    "/modlog" ++ query [ ( "community_id", community ), ( "limit", "20" ) ]
+modlogApiPath : String -> Maybe String -> String
+modlogApiPath community cursorValue =
+    "/modlog" ++ query [ ( "community_id", community ), ( "limit", "20" ), ( "page_cursor", Maybe.withDefault "" cursorValue ) ]
 
 
 query : List ( String, String ) -> String
@@ -557,20 +558,31 @@ loadReports url model =
         community =
             Route.query "community_id" url
 
+        cursorValue =
+            Route.cursor url
+
         updated =
-            { model | reports = Loading, reportState = state, reportCommunity = community }
+            { model | reports = Loading, reportState = state, reportCommunity = community, reportCursor = cursorValue }
     in
     ( updated, reportsCommand updated )
 
 
-loadModlog : Url -> Model -> ( Model, Cmd Msg )
-loadModlog url model =
+loadModlog : Route.Route -> Url -> Model -> ( Model, Cmd Msg )
+loadModlog route url model =
     let
         community =
-            Route.query "community_id" url
+            case route of
+                Route.Modlog (Just id) ->
+                    String.fromInt id
+
+                _ ->
+                    Route.query "community_id" url
+
+        cursorValue =
+            Route.cursor url
 
         updated =
-            { model | modlog = Loading, modlogCommunity = community }
+            { model | modlog = Loading, modlogCommunity = community, modlogCursor = cursorValue }
     in
     ( updated, modlogCommand updated )
 
@@ -582,9 +594,9 @@ loadBans model =
 
 reportsCommand : Model -> Cmd Msg
 reportsCommand model =
-    Api.get (reportsApiPath model.reportState model.reportCommunity) (Loaded LoadReports)
+    Api.get (reportsApiPath model.reportState model.reportCommunity model.reportCursor) (Loaded LoadReports)
 
 
 modlogCommand : Model -> Cmd Msg
 modlogCommand model =
-    Api.get (modlogApiPath model.modlogCommunity) (Loaded LoadModlog)
+    Api.get (modlogApiPath model.modlogCommunity model.modlogCursor) (Loaded LoadModlog)

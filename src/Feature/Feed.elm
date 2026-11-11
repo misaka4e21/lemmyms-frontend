@@ -6,9 +6,9 @@ import Generated.I18n as Translations
 import Html exposing (Html, div)
 import Html.Attributes as A
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
-import Route
 import Ui.Feedback exposing (viewRemote)
 import Ui.Layout exposing (pageHeading)
 import Ui.Pagination exposing (emptyWithPagination, viewPagination)

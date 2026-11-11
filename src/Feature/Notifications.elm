@@ -11,9 +11,9 @@ import Html.Events as Events
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
+import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
-import Route
 import Ui.Feedback exposing (loginRequired, viewRemote)
 import Ui.Formatting exposing (Formatting)
 import Ui.Layout exposing (pageHeading)
@@ -253,15 +253,15 @@ notificationTargetLink active notice =
     case notice.data of
         Domain.NotificationComment comment ->
             a
-                [ A.href (Route.path (Route.Post (String.fromInt comment.post.id))) ]
+                [ A.href (Route.path (Route.Post comment.post.id (Just comment.comment.id))) ]
                 [ text (Translations.repliesTitle active.texts) ]
 
         Domain.NotificationPost post ->
-            a [ A.href (Route.path (Route.Post (String.fromInt post.post.id))) ]
+            a [ A.href (Route.path (Route.Post post.post.id Nothing)) ]
                 [ text (Translations.repliesTitle active.texts) ]
 
         Domain.NotificationModAction modlog ->
-            a [ A.href (Route.path Route.AdminModlog) ]
+            a [ A.href (Route.path (Route.Modlog Nothing)) ]
                 [ text (Translations.notificationModeration active.texts) ]
 
         Domain.NotificationPrivateMessage _ ->

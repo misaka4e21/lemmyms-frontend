@@ -5,8 +5,8 @@ import Generated.I18n as Translations
 import Html exposing (Html, a, button, div, p, text)
 import Html.Attributes as A
 import Html.Events as Events
+import Lemmy.Route as Route
 import Remote exposing (Remote(..))
-import Route
 
 
 viewRemote : msg -> Translations.I18n -> Remote a -> (a -> Html msg) -> Html msg

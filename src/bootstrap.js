@@ -14,17 +14,6 @@ try {
 } catch {
   storage = null;
 }
-let verificationToken = "";
-if (location.pathname.startsWith("/verify_email/")) {
-  verificationToken = decodeURIComponent(location.pathname.slice("/verify_email/".length));
-  history.replaceState(null, "", "/verify-email" + location.search);
-} else if (location.pathname === "/verify-email") {
-  verificationToken = new URLSearchParams(location.hash.slice(1)).get("token") || "";
-  if (verificationToken) history.replaceState(null, "", location.pathname + location.search);
-} else if (location.pathname.startsWith("/password_change/")) {
-  const token = decodeURIComponent(location.pathname.slice("/password_change/".length));
-  history.replaceState(null, "", "/reset-password/confirm#token=" + encodeURIComponent(token));
-}
 const formatTimes = () => {
   const locale = document.documentElement.lang || "en-US";
   for (const element of document.querySelectorAll("time[data-commune-time]")) {
@@ -39,7 +28,6 @@ const app = window.Elm.Main.init({
   flags: {
     languages: navigator.languages || ["en-US"],
     savedLocale: readPreference(storage),
-    verificationToken,
     wideLayout: wideMedia.matches,
   },
 });
