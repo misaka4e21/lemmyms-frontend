@@ -6,7 +6,7 @@ The interface SHALL use consistent Material Design 3 color, typography, elevatio
 
 The application bar SHALL present a distinct branded surface that is visually separate from the page surface. It SHALL be a single flat color (not a gradient), SHALL remain fully opaque, and SHALL stay visible while page content scrolls beneath it. Foreground text, icons, and control boundaries inside the application bar SHALL meet the contrast thresholds in the accessibility conformance requirement against that surface.
 
-The branded palette SHALL be pink: the primary, surface, container, on-surface, outline, focus, and application-bar tokens SHALL resolve to pink hues in both light and dark themes. Decorative accent color SHALL be confined to emphasis that does not carry meaning alone and SHALL NOT be used for small text on light surfaces unless it meets the text contrast threshold. The current-page state in the navigation drawer SHALL be conveyed by at least one non-color cue in addition to any color change.
+The branded palette SHALL be pink: the primary, container, on-surface, outline, focus, and application-bar tokens SHALL resolve to pink hues in both light and dark themes. The page surface (`--md-surface`) SHALL be pure white in light mode. Decorative accent color SHALL be confined to emphasis that does not carry meaning alone and SHALL NOT be used for small text on light surfaces unless it meets the text contrast threshold. The current-page state in the navigation drawer SHALL be conveyed by at least one non-color cue in addition to any color change.
 
 #### Scenario: Compact viewport
 

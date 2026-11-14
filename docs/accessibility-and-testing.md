@@ -90,3 +90,22 @@ Compact navigation correction: the compact rule `.desktop-nav { display: none }`
 - `npm run test:browser` passed 63 Playwright tests and skipped the real-backend test because external HTTPS and PostgreSQL credentials were not supplied. The suite adds toolbar formatting, local and stored remote mention insertion, IME-safe Enter, empty and unavailable candidate states, timestamp stability after vote refresh and locale switching, compact section and entity headings, disabled-direction clearing, and busy vote controls.
 - Automated axe scans at 1280, 768, and 320 CSS pixels reported no WCAG 2.2 A/AA violations across the existing routes and an authoring page with the mention listbox open.
 - `npm run format:check`, `npm run i18n:check`, and `ELM_HOME=/tmp/commune-elm-home npm run compile` passed. The real-backend workflow remains unverified in this run.
+
+## Pink application bar, 2026-11-14
+
+The application bar is now a single flat pink surface with a white foreground, replacing the 2026-10-25 gradient. The page surface became pure white and the surface containers are neutral grays; the pink stays on primary, containers, accent, focus, and the bar. All colors are still custom properties in `src/style.css`; no component-level color values were added.
+
+| Token | Value | Checked against | Ratio |
+|---|---|---|---|
+| `--md-top-bar` | `#b3265e` | `--md-on-top-bar` | 6.26:1 |
+| `--md-focus-on-dark` | `#ffffff` | bar surface | ≥6.26:1 |
+| `--md-accent` | `#9c1b4a` | `--md-surface` (white) | 7.87:1 |
+| `--md-error` | `#ba1a1a` | `--md-surface` (white) | 6.46:1 |
+| `--md-on-surface-variant` | `#524346` | `--md-surface-container-high` | 8.04:1 |
+
+Evidence collected on 2026-11-14 with Chromium supplied by `/usr/bin/chromium`:
+
+- `node --test tests-js/*.test.js` passed all six test files, including the five `tests-js/palette.test.js` assertions, now computed against the single flat bar stop.
+- `npm run build` succeeded and the emitted CSS carries `--md-top-bar` as `#b3265e` for light and `#9c1b4a` for dark; `dist/index.html` carries `theme-color="#b3265e"`.
+- `npm run test:browser` passed 74 tests with 3 skipped because external credentials were not supplied. The axe WCAG 2.2 A/AA scans on covered routes reported zero violations on the pink palette, and the enlarged-text, forced-colors, reduced-motion, and width checks still pass.
+- Dark mode is not covered by `palette.test.js`. Recomputed with the same formula: the dark bar `#9c1b4a` against its white foreground is 7.87:1, the dark accent and primary `#ffb1c9` on the dark surface are 10.92:1, the dark zero badge is 8.60:1, and dark body text on the dark surface is 14.24:1.

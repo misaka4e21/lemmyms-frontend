@@ -22,7 +22,7 @@ All color values live in `src/style.css` as CSS custom properties; no component-
 - **Pink primary**: `#b3265e` (light) / `#ffb1c9` (dark). Chosen so white text clears 4.5:1 on the bar and primary text clears 4.5:1 on the surface. Darker than the existing accent (`#c2185b`) so the two no longer collide.
 - **Accent darkened** from `#c2185b` to `#9c1b4a` (light) so it stays distinct from the new primary while still clearing 4.5:1 on the light surface.
 - **Flat bar**: a single `--md-top-bar` token replaces `--md-top-bar-start/mid/end`. Simpler and avoids the gradient compositing problem; the bar is now one solid pink surface.
-- **Surfaces**: shifted from lavender (`#fbf8ff`) to pale pink (`#fff0f6`) so the whole page reads pink, not just the primary.
+- **Surfaces**: page surface (`--md-surface`) is pure white (`#ffffff`); surface-container tokens are neutral grays (`#f5f5f5`, `#eeeeee`). Primary, container, and bar remain pink so the pink reads as brand, not as a page wash.
 - **theme-color**: set to the single bar value `#b3265e`.
 
 ## Risks / Trade-offs

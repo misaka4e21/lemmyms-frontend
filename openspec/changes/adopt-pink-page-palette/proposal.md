@@ -4,7 +4,7 @@ The page palette is currently purple (`--md-primary`, surfaces, top bar gradient
 
 ## What Changes
 
-- Replace the purple `:root` and dark-mode token set (`--md-primary`, containers, surfaces, on-surface, on-surface-variant, outline, focus, top-bar) with pink equivalents.
+- Replace the purple `:root` and dark-mode token set (`--md-primary`, containers, on-surface, on-surface-variant, outline, focus, top-bar) with pink equivalents. Page surface (`--md-surface`) becomes pure white in light mode; surface-container tokens become neutral grays.
 - Replace the three-stop top-bar gradient with a single flat pink stop (`--md-top-bar`), dropping `--md-top-bar-start/mid/end`.
 - Darken `--md-accent` so it reads as a distinct emphasis color against the new pink primary.
 - Update the `theme-color` meta in `index.html` to the new pink bar value.

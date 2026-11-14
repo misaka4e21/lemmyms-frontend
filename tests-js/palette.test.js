@@ -35,24 +35,20 @@ const token = name => {
 
 const format = (first, second) => `${contrast(first, second).toFixed(2)}:1`;
 
-test('each application bar stop keeps white text above 4.5:1', () => {
-  for (const stop of ['md-top-bar-start', 'md-top-bar-mid', 'md-top-bar-end']) {
-    const background = token(stop);
-    assert.ok(
-      contrast(background, token('md-on-top-bar')) >= 4.5,
-      `${stop} (${background}) only reaches ${format(background, token('md-on-top-bar'))}`
-    );
-  }
+test('application bar keeps white text above 4.5:1', () => {
+  const background = token('md-top-bar');
+  assert.ok(
+    contrast(background, token('md-on-top-bar')) >= 4.5,
+    `md-top-bar (${background}) only reaches ${format(background, token('md-on-top-bar'))}`
+  );
 });
 
-test('the on-bar focus ring stays above 3:1 on every bar stop', () => {
-  for (const stop of ['md-top-bar-start', 'md-top-bar-mid', 'md-top-bar-end']) {
-    const background = token(stop);
-    assert.ok(
-      contrast(background, token('md-focus-on-dark')) >= 3,
-      `${stop} focus ring only reaches ${format(background, token('md-focus-on-dark'))}`
-    );
-  }
+test('the on-bar focus ring stays above 3:1', () => {
+  const background = token('md-top-bar');
+  assert.ok(
+    contrast(background, token('md-focus-on-dark')) >= 3,
+    `md-top-bar focus ring only reaches ${format(background, token('md-focus-on-dark'))}`
+  );
 });
 
 test('accent text stays above 4.5:1 on the page surface', () => {

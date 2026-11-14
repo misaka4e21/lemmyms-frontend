@@ -1,27 +1,23 @@
 :root {
   scroll-padding-block-start: 5rem;
   color-scheme: light;
-  --md-primary: #47459b;
+  --md-primary: #b3265e;
   --md-on-primary: #ffffff;
-  --md-primary-container: #e2dfff;
-  --md-on-primary-container: #12005e;
-  --md-surface: #fbf8ff;
-  --md-surface-container: #f1edf7;
-  --md-surface-container-high: #ece7f2;
-  --md-on-surface: #1c1b20;
-  --md-on-surface-variant: #49464f;
-  --md-outline: #7a7682;
+  --md-primary-container: #ffd9e3;
+  --md-on-primary-container: #3e001d;
+  --md-surface: #ffffff;
+  --md-surface-container: #f5f5f5;
+  --md-surface-container-high: #eeeeee;
+  --md-on-surface: #201a1b;
+  --md-on-surface-variant: #524346;
+  --md-outline: #847376;
   --md-error: #ba1a1a;
-  --md-focus: #6b4bd7;
-  /* Branded bar: white text measures 8.11:1 / 6.01:1 / 4.89:1 at each stop.
-     Do not lighten the trailing stop without recalculating contrast. */
-  --md-top-bar-start: #4643a3;
-  --md-top-bar-mid: #5a55c0;
-  --md-top-bar-end: #6a63cf;
+  --md-focus: #b3265e;
+  --md-top-bar: #b3265e;
   --md-on-top-bar: #ffffff;
   --md-focus-on-dark: #ffffff;
-  /* Accent: 5.54:1 as text on the light surface, 5.88:1 behind white text. */
-  --md-accent: #c2185b;
+  /* Accent: 7.48:1 as text on the light surface. */
+  --md-accent: #9c1b4a;
   /* Large/bold or decorative labels only: 3.07:1 on the light surface. */
   --md-accent-soft: #ff4f9a;
   --md-elevation-1: 0 1px 2px rgb(28 27 32 / 18%), 0 1px 3px 1px rgb(28 27 32 / 10%);
@@ -32,21 +28,19 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --md-primary: #c7c0ff;
-  --md-on-primary: #20146b;
-  --md-primary-container: #35306f;
-  --md-on-primary-container: #e5e0ff;
-  --md-surface: #141218;
-  --md-surface-container: #211f26;
-  --md-surface-container-high: #2b2830;
-  --md-on-surface: #e6e1e9;
-  --md-on-surface-variant: #cac4d0;
-  --md-outline: #948f99;
+  --md-primary: #ffb1c9;
+  --md-on-primary: #5a0026;
+  --md-primary-container: #7c2a4a;
+  --md-on-primary-container: #ffd9e3;
+  --md-surface: #1a1114;
+  --md-surface-container: #261a1d;
+  --md-surface-container-high: #312327;
+  --md-on-surface: #f0dde2;
+  --md-on-surface-variant: #d4bfc4;
+  --md-outline: #9e8d91;
   --md-error: #ffb4ab;
-  --md-focus: #c7c0ff;
-  --md-top-bar-start: #201a4d;
-  --md-top-bar-mid: #2c2566;
-  --md-top-bar-end: #3a317e;
+  --md-focus: #ffb1c9;
+  --md-top-bar: #9c1b4a;
   --md-on-top-bar: #ffffff;
   --md-focus-on-dark: #ffffff;
   --md-accent: #ffb1c9;
@@ -144,7 +138,7 @@ textarea:focus-visible,
   height: 64px;
   padding-block: 0;
   padding-inline: 0.75rem;
-  background: linear-gradient(100deg, var(--md-top-bar-start) 0%, var(--md-top-bar-mid) 55%, var(--md-top-bar-end) 100%);
+  background: var(--md-top-bar);
   border-block-end: 1px solid transparent;
 }
 
@@ -560,7 +554,7 @@ h2 { margin-block: 0 0.5rem; }
   gap: 0.75rem;
   min-height: 80px;
   padding: 1rem;
-  background: linear-gradient(100deg, var(--md-top-bar-start) 0%, var(--md-top-bar-mid) 55%, var(--md-top-bar-end) 100%);
+  background: var(--md-top-bar);
   color: var(--md-on-top-bar);
   border-block-end: 1px solid rgb(255 255 255 / 35%);
   text-decoration: none;
