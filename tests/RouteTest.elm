@@ -106,6 +106,33 @@ suite =
                         , "/login_reset"
                         ]
                     )
+        , test "round trips the legal route" <|
+            \_ ->
+                Expect.equal Route.Legal (parse (Route.path Route.Legal))
+        , test "round trips the instances route" <|
+            \_ ->
+                Expect.equal Route.Instances (parse (Route.path Route.Instances))
+        , test "round trips the external interaction route" <|
+            \_ ->
+                Expect.equal Route.ExternalInteraction (parse (Route.path Route.ExternalInteraction))
+        , test "round trips P4 administration and authentication paths" <|
+            \_ ->
+                let
+                    routes =
+                        [ Route.Setup
+                        , Route.RegistrationApplications
+                        , Route.PendingFollows
+                        , Route.AdminTaglines
+                        , Route.AdminEmoji
+                        , Route.AdminOAuthProviders
+                        , Route.AdminUsers
+                        , Route.AdminMedia
+                        , Route.AdminConfiguration
+                        , Route.AdminFederation
+                        , Route.OAuthCallback
+                        ]
+                in
+                Expect.equal routes (List.map (Route.path >> parse) routes)
         , test "round trips generated paths" <|
             \_ ->
                 let

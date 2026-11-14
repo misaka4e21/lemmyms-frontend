@@ -8,20 +8,35 @@ import App.View.Account exposing (pageLogin, pagePasswordReset, pagePasswordRese
 import App.View.Content exposing (editorConfig, pageCommentTarget, pageCommunities, pageCommunity, pageCreatePost, pageLatest, pagePost, pageSearch, postCard)
 import App.View.Participation exposing (pageManage, pageMessageComposer, pageNewCommunity, pageNotifications)
 import Browser
+import Dict
 import Feature.AccountBlocks as AccountBlocks
 import Feature.AccountContent as AccountContent
+import Feature.CustomEmoji as CustomEmoji
 import Feature.Editor.State exposing (EditorMode(..))
 import Feature.Editor.Update as Editor
 import Feature.Editor.View
+import Feature.FederationPolicy as FederationPolicy
+import Feature.Instances as Instances
 import Feature.MultiCommunity as MultiCommunity
+import Feature.OAuthLogin as OAuthLogin
+import Feature.OAuthProviders as OAuthProviders
+import Feature.PendingFollows as PendingFollows
+import Feature.RegistrationApplications as RegistrationApplications
 import Feature.Report as Report
 import Feature.SiteAdmin.Update as SiteAdmin
 import Feature.SiteAdmin.View as SiteAdminView
+import Feature.SiteConfiguration as SiteConfiguration
+import Feature.SiteMedia as SiteMedia
+import Feature.SiteSetup as SiteSetup
+import Feature.SiteUsers as SiteUsers
+import Feature.Taglines as Taglines
 import Generated.I18n as Translations
 import Html exposing (Html, p, text)
 import Lemmy.Domain as Domain
+import Lemmy.Markdown as Markdown
 import Lemmy.Route as Route
 import Remote exposing (Remote(..))
+import Ui.Feedback exposing (viewRemote)
 import Ui.Layout exposing (pageHeading)
 
 
@@ -176,6 +191,48 @@ routeTitle model active =
         Route.AdminSettings ->
             Translations.voteSettingsTitle texts
 
+        Route.Legal ->
+            Translations.legalInformation texts
+
+        Route.Instances ->
+            Instances.title active.texts
+
+        Route.ExternalInteraction ->
+            Translations.resolvedResult texts
+
+        Route.PendingFollows ->
+            Translations.followRequests texts
+
+        Route.RegistrationApplications ->
+            RegistrationApplications.title texts
+
+        Route.Setup ->
+            Translations.siteSetup texts
+
+        Route.AdminTaglines ->
+            Translations.taglines texts
+
+        Route.AdminEmoji ->
+            Translations.customEmojis texts
+
+        Route.AdminOAuthProviders ->
+            Translations.oauthProviders texts
+
+        Route.AdminUsers ->
+            Translations.siteUsers texts
+
+        Route.AdminMedia ->
+            Translations.siteMedia texts
+
+        Route.AdminConfiguration ->
+            Translations.siteConfiguration texts
+
+        Route.AdminFederation ->
+            Translations.federationPolicy texts
+
+        Route.OAuthCallback ->
+            Translations.oauthCallback texts
+
         Route.CommunitySettings _ ->
             Translations.manageTitle texts
 
@@ -186,6 +243,117 @@ routeTitle model active =
 pageView : Model -> Active -> Html Msg
 pageView model active =
     case model.route of
+        Route.OAuthCallback ->
+            OAuthLogin.callbackPage { totp = OAuthTotpChanged, submit = OAuthSubmit } active model.oauthLogin
+
+        Route.AdminFederation ->
+            FederationPolicy.page
+                { retry = RetryPage, changed = FederationPolicyChanged, submit = FederationPolicySubmit }
+                active
+                model.auth
+                model.url
+                model.federationPolicy
+
+        Route.AdminMedia ->
+            SiteMedia.page RetryPage active model.auth model.url model.siteMedia
+
+        Route.AdminConfiguration ->
+            SiteConfiguration.page
+                { retry = RetryPage
+                , changed = SiteConfigurationChanged
+                , toggled = SiteConfigurationToggled
+                , save = SiteConfigurationSave
+                , imageSelected = SiteConfigurationImageSelected
+                , imageRemove = SiteConfigurationImageRemove
+                }
+                active
+                model.auth
+                model.siteConfiguration
+
+        Route.AdminUsers ->
+            SiteUsers.page
+                { retry = RetryPage, changeAdmin = \id name added -> OpenConfirmation (ChangeSiteAdminDialog id name added) }
+                active
+                model.auth
+                model.url
+                model.siteUsers
+
+        Route.AdminOAuthProviders ->
+            OAuthProviders.page
+                { retry = RetryPage
+                , changed = OAuthProviderFieldChanged
+                , flagChanged = OAuthProviderFlagChanged
+                , edit = OAuthProviderEdit
+                , cancel = OAuthProviderCancel
+                , submit = OAuthProviderSubmit
+                , delete = \provider -> OpenConfirmation (DeleteOAuthProviderDialog provider.id (Dict.get "display_name" provider.fields |> Maybe.withDefault ""))
+                }
+                active
+                model.auth
+                model.oauthProviders
+
+        Route.AdminEmoji ->
+            CustomEmoji.page
+                { retry = RetryPage
+                , changed = EmojiChanged
+                , edit = EmojiEdit
+                , cancel = EmojiCancel
+                , submit = EmojiSubmit
+                , delete = \emoji -> OpenConfirmation (DeleteEmojiDialog emoji.id emoji.shortcode)
+                }
+                active
+                model.auth
+                model.customEmoji
+
+        Route.AdminTaglines ->
+            Taglines.page
+                { retry = RetryPage
+                , newChanged = TaglineNewChanged
+                , editChanged = TaglineEditChanged
+                , create = TaglineSave Nothing
+                , save = Just >> TaglineSave
+                , delete = \id content -> OpenConfirmation (DeleteTaglineDialog id content)
+                }
+                active
+                model.auth
+                model.url
+                model.taglines
+
+        Route.Setup ->
+            SiteSetup.page { change = SiteSetupChanged, submit = SiteSetupSubmitted } active model.auth model.site model.siteSetup
+
+        Route.RegistrationApplications ->
+            RegistrationApplications.page
+                { retry = RetryPage, changeReason = RegistrationReasonChanged, decide = RegistrationDecision }
+                active
+                model.auth
+                model.url
+                model.registrationApplications
+
+        Route.PendingFollows ->
+            PendingFollows.page { retry = RetryPage, decide = PendingFollowDecision } active model.auth model.url model.pendingFollows
+
+        Route.ExternalInteraction ->
+            pageHeading (Translations.resolvedResult active.texts)
+                (viewRemote RetryPage active.texts model.externalInteraction (\_ -> text ""))
+
+        Route.Instances ->
+            Instances.page RetryPage active model.url model.instances
+
+        Route.Legal ->
+            pageHeading (Translations.legalInformation active.texts)
+                (case model.site |> Maybe.andThen (.localSite >> .legalInformation) of
+                    Just legal ->
+                        if String.isEmpty (String.trim legal) then
+                            p [] [ text (Translations.noContent active.texts) ]
+
+                        else
+                            Markdown.render legal
+
+                    Nothing ->
+                        p [] [ text (Translations.noContent active.texts) ]
+                )
+
         Route.Home ->
             pageLatest model active
 

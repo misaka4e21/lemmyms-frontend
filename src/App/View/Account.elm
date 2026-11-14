@@ -6,6 +6,7 @@ import Browser
 import Feature.AccountSettings as AccountSettings
 import Feature.Auth.Update as Auth
 import Feature.Auth.View
+import Feature.OAuthLogin as OAuthLogin
 import Feature.Profile as Profile
 import Html exposing (Html)
 import Lemmy.Domain as Domain
@@ -14,7 +15,14 @@ import Url
 
 pageLogin : Model -> Active -> Html Msg
 pageLogin model active =
-    Feature.Auth.View.pageLogin (authViewConfig model) model.auth model.account active
+    Html.div []
+        [ Feature.Auth.View.pageLogin (authViewConfig model) model.auth model.account active
+        , OAuthLogin.providerPanel
+            { username = OAuthUsernameChanged, answer = OAuthAnswerChanged, start = OAuthStart }
+            active
+            model.auth
+            model.oauthLogin
+        ]
 
 
 pageRegister : Model -> Active -> Html Msg

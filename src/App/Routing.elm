@@ -13,20 +13,33 @@ import Feature.Community as Community
 import Feature.CommunityCreate as CommunityCreate
 import Feature.CommunityManage.State as ManageState
 import Feature.CommunityManage.Update as Manage
+import Feature.CustomEmoji as CustomEmoji
 import Feature.Editor.State as EditorState exposing (EditorMode(..), emptyEditor)
 import Feature.Editor.Update as Editor
+import Feature.ExternalInteraction as ExternalInteraction
+import Feature.FederationPolicy as FederationPolicy
 import Feature.Feed as Feed
+import Feature.Instances as Instances
 import Feature.MultiCommunity as MultiCommunity
 import Feature.Notifications as Notifications
+import Feature.OAuthLogin as OAuthLogin
+import Feature.OAuthProviders as OAuthProviders
+import Feature.PendingFollows as PendingFollows
 import Feature.Post as Post
 import Feature.Profile as Profile
+import Feature.RegistrationApplications as RegistrationApplications
 import Feature.Report as Report
 import Feature.Search as Search
 import Feature.SiteAdmin.State as SiteAdminState
 import Feature.SiteAdmin.Update as SiteAdmin
+import Feature.SiteConfiguration as SiteConfiguration
+import Feature.SiteMedia as SiteMedia
+import Feature.SiteUsers as SiteUsers
+import Feature.Taglines as Taglines
 import Json.Decode as Decode
 import Lemmy.Domain as Domain
 import Lemmy.Route as Route
+import Ports
 import Remote exposing (Remote(..))
 import Url exposing (Url)
 
@@ -56,6 +69,109 @@ loadRoute model =
             model.routeEpoch
     in
     case model.route of
+        Route.OAuthCallback ->
+            let
+                previous =
+                    model.oauthLogin
+
+                hasQuery =
+                    model.url.query /= Nothing
+            in
+            ( { reset
+                | oauthLogin =
+                    { previous
+                        | callback =
+                            if hasQuery then
+                                OAuthLogin.Checking
+
+                            else
+                                OAuthLogin.Invalid
+                    }
+              }
+            , if hasQuery then
+                Ports.consumeOAuth
+
+              else
+                Cmd.none
+            )
+
+        Route.AdminFederation ->
+            let
+                ( state, command ) =
+                    FederationPolicy.load model.auth model.url (FederationPolicyLoaded epoch)
+            in
+            ( { reset | federationPolicy = state }, command )
+
+        Route.AdminConfiguration ->
+            let
+                ( state, command ) =
+                    SiteConfiguration.load model.auth (SiteConfigurationLoaded epoch)
+            in
+            ( { reset | siteConfiguration = state }, command )
+
+        Route.AdminMedia ->
+            let
+                ( state, command ) =
+                    SiteMedia.load model.auth model.url (SiteMediaLoaded epoch)
+            in
+            ( { reset | siteMedia = state }, command )
+
+        Route.AdminUsers ->
+            let
+                ( state, command ) =
+                    SiteUsers.load model.auth model.url (SiteUsersLoaded epoch)
+            in
+            ( { reset | siteUsers = state }, command )
+
+        Route.AdminOAuthProviders ->
+            let
+                ( state, command ) =
+                    OAuthProviders.load model.auth (OAuthProvidersLoaded epoch)
+            in
+            ( { reset | oauthProviders = state }, command )
+
+        Route.AdminEmoji ->
+            let
+                ( state, command ) =
+                    CustomEmoji.load model.auth (EmojiLoaded epoch)
+            in
+            ( { reset | customEmoji = state }, command )
+
+        Route.AdminTaglines ->
+            let
+                ( state, command ) =
+                    Taglines.load model.auth model.url (TaglinesLoaded epoch)
+            in
+            ( { reset | taglines = state }, command )
+
+        Route.RegistrationApplications ->
+            let
+                ( state, command ) =
+                    RegistrationApplications.load model.auth model.url (RegistrationApplicationsLoaded epoch)
+            in
+            ( { reset | registrationApplications = state }, command )
+
+        Route.PendingFollows ->
+            let
+                ( state, command ) =
+                    PendingFollows.load model.auth model.url (PendingFollowsLoaded epoch)
+            in
+            ( { reset | pendingFollows = state }, command )
+
+        Route.ExternalInteraction ->
+            let
+                ( state, command ) =
+                    ExternalInteraction.load model.url (ExternalInteractionLoaded epoch)
+            in
+            ( { reset | externalInteraction = state }, command )
+
+        Route.Instances ->
+            let
+                ( state, command ) =
+                    Instances.load model.url (InstancesLoaded epoch)
+            in
+            ( { reset | instances = state }, command )
+
         Route.Home ->
             let
                 ( state, command ) =

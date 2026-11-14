@@ -83,6 +83,14 @@ adminNav : Active -> Html msg
 adminNav active =
     navLinks
         [ ( Route.Admin, Translations.adminOverview active.texts )
+        , ( Route.RegistrationApplications, Translations.registrationApplications active.texts )
+        , ( Route.AdminTaglines, Translations.taglines active.texts )
+        , ( Route.AdminEmoji, Translations.customEmojis active.texts )
+        , ( Route.AdminOAuthProviders, Translations.oauthProviders active.texts )
+        , ( Route.AdminUsers, Translations.siteUsers active.texts )
+        , ( Route.AdminMedia, Translations.siteMedia active.texts )
+        , ( Route.AdminConfiguration, Translations.siteConfiguration active.texts )
+        , ( Route.AdminFederation, Translations.federationPolicy active.texts )
         , ( Route.AdminSettings, Translations.adminVoteSettings active.texts )
         , ( Route.Reports, Translations.adminReports active.texts )
         , ( Route.Modlog Nothing, Translations.adminModlog active.texts )
@@ -122,6 +130,15 @@ pageOverview config model active =
 
 pageSettings : Config msg -> ViewModel -> Active -> Html msg
 pageSettings config model active =
+    let
+        ready =
+            case model.admin.voteSettings of
+                Ready _ ->
+                    True
+
+                _ ->
+                    False
+    in
     pageWrapper model
         active
         (Translations.adminVoteSettings active.texts)
@@ -132,6 +149,7 @@ pageSettings config model active =
                 [ input
                     [ A.type_ "checkbox"
                     , A.checked model.admin.upvotesEnabled
+                    , A.disabled (model.admin.settingsBusy || not ready)
                     , Events.onCheck config.upvotesChanged
                     ]
                     []
@@ -141,13 +159,14 @@ pageSettings config model active =
                 [ input
                     [ A.type_ "checkbox"
                     , A.checked model.admin.downvotesEnabled
+                    , A.disabled (model.admin.settingsBusy || not ready)
                     , Events.onCheck config.downvotesChanged
                     ]
                     []
                 , text (" " ++ Translations.downvotesEnabled active.texts)
                 ]
             , viewFormProblem active.texts model.admin.settingsProblem
-            , button [ A.type_ "submit", A.class "filled-button", A.disabled model.admin.settingsBusy ]
+            , button [ A.type_ "submit", A.class "filled-button", A.disabled (model.admin.settingsBusy || not ready) ]
                 [ text (Translations.saveChanges active.texts) ]
             ]
         )

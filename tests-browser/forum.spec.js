@@ -439,6 +439,7 @@ function modlogView() {
 
 async function mockApi(page, state, { authenticated = false } = {}) {
   state.signedIn = authenticated;
+  if (process.env.COMMUNE_TEST_ELM_JS) await page.route('**/elm.js', route => route.fulfill({ path: process.env.COMMUNE_TEST_ELM_JS, contentType: 'text/javascript' }));
   await page.route('**/api/v4/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -448,8 +449,115 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     try { body = request.postDataJSON() || {}; } catch { body = {}; }
     state.calls.push({ method, path, search: url.search, body });
 
-    if (path === '/api/v4/site') return json(route, 200, site);
-    if (path === '/api/v4/account' && method === 'GET') return state.signedIn ? json(route, 200, myUser) : json(route, 401, { error: 'not_logged_in' });
+    if (['/api/v4/site/icon', '/api/v4/site/banner'].includes(path)) {
+      const target = state.configSite || site;
+      const kind = path.split('/').at(-1);
+      target.site_view.site[kind] = method === 'POST' ? `https://forum.test/${kind}.png` : null;
+      return json(route, 200, method === 'POST' ? { image_url: target.site_view.site[kind], filename: `${kind}.png` } : { success: true });
+    }
+    if (path === '/api/v4/site' && method === 'POST') {
+      if (state.failSiteSetup) return json(route, 400, { error: 'invalid_input' });
+      site.site_view.local_site.site_setup = true;
+      return json(route, 200, site.site_view);
+    }
+    if (path === '/api/v4/site' && method === 'PUT') {
+      if (state.siteConfigDelay) await new Promise(resolve => setTimeout(resolve, state.siteConfigDelay));
+      if (state.failSiteConfig) return json(route, 403, { error: 'not_an_admin' });
+      const target = state.configSite || site;
+      for (const [key, value] of Object.entries(body)) {
+        if (['name', 'summary', 'sidebar', 'content_warning'].includes(key)) target.site_view.site[key] = value;
+        else if (key === 'discussion_languages') target.discussion_languages = value;
+        else if (key.startsWith('rate_limit_')) target.site_view.local_site_rate_limit[key.slice(11)] = value;
+        else target.site_view.local_site[key] = value;
+      }
+      return json(route, 200, { site_view: target.site_view });
+    }
+    if (path === '/api/v4/site') return json(route, 200, { ...(state.configSite || site), admin_oauth_providers: state.providers || [], oauth_providers: state.publicProviders || [] });
+    if (path === '/api/v4/oauth/authenticate') {
+      if (state.oauthFail) return json(route, 400, { error: state.oauthFail === true ? 'oauth_authorization_invalid' : state.oauthFail });
+      if (state.oauthEstablishSession) state.signedIn = true;
+      return json(route, 200, state.oauthResult || { jwt: 'mock-token', registration_created: false, verify_email_sent: false });
+    }
+    if (path === '/api/v4/admin/users') {
+      const cursor = url.searchParams.get('page_cursor');
+      return json(route, 200, { items: state.siteUsers || [], prev_page: cursor ? 'first' : null, next_page: cursor ? null : 'next-user' });
+    }
+    if (path === '/api/v4/image/list') {
+      if (state.failMedia) return json(route, 403, { error: 'forbidden' });
+      const cursor = url.searchParams.get('page_cursor');
+      return json(route, 200, { items: state.siteMedia || [], prev_page: cursor ? 'first' : null, next_page: cursor ? null : 'next-media' });
+    }
+    if (path === '/api/v4/admin/add') {
+      if (state.failAdminChange) return json(route, 403, { error: 'forbidden' });
+      state.siteUsers.find(item => item.person.id === body.person_id).local_user.admin = body.added;
+      return json(route, 200, { admins: [] });
+    }
+    if (path === '/api/v4/oauth_provider') {
+      if (state.failProvider) return json(route, 403, { error: 'forbidden' });
+      if (method === 'POST') {
+        const { client_secret, ...publicFields } = body;
+        state.providers.push({ id: 15, ...publicFields });
+      }
+      if (method === 'PUT') {
+        const provider = state.providers.find(item => item.id === body.id);
+        const { client_secret, ...publicFields } = body;
+        Object.assign(provider, publicFields);
+      }
+      if (method === 'DELETE') state.providers = state.providers.filter(item => item.id !== body.id);
+      return json(route, 200, { success: true });
+    }
+    if (path === '/api/v4/admin/tagline/list') return json(route, 200, pageOf(state.taglines || []));
+    if (path === '/api/v4/admin/tagline') {
+      if (state.failTagline) return json(route, 400, { error: 'invalid_input' });
+      if (method === 'POST') state.taglines.push({ id: 11, content: body.content, published_at: '2026-11-13T08:00:00Z' });
+      if (method === 'PUT') state.taglines.find(item => item.id === body.id).content = body.content;
+      if (method === 'DELETE') state.taglines = state.taglines.filter(item => item.id !== body.id);
+      return json(route, 200, { success: true });
+    }
+    if (path === '/api/v4/custom_emoji/list') return json(route, 200, { custom_emojis: state.customEmojis || [] });
+    if (path === '/api/v4/custom_emoji') {
+      if (state.failEmoji) return json(route, 400, { error: 'invalid_input' });
+      if (method === 'POST') state.customEmojis.push({ custom_emoji: { id: 12, ...body }, keywords: body.keywords.map(keyword => ({ keyword })) });
+      if (method === 'PUT') {
+        const item = state.customEmojis.find(emoji => emoji.custom_emoji.id === body.id);
+        item.custom_emoji = { ...item.custom_emoji, ...body };
+        item.keywords = body.keywords.map(keyword => ({ keyword }));
+      }
+      if (method === 'DELETE') state.customEmojis = state.customEmojis.filter(item => item.custom_emoji.id !== body.id);
+      return json(route, 200, { success: true });
+    }
+    if (path === '/api/v4/admin/registration_application/list') {
+      const cursor = url.searchParams.get('page_cursor');
+      return json(route, 200, { items: state.applications || [], prev_page: cursor ? 'first' : null, next_page: cursor ? null : 'next-application' });
+    }
+    if (path === '/api/v4/admin/registration_application/approve') {
+      if (state.applicationDelay) await new Promise(resolve => setTimeout(resolve, state.applicationDelay));
+      if (state.failApplication) return json(route, 409, { error: 'conflict' });
+      state.applications = [];
+      return json(route, 200, { success: true });
+    }
+    if (path === '/api/v4/resolve_object') {
+      const uri = url.searchParams.get('q');
+      if (uri?.includes('unavailable')) return json(route, 404, { error: 'not_found' });
+      if (uri?.includes('unsupported')) return json(route, 200, { type_: 'unknown' });
+      return json(route, 200, { type_: 'community', ...communityView(state) });
+    }
+    if (path === '/api/v4/federated_instances') {
+      if (state.failInstances) return json(route, 503, { error: 'unavailable' });
+      if (state.federationRecords) return json(route, 200, pageOf(state.federationRecords));
+      const filter = url.searchParams.get('domain_filter');
+      const cursor = url.searchParams.get('page_cursor');
+      const items = filter === 'missing' ? [] : [{ instance: { domain: cursor ? 'second.example' : 'first.example' } }];
+      return json(route, 200, { items, ...(cursor ? { prev_page: 'first' } : {}), ...(!cursor && items.length ? { next_page: 'next' } : {}) });
+    }
+    if (path === '/api/v4/admin/instance/allow' || path === '/api/v4/admin/instance/block') {
+      if (state.failFederation) return json(route, 400, { error: 'invalid_input' });
+      const item = state.federationRecords.find(record => record.instance.domain === body.instance);
+      if (path.endsWith('/allow')) item.allowed = body.allow ? {} : null;
+      if (path.endsWith('/block')) item.blocked = body.block ? {} : null;
+      return json(route, 200, item);
+    }
+    if (path === '/api/v4/account' && method === 'GET') return state.signedIn ? json(route, 200, state.identity || myUser) : json(route, 401, { error: 'not_logged_in' });
     if (path === '/api/v4/account/unread_counts') return json(route, 200, { notification_count: 1 });
     if (path === '/api/v4/account/notification/list') {
       if (url.searchParams.get('type_') === 'private_message') return json(route, 200, pageOf([privateMessageNotification(state)]));
@@ -611,7 +719,16 @@ async function mockApi(page, state, { authenticated = false } = {}) {
       return json(route, 200, { image_url: 'https://forum.test/pictrs/image/community.png', filename: 'community.png' });
     }
     if (path === '/api/v4/community/mod' || path === '/api/v4/community/ban_user') return route.fulfill({ status: 204 });
-    if (path === '/api/v4/community/pending_follows/list') return json(route, 200, pageOf([]));
+    if (path === '/api/v4/community/pending_follows/list') {
+      if (!state.followQueue) return json(route, 200, pageOf([]));
+      const cursor = url.searchParams.get('page_cursor');
+      return json(route, 200, { items: state.followQueue, prev_page: cursor ? 'first' : null, next_page: cursor ? null : 'next-follow' });
+    }
+    if (path === '/api/v4/community/pending_follows/approve') {
+      if (state.failFollowDecision) return json(route, 409, { error: 'conflict' });
+      state.followQueue = [];
+      return json(route, 200, { success: true });
+    }
     if (path === '/api/v4/search') {
       return json(route, 200, {
         resolve: (url.searchParams.get('search_term') || '').includes('http') ? { type_: 'post', ...postView(state) } : null,
@@ -654,6 +771,577 @@ async function open(page, path) {
   await page.goto(path);
   await expect(page.locator('main')).toBeVisible();
 }
+
+test('shows current site legal information and its empty state', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state);
+  site.site_view.local_site.legal_information = 'Read the **terms**.';
+  try {
+    await open(page, '/legal');
+    await expect(page.getByRole('heading', { name: 'Legal information' })).toBeVisible();
+    await expect(page.locator('main strong')).toHaveText('terms');
+    site.site_view.local_site.legal_information = null;
+    await page.reload();
+    await expect(page.getByText('No content', { exact: true })).toBeVisible();
+  } finally {
+    site.site_view.local_site.legal_information = null;
+  }
+});
+
+test('browses federated instances with filters, pagination, and errors', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state);
+  await open(page, '/instances?kind=allowed&domain_filter=example');
+  await expect(page.getByRole('heading', { name: 'Federated instances' })).toBeVisible();
+  await expect(page.getByText('first.example')).toBeVisible();
+  await page.getByRole('link', { name: 'Next page' }).click();
+  await expect(page.getByText('second.example')).toBeVisible();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/federated_instances' && call.search.includes('kind=allowed') && call.search.includes('domain_filter=example') && call.search.includes('page_cursor=next'))).toBeTruthy();
+  await page.getByLabel('Domain').fill('missing');
+  await page.getByRole('button', { name: 'Filter' }).click();
+  await expect(page.getByText('No content', { exact: true })).toBeVisible();
+  state.failInstances = true;
+  await page.reload();
+  await expect(page.getByRole('alert')).toBeVisible();
+});
+
+test('preserves direct P4 routes across browser history', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/instances');
+  await expect(page.getByRole('heading', { name: 'Federated instances' })).toBeVisible();
+  await page.goto('/admin/users');
+  await expect(page.getByRole('heading', { name: 'Site users' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Federated instances' })).toBeVisible();
+  await page.goForward();
+  await expect(page.getByRole('heading', { name: 'Site users' })).toBeVisible();
+});
+
+test('resolves external interaction and reports invalid or unavailable objects', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state);
+  await page.goto('/activitypub/externalInteraction?uri=https%3A%2F%2Fremote.example%2Fc%2Fnews');
+  await expect(page).toHaveURL(/\/c\/news$/);
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/resolve_object' && new URLSearchParams(call.search).get('q') === 'https://remote.example/c/news')).toBeTruthy();
+  for (const uri of ['invalid', 'https://remote.example/unavailable', 'https://remote.example/unsupported']) {
+    await page.goto(`/activitypub/externalInteraction?uri=${encodeURIComponent(uri)}`);
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page).toHaveURL(/externalInteraction/);
+  }
+});
+
+test('reviews pending follows with admin filters and refreshes on success or conflict', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.followQueue = [{ person: replyPerson, community, is_new_instance: false, follow_state: 'approval_required' }];
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/pending_follows?all_communities=true&unread_only=true');
+  await expect(page.getByText('bob@forum.test · news')).toBeVisible();
+  await page.getByRole('link', { name: 'Next page' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/pending_follows/list' && call.search.includes('all_communities=true') && call.search.includes('unread_only=true') && call.search.includes('page_cursor=next-follow'))).toBeTruthy();
+  state.failFollowDecision = true;
+  await page.getByRole('button', { name: 'Reject' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByText('bob@forum.test · news')).toBeVisible();
+  state.failFollowDecision = false;
+  await page.getByRole('button', { name: 'Accept' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/pending_follows/approve' && call.body.community_id === 1 && call.body.follower_id === 2 && call.body.approve === true)).toBeTruthy();
+  await expect(page.getByText('No pending follow requests.')).toBeVisible();
+  state.followQueue = [{ person: replyPerson, community, is_new_instance: false, follow_state: 'approval_required' }];
+  await page.reload();
+  await page.getByRole('button', { name: 'Reject' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/pending_follows/approve' && call.body.approve === false)).toBeTruthy();
+  await expect(page.getByText('No pending follow requests.')).toBeVisible();
+});
+
+test('limits pending follows to moderators and administrators', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.identity = { ...myUser, local_user_view: { ...myUser.local_user_view, local_user: { ...myUser.local_user_view.local_user, admin: false } } };
+  state.followQueue = [{ person: replyPerson, community, is_new_instance: false, follow_state: 'approval_required' }];
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/pending_follows?all_communities=true');
+  await expect(page.getByText('bob@forum.test · news')).toBeVisible();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/pending_follows/list' && call.search.includes('all_communities=false'))).toBeTruthy();
+  state.identity = { ...state.identity, moderates: [] };
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0);
+  await expect(page.getByText('bob@forum.test · news')).toHaveCount(0);
+});
+
+test('reviews registration applications and preserves a rejected decision draft', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.applications = [{ registration_application: { id: 8, answer: 'I like the forum', published_at: '2026-11-13T08:00:00Z', deny_reason: null }, creator: replyPerson }];
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/registration_applications?unread_only=true');
+  await expect(page.getByRole('heading', { name: 'Registration applications' })).toBeVisible();
+  await expect(page.getByText('I like the forum')).toBeVisible();
+  await page.getByRole('link', { name: 'Next page' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/registration_application/list' && call.search.includes('unread_only=true') && call.search.includes('page_cursor=next-application'))).toBeTruthy();
+  await page.getByLabel('Reason').fill('Needs more detail');
+  state.failApplication = true;
+  state.applicationDelay = 250;
+  await page.getByRole('button', { name: 'Reject' }).click();
+  await expect(page.locator('main .loading-state')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reject' })).toBeDisabled();
+  await expect(page.getByRole('alert')).toHaveText('This content changed. Your draft is safe; compare the latest source.');
+  state.applicationDelay = 0;
+  await expect(page.getByLabel('Reason')).toHaveValue('Needs more detail');
+  state.failApplication = false;
+  await page.getByRole('button', { name: 'Reject' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/registration_application/approve' && call.method === 'PUT' && call.body.id === 8 && call.body.approve === false && call.body.deny_reason === 'Needs more detail')).toBeTruthy();
+  await expect(page.getByText('No content', { exact: true })).toBeVisible();
+  state.applications = [{ registration_application: { id: 9, answer: 'Another application', published_at: '2026-11-13T08:00:00Z' }, creator: replyPerson }];
+  await page.reload();
+  await page.getByRole('button', { name: 'Accept' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/registration_application/approve' && call.body.id === 9 && call.body.approve === true && !('deny_reason' in call.body))).toBeTruthy();
+});
+
+test('denies registration application controls to non-admins', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.identity = { ...myUser, local_user_view: { ...myUser.local_user_view, local_user: { ...myUser.local_user_view.local_user, admin: false } } };
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/registration_applications');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0);
+  expect(state.calls.some(call => call.path === '/api/v4/admin/registration_application/list')).toBe(false);
+});
+
+test('site setup checks authorization and preserves a failed draft', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  site.site_view.local_site.site_setup = false;
+  try {
+    await open(page, '/setup');
+    await page.getByLabel('Site name').fill('Example site');
+    await page.getByLabel('Legal information').fill('Terms');
+    state.failSiteSetup = true;
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByLabel('Site name')).toHaveValue('Example site');
+    state.failSiteSetup = false;
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect.poll(() => state.calls.some(call => call.path === '/api/v4/site' && call.method === 'POST' && call.body.name === 'Example site' && call.body.legal_information === 'Terms')).toBeTruthy();
+    await expect(page).toHaveURL(/\/$/);
+    await page.goto('/setup');
+    await expect(page.getByText('This site has already been set up.')).toBeVisible();
+    site.site_view.local_site.site_setup = false;
+    state.identity = { ...myUser, local_user_view: { ...myUser.local_user_view, local_user: { ...myUser.local_user_view.local_user, admin: false } } };
+    await page.reload();
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByLabel('Site name')).toHaveCount(0);
+    state.signedIn = false;
+    await page.reload();
+    await expect(page.getByRole('link', { name: 'Log in' }).last()).toBeVisible();
+    expect(state.calls.filter(call => call.path === '/api/v4/site' && call.method === 'POST')).toHaveLength(2);
+  } finally {
+    site.site_view.local_site.site_setup = true;
+  }
+});
+
+test('site configuration preserves untouched fields and failed drafts', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.configSite = structuredClone(site);
+  state.configSite.site_view.local_site.legal_information = 'Previous terms';
+  Object.assign(state.configSite.site_view.local_site, { federation_signed_fetch: true, nsfw_content_disallowed: false, oauth_registration: true });
+  state.configSite.discussion_languages = [0, 1];
+  state.configSite.site_view.local_site_rate_limit = Object.fromEntries(
+    ['message', 'post', 'register', 'image', 'comment', 'search', 'import_user_settings'].flatMap(category => [[`${category}_max_requests`, 10], [`${category}_interval_seconds`, 60]])
+  );
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/configuration');
+  const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+  expect(axe.violations).toEqual([]);
+  await page.getByLabel('Site name').fill('Changed site');
+  await page.getByLabel('Summary').fill('New summary');
+  await page.getByLabel('Legal information').fill('');
+  await page.getByLabel('Discussion language IDs (comma separated)').fill('2147483648');
+  await expect(page.getByLabel('Discussion language IDs (comma separated)')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  await page.getByLabel('Discussion language IDs (comma separated)').fill('0, 2');
+  await page.getByLabel('Private site').check();
+  await page.getByLabel('Registration mode').selectOption('closed');
+  await page.getByLabel('Enable federation').uncheck();
+  await page.getByLabel('Content warning').fill('Warning');
+  await page.locator('#rate_limit_post_interval_seconds').fill('0');
+  await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  await expect(page.locator('#rate_limit_post_interval_seconds')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('#rate_limit_post_interval_seconds')).toHaveAttribute('aria-describedby', 'site-configuration-error');
+  await expect(page.locator('#site-configuration-error')).toBeVisible();
+  await page.locator('#rate_limit_post_interval_seconds').fill('90');
+  await expect(page.locator('#rate_limit_post_interval_seconds')).not.toHaveAttribute('aria-invalid');
+  state.failSiteConfig = true;
+  state.siteConfigDelay = 250;
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.locator('main [role="status"]')).toBeVisible();
+  await expect(page.getByRole('alert')).toBeVisible();
+  state.siteConfigDelay = 0;
+  await expect(page.getByLabel('Site name')).toHaveValue('Changed site');
+  state.failSiteConfig = false;
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.filter(call => call.path === '/api/v4/site' && call.method === 'PUT').length).toBe(2);
+  const payload = state.calls.filter(call => call.path === '/api/v4/site' && call.method === 'PUT').at(-1).body;
+  expect(payload).toEqual({ content_warning: 'Warning', discussion_languages: [0, 2], federation_enabled: false, legal_information: '', name: 'Changed site', private_instance: true, rate_limit_post_interval_seconds: 90, registration_mode: 'closed', summary: 'New summary' });
+  await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  await expect(page.getByLabel('Site name')).toHaveValue('Changed site');
+  await page.locator('#site-icon-file').setInputFiles({ name: 'icon.png', mimeType: 'image/png', buffer: Buffer.from('image') });
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/site/icon' && call.method === 'POST')).toBeTruthy();
+  await expect(page.locator('#site-remove-icon')).toBeEnabled();
+  await page.locator('#site-remove-icon').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('heading')).toHaveText('Remove site icon');
+  await expect(page.getByRole('dialog')).toContainText('This removes the image from the site.');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#site-remove-icon')).toBeFocused();
+  expect(state.calls.some(call => call.path === '/api/v4/site/icon' && call.method === 'DELETE')).toBe(false);
+  await page.locator('#site-remove-icon').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/site/icon' && call.method === 'DELETE')).toBeTruthy();
+  await expect(page.locator('#site-remove-icon')).toBeDisabled();
+  await page.locator('#site-banner-file').setInputFiles({ name: 'banner.png', mimeType: 'image/png', buffer: Buffer.from('image') });
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/site/banner' && call.method === 'POST')).toBeTruthy();
+  await expect(page.locator('#site-remove-banner')).toBeEnabled();
+  await page.locator('#site-remove-banner').click();
+  await expect(page.getByRole('dialog').getByRole('heading')).toHaveText('Remove site banner');
+  await expect(page.getByRole('dialog')).toContainText('This removes the image from the site.');
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/site/banner' && call.method === 'DELETE')).toBeTruthy();
+  await expect(page.locator('#site-remove-banner')).toBeDisabled();
+});
+
+test('site configuration does not expose controls to non-admins', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.identity = { ...myUser, local_user_view: { ...myUser.local_user_view, local_user: { ...myUser.local_user_view.local_user, admin: false } } };
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/configuration');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByLabel('Site name')).toHaveCount(0);
+  expect(state.calls.some(call => call.path === '/api/v4/site' && call.method === 'PUT')).toBe(false);
+});
+
+test('creates, edits, and confirms deletion of site taglines', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.taglines = [{ id: 10, content: 'Existing tagline', published_at: '2026-11-13T08:00:00Z' }];
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/taglines');
+  await expect(page.getByRole('heading', { name: 'Taglines' })).toBeVisible();
+  await page.locator('#new-tagline').fill('New tagline');
+  state.failTagline = true;
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.locator('#new-tagline')).toHaveValue('New tagline');
+  state.failTagline = false;
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/tagline' && call.method === 'POST' && call.body.content === 'New tagline')).toBeTruthy();
+  await expect(page.locator('#tagline-11')).toHaveValue('New tagline');
+  await page.locator('#tagline-10').fill('Edited tagline');
+  await page.locator('#tagline-10').locator('..').getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.method === 'PUT' && call.path === '/api/v4/admin/tagline' && call.body.id === 10 && call.body.content === 'Edited tagline')).toBeTruthy();
+  await page.locator('#tagline-delete-10').click();
+  await expect(page.getByRole('dialog')).toContainText('Edited tagline');
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('#tagline-delete-10')).toBeFocused();
+  expect(state.calls.some(call => call.method === 'DELETE' && call.path === '/api/v4/admin/tagline')).toBe(false);
+  await page.locator('#tagline-delete-10').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(() => state.calls.some(call => call.method === 'DELETE' && call.path === '/api/v4/admin/tagline' && call.body.id === 10)).toBeTruthy();
+  await expect(page.locator('#tagline-10')).toHaveCount(0);
+});
+
+test('manages custom emoji and preserves failed input', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.customEmojis = [];
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/emoji');
+  await page.getByLabel('Shortcode').fill('hello');
+  await page.getByLabel('Image URL').fill('https://forum.test/image.png');
+  await page.getByLabel('Alternative text').fill('Hello');
+  await page.getByLabel('Category').fill('greetings');
+  await page.getByLabel('Keywords, separated by commas').fill('hi, wave');
+  state.failEmoji = true;
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByLabel('Shortcode')).toHaveValue('hello');
+  state.failEmoji = false;
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/custom_emoji' && call.method === 'POST' && call.body.image_url === 'https://forum.test/image.png' && call.body.keywords.join(',') === 'hi,wave')).toBeTruthy();
+  await page.getByRole('button', { name: 'Edit emoji' }).click();
+  await expect(page.getByLabel('Keywords, separated by commas')).toHaveValue('hi, wave');
+  await page.getByLabel('Alternative text').fill('Greeting');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/custom_emoji' && call.method === 'PUT' && call.body.id === 12 && call.body.alt_text === 'Greeting')).toBeTruthy();
+  await page.locator('#emoji-delete-12').click();
+  await expect(page.getByRole('dialog')).toContainText(':hello:');
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/custom_emoji' && call.method === 'DELETE' && call.body.id === 12)).toBeTruthy();
+  await expect(page.getByText('No content', { exact: true })).toBeVisible();
+});
+
+test('manages OAuth providers without exposing or replacing an unchanged secret', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.providers = [];
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/oauth');
+  const fields = {
+    'Provider name': 'Example provider',
+    'Issuer URL': 'https://identity.example',
+    'Authorization endpoint': 'https://identity.example/authorize',
+    'Token endpoint': 'https://identity.example/token',
+    'User info endpoint': 'https://identity.example/userinfo',
+    'User ID claim': 'sub',
+    'Client ID': 'client-id',
+    'Client secret': 'secret-value',
+    'Scopes': 'openid email'
+  };
+  for (const [name, value] of Object.entries(fields)) await page.getByLabel(name, { exact: true }).fill(value);
+  state.failProvider = true;
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByLabel('Provider name')).toHaveValue('Example provider');
+  state.failProvider = false;
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/oauth_provider' && call.method === 'POST' && call.body.client_secret === 'secret-value')).toBeTruthy();
+  await page.getByRole('button', { name: 'Edit provider' }).click();
+  await expect(page.getByLabel('Client secret')).toHaveValue('');
+  await expect(page.getByLabel('Client ID')).toBeDisabled();
+  await page.getByLabel('Provider name').fill('Edited provider');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/oauth_provider' && call.method === 'PUT' && call.body.id === 15 && call.body.display_name === 'Edited provider' && !('client_secret' in call.body) && !('client_id' in call.body) && !('issuer' in call.body))).toBeTruthy();
+  await page.locator('#provider-delete-15').click();
+  await expect(page.getByRole('dialog')).toContainText('Edited provider');
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('#provider-delete-15')).toBeFocused();
+  await page.locator('#provider-delete-15').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/oauth_provider' && call.method === 'DELETE' && call.body.id === 15)).toBeTruthy();
+});
+
+test('does not expose OAuth provider management to non-admins', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.identity = { ...myUser, local_user_view: { ...myUser.local_user_view, local_user: { ...myUser.local_user_view.local_user, admin: false } } };
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/oauth');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByLabel('Client secret')).toHaveCount(0);
+  expect(state.calls.some(call => call.path === '/api/v4/oauth_provider')).toBe(false);
+});
+
+test('validates and consumes an OAuth callback before exchanging the code', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.oauthEstablishSession = true;
+  await mockApi(page, state);
+  await open(page, '/login');
+  const origin = new URL(page.url()).origin;
+  await page.evaluate(originValue => sessionStorage.setItem('lemmyms.oauth.pending', JSON.stringify({
+    state: 'test-state', providerId: 15, redirectUri: `${originValue}/oauth/callback`,
+    verifier: 'v'.repeat(64), username: 'newuser', answer: 'Application', expiresAt: Date.now() + 60000
+  })), origin);
+  await page.goto('/oauth/callback?code=auth-code&state=test-state');
+  await expect(page.getByRole('heading', { name: 'Complete OAuth sign-in' })).toBeVisible();
+  await expect(page).toHaveURL(/\/oauth\/callback$/);
+  await page.getByLabel('Two-factor authentication code (if enabled)').fill('123456');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/oauth/authenticate' && call.body.code === 'auth-code' && call.body.oauth_provider_id === 15 && call.body.redirect_uri === `${origin}/oauth/callback` && call.body.pkce_code_verifier === 'v'.repeat(64) && call.body.username === 'newuser' && call.body.answer === 'Application' && call.body.totp_2fa_token === '123456')).toBeTruthy();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto('/oauth/callback?code=auth-code&state=test-state');
+  await expect(page.getByRole('alert')).toContainText('invalid or expired');
+  expect(state.calls.filter(call => call.path === '/api/v4/oauth/authenticate')).toHaveLength(1);
+});
+
+test('starts OAuth with a fresh provider-bound state and PKCE challenge', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.publicProviders = [{ id: 15, display_name: 'Identity provider', authorization_endpoint: 'https://id.example/authorize', client_id: 'client', scopes: 'openid email', use_pkce: true }];
+  await mockApi(page, state);
+  await page.route('https://id.example/**', route => route.fulfill({ status: 200, body: 'identity provider' }));
+  await open(page, '/login');
+  const origin = new URL(page.url()).origin;
+  await page.getByLabel('Username for a new account (optional for existing accounts)').fill('newuser');
+  await page.getByLabel('Registration application answer, if required').fill('Application');
+  const request = page.waitForRequest(req => req.url().startsWith('https://id.example/authorize'));
+  await page.getByRole('button', { name: 'Identity provider' }).click();
+  const authorization = new URL((await request).url());
+  expect(authorization.searchParams.get('client_id')).toBe('client');
+  expect(authorization.searchParams.get('redirect_uri')).toBe(`${origin}/oauth/callback`);
+  expect(authorization.searchParams.get('code_challenge_method')).toBe('S256');
+  expect(authorization.searchParams.get('code_challenge')).toBeTruthy();
+  expect(authorization.searchParams.get('state')).toBeTruthy();
+  await page.goto(`${origin}/login`);
+  const pending = await page.evaluate(() => JSON.parse(sessionStorage.getItem('lemmyms.oauth.pending')));
+  expect(pending.providerId).toBe(15);
+  expect(pending.username).toBe('newuser');
+  expect(pending.answer).toBe('Application');
+  expect(pending.state).toBe(authorization.searchParams.get('state'));
+});
+
+test('reports OAuth registration and verification outcomes', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state);
+  await open(page, '/login');
+  const origin = new URL(page.url()).origin;
+  for (const [result, message] of [
+    [{ registration_created: true, verify_email_sent: false }, 'Your registration application was submitted.'],
+    [{ registration_created: false, verify_email_sent: true }, 'Check your email to complete registration.']
+  ]) {
+    state.oauthResult = result;
+    await page.evaluate(originValue => sessionStorage.setItem('lemmyms.oauth.pending', JSON.stringify({
+      state: 'valid', providerId: 15, redirectUri: `${originValue}/oauth/callback`, verifier: null,
+      username: 'newuser', answer: 'answer', expiresAt: Date.now() + 60000
+    })), origin);
+    await page.goto('/oauth/callback?code=auth-code&state=valid');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByText(message)).toBeVisible();
+  }
+});
+
+test('explains missing OAuth registration details and preserves the application answer', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.publicProviders = [{ id: 15, display_name: 'Identity provider', authorization_endpoint: 'https://id.example/authorize', client_id: 'client', scopes: 'openid email', use_pkce: true }];
+  state.oauthFail = 'registration_username_required';
+  await mockApi(page, state);
+  await open(page, '/login');
+  const origin = new URL(page.url()).origin;
+  await page.evaluate(originValue => sessionStorage.setItem('lemmyms.oauth.pending', JSON.stringify({
+    state: 'valid', providerId: 15, redirectUri: `${originValue}/oauth/callback`, verifier: null,
+    username: '', answer: 'My application', expiresAt: Date.now() + 60000
+  })), origin);
+  await page.goto('/oauth/callback?code=auth-code&state=valid');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('alert')).toContainText('A username is required');
+  await page.getByRole('link', { name: 'Log in' }).last().click();
+  await expect(page.getByLabel('Registration application answer, if required')).toHaveValue('My application');
+});
+
+test('rejects OAuth state mismatches and does not claim a session without a cookie', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state);
+  await open(page, '/login');
+  const origin = new URL(page.url()).origin;
+  const seed = async () => page.evaluate(originValue => sessionStorage.setItem('lemmyms.oauth.pending', JSON.stringify({
+    state: 'right', providerId: 15, redirectUri: `${originValue}/oauth/callback`, verifier: null,
+    username: '', answer: '', expiresAt: Date.now() + 60000
+  })), origin);
+  await seed();
+  await page.goto('/oauth/callback?code=auth-code&state=wrong');
+  await expect(page.getByRole('alert')).toContainText('invalid or expired');
+  expect(state.calls.some(call => call.path === '/api/v4/oauth/authenticate')).toBe(false);
+  await seed();
+  await page.goto('/oauth/callback?code=auth-code&state=right');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('alert')).toContainText('server did not establish a session');
+});
+
+test('filters site users and confirms administrator role changes', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.siteUsers = [{ ...myUser.local_user_view, person: replyPerson, local_user: { ...myUser.local_user_view.local_user, id: 2, person_id: 2, admin: false } }];
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/users?sort=old&banned_only=true');
+  await expect(page.getByText('bob@forum.test')).toBeVisible();
+  await page.getByRole('link', { name: 'Next page' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/users' && call.search.includes('banned_only=true') && call.search.includes('sort=old') && call.search.includes('page_cursor=next-user'))).toBeTruthy();
+  await page.getByRole('button', { name: 'Grant administrator' }).click();
+  await expect(page.getByRole('dialog')).toContainText('bob@forum.test');
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('#site-admin-2')).toBeFocused();
+  state.failAdminChange = true;
+  await page.getByRole('button', { name: 'Grant administrator' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Grant administrator' })).toBeVisible();
+  state.failAdminChange = false;
+  await page.getByRole('button', { name: 'Grant administrator' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/add' && call.body.person_id === 2 && call.body.added === true)).toBeTruthy();
+  await expect(page.getByRole('button', { name: 'Remove administrator' })).toBeVisible();
+  await page.getByRole('button', { name: 'Remove administrator' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/add' && call.body.person_id === 2 && call.body.added === false)).toBeTruthy();
+  await expect(page.getByRole('button', { name: 'Grant administrator' })).toBeVisible();
+  state.identity = { ...myUser, local_user_view: { ...myUser.local_user_view, local_user: { ...myUser.local_user_view.local_user, admin: false } } };
+  await page.reload();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Grant administrator' })).toHaveCount(0);
+});
+
+test('lists current site media with paging and reports access failures', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.siteMedia = [{ local_image: { pictrs_alias: 'photo.png', published_at: '2026-11-13T08:00:00Z' }, person: replyPerson }];
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/media');
+  await expect(page.getByRole('heading', { name: 'Site media' })).toBeVisible();
+  await expect(page.getByText('Uploaded by bob@forum.test')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'photo.png' })).toHaveAttribute('href', '/api/v4/image/photo.png');
+  await page.getByRole('link', { name: 'Next page' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/image/list' && call.search.includes('page_cursor=next-media'))).toBeTruthy();
+  state.failMedia = true;
+  await page.reload();
+  await expect(page.getByRole('alert')).toBeVisible();
+});
+
+test('updates site federation policies independently of personal blocks', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.federationRecords = [{ instance: { domain: 'remote.example' }, allowed: null, blocked: null }];
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/federation');
+  await expect(page.getByText('remote.example · Linked')).toBeVisible();
+  await expect(page.getByText('These rules apply to this site and are separate from personal blocks.')).toBeVisible();
+  await page.getByLabel('Domain').fill('remote.example');
+  await page.getByLabel('Reason').fill('Trusted');
+  state.failFederation = true;
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByLabel('Domain')).toHaveValue('remote.example');
+  state.failFederation = false;
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/instance/allow' && call.body.instance === 'remote.example' && call.body.allow === true && call.body.reason === 'Trusted')).toBeTruthy();
+  await expect(page.getByText('remote.example · Allowed')).toBeVisible();
+  await page.getByLabel('Domain').fill('remote.example');
+  await page.getByLabel('Reason').fill('Policy change');
+  await page.getByLabel('Policy action').selectOption('unallow');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/instance/allow' && call.body.allow === false)).toBeTruthy();
+  await expect(page.getByText('remote.example · Linked')).toBeVisible();
+  await page.getByLabel('Domain').fill('remote.example');
+  await page.getByLabel('Reason').fill('Abuse');
+  await page.getByLabel('Policy action').selectOption('block');
+  await page.getByLabel('Block expiry, Unix seconds (optional)').fill('-1');
+  await expect(page.getByLabel('Block expiry, Unix seconds (optional)')).toHaveAttribute('aria-describedby', 'federation-expires-error');
+  await expect(page.locator('#federation-expires-error')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  await page.getByLabel('Block expiry, Unix seconds (optional)').fill('2000000000');
+  await expect(page.locator('#federation-expires-error')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/instance/block' && call.body.block === true && call.body.expires_at === 2000000000)).toBeTruthy();
+  await expect(page.getByText('remote.example · Blocked')).toBeVisible();
+  await page.getByLabel('Domain').fill('remote.example');
+  await page.getByLabel('Reason').fill('Resolved');
+  await page.getByLabel('Policy action').selectOption('unblock');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/admin/instance/block' && call.body.block === false && !('expires_at' in call.body))).toBeTruthy();
+  expect(state.calls.some(call => call.path.includes('/account/block'))).toBe(false);
+});
 
 test('browses latest, community, post and search', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
@@ -741,6 +1429,29 @@ test('admin report and modlog pages render', async ({ page }) => {
   await expect(page.getByText('spam')).toBeVisible();
   await page.goto('/modlog');
   await expect(page.getByText('mod_ban_from_community')).toBeVisible();
+});
+
+test('loads site vote settings and preserves untouched vote modes', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  site.site_view.local_site.default_post_upvotes = 'local';
+  site.site_view.local_site.default_post_downvotes = 'all';
+  try {
+    await open(page, '/admin/settings');
+    const upvotes = page.getByLabel('Upvotes enabled');
+    const downvotes = page.getByLabel('Downvotes enabled');
+    await expect(upvotes).toBeChecked();
+    await expect(downvotes).toBeChecked();
+    await downvotes.uncheck();
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect.poll(() => state.calls.some(call => call.path === '/api/v4/site' && call.method === 'PUT' && call.body.default_post_downvotes === 'disable' && !('default_post_upvotes' in call.body))).toBeTruthy();
+    await expect(downvotes).not.toBeChecked();
+    await expect(upvotes).toBeChecked();
+  } finally {
+    site.site_view.local_site.default_post_upvotes = 'all';
+    site.site_view.local_site.default_post_downvotes = 'all';
+  }
 });
 
 test('resolves comment permalinks and canonical account routes', async ({ page }) => {
@@ -1097,9 +1808,12 @@ test('opens own profile from the drawer identity header', async ({ page }) => {
   expect(labels).toEqual([
     'Latest discussions',
     'Communities',
+    'Federated instances',
+    'Legal information',
     'Search',
     'Notifications',
     'Manage site',
+    'Pending follow requests',
     'My content',
     'Blocks',
     'Profile settings',
@@ -1328,5 +2042,30 @@ test('has no automated accessibility violations on the latest page', async ({ pa
     await page.goto(path);
     const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(axe.violations).toEqual([]);
+  }
+});
+
+test('P4 administration and federation pages have no automated accessibility violations', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  for (const [path, title] of [
+    ['/instances', 'Federated instances'],
+    ['/legal', 'Legal information'],
+    ['/admin/users', 'Site users'],
+    ['/admin/media', 'Site media'],
+    ['/admin/federation', 'Federation policy'],
+    ['/admin/oauth', 'OAuth providers'],
+    ['/admin/taglines', 'Taglines'],
+    ['/admin/emoji', 'Custom emoji'],
+    ['/registration_applications', 'Registration applications'],
+    ['/pending_follows', 'Pending follow requests']
+  ]) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+    await expect(page.locator('main .loading-state')).toHaveCount(0);
+    await expect(page.locator('main [role="alert"]')).toHaveCount(0);
+    const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(axe.violations, path).toEqual([]);
   }
 });

@@ -6,6 +6,8 @@ import App.Feedback exposing (Flash(..), flashText)
 import App.Session exposing (AuthState(..))
 import App.State exposing (ConfirmationAction(..), Model, Msg(..))
 import Feature.Auth.Update as Auth
+import Feature.Instances as Instances
+import Feature.PendingFollows as PendingFollows
 import Generated.I18n as Translations
 import Html exposing (Html, a, bdi, button, div, h1, h2, header, img, label, main_, nav, option, p, section, select, span, text)
 import Html.Attributes as A
@@ -257,9 +259,22 @@ drawerLinks model active extras =
     in
     [ drawerLink model active Route.Home Icon.Home (Translations.navLatest texts) extras
     , drawerLink model active Route.Communities Icon.Communities (Translations.navCommunities texts) extras
+    , drawerLink model active Route.Instances Icon.Language (Instances.title active.texts) extras
+    , drawerLink model active Route.Legal Icon.Admin (Translations.legalInformation texts) extras
     , drawerLink model active Route.Search Icon.Search (Translations.navSearch texts) extras
     , drawerNotificationLink model active extras
     ]
+        ++ (case model.site of
+                Just site ->
+                    if site.localSite.siteSetup then
+                        []
+
+                    else
+                        [ drawerLink model active Route.Setup Icon.Settings (Translations.siteSetup texts) extras ]
+
+                Nothing ->
+                    []
+           )
 
 
 drawerLink : Model -> Active -> Route.Route -> Icon.Icon -> String -> List (Html.Attribute Msg) -> Html Msg
@@ -344,11 +359,18 @@ drawerManagement : Model -> Active -> List (Html.Attribute Msg) -> List (Html Ms
 drawerManagement model active extras =
     case model.auth of
         Authenticated identity ->
-            if Domain.isAdmin identity then
+            (if Domain.isAdmin identity then
                 [ drawerLink model active Route.Admin Icon.Admin (Translations.navAdmin active.texts) extras ]
 
-            else
+             else
                 []
+            )
+                ++ (if PendingFollows.allowed model.auth then
+                        [ drawerLink model active Route.PendingFollows Icon.Communities (Translations.followRequests active.texts) extras ]
+
+                    else
+                        []
+                   )
 
         _ ->
             []
@@ -423,6 +445,29 @@ confirmationTitle active action =
             else
                 Translations.multiCommunityRestore active.texts
 
+        DeleteTaglineDialog _ _ ->
+            Translations.deleteTagline active.texts
+
+        DeleteEmojiDialog _ _ ->
+            Translations.deleteEmoji active.texts
+
+        DeleteOAuthProviderDialog _ _ ->
+            Translations.deleteProvider active.texts
+
+        ChangeSiteAdminDialog _ _ added ->
+            if added then
+                Translations.grantSiteAdmin active.texts
+
+            else
+                Translations.removeSiteAdmin active.texts
+
+        RemoveSiteImageDialog kind ->
+            if kind == "icon" then
+                Translations.siteRemoveIcon active.texts
+
+            else
+                Translations.siteRemoveBanner active.texts
+
 
 confirmationHelp : Active -> ConfirmationAction -> String
 confirmationHelp active action =
@@ -448,6 +493,21 @@ confirmationHelp active action =
 
             else
                 Translations.multiCommunityRestoreHelp active.texts
+
+        DeleteTaglineDialog _ content ->
+            Translations.confirmDeleteTagline active.texts ++ " " ++ content
+
+        DeleteEmojiDialog _ shortcode ->
+            Translations.confirmDeleteEmoji active.texts ++ " :" ++ shortcode ++ ":"
+
+        DeleteOAuthProviderDialog _ name ->
+            Translations.confirmDeleteProvider active.texts ++ " " ++ name
+
+        ChangeSiteAdminDialog _ name _ ->
+            Translations.confirmAdminChange active.texts ++ " " ++ name
+
+        RemoveSiteImageDialog _ ->
+            Translations.confirmSiteImageHelp active.texts
 
 
 viewDonationPrompt : Active -> Html Msg

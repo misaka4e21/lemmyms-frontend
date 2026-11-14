@@ -119,6 +119,17 @@ type alias GetSiteResponse =
     , tagline : Maybe Tagline
     , myFeedToken : Maybe String
     , captchaEnabled : Bool
+    , oauthProviders : List PublicOAuthProvider
+    }
+
+
+type alias PublicOAuthProvider =
+    { id : Id
+    , displayName : String
+    , authorizationEndpoint : String
+    , clientId : String
+    , scopes : String
+    , usePkce : Bool
     }
 
 
@@ -892,6 +903,18 @@ getSiteResponse =
         |> and (maybeField "tagline" tagline)
         |> and (maybeField "my_feed_token" D.string)
         |> and (defaultField "captcha_enabled" False D.bool)
+        |> and (defaultField "oauth_providers" [] (D.list publicOAuthProvider))
+
+
+publicOAuthProvider : Decoder PublicOAuthProvider
+publicOAuthProvider =
+    D.map6 PublicOAuthProvider
+        (D.field "id" identifier)
+        (D.field "display_name" D.string)
+        (D.field "authorization_endpoint" D.string)
+        (D.field "client_id" D.string)
+        (D.field "scopes" D.string)
+        (defaultField "use_pkce" False D.bool)
 
 
 instance : Decoder Instance

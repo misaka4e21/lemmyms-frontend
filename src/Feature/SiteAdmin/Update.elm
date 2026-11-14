@@ -116,7 +116,7 @@ updateWorking context message state =
             )
 
         SettingsLoaded response ->
-            case Api.decodeResponse Domain.siteView response of
+            case Api.decodeResponse (Decode.field "site_view" Domain.siteView) response of
                 Ok settings ->
                     ( { state
                         | model =
@@ -149,42 +149,42 @@ updateWorking context message state =
             ( { state | model = { model | downvotesEnabled = value, settingsProblem = Nothing } }, Cmd.none )
 
         SaveSettings ->
-            if model.settingsBusy then
-                ( state, Cmd.none )
+            case model.voteSettings of
+                Ready original ->
+                    let
+                        changed key current previous =
+                            if current == (previous /= Domain.DisabledVotes) then
+                                []
 
-            else
-                ( { state | model = { model | settingsBusy = True, settingsProblem = Nothing } }
-                , Api.send context.csrf
-                    "PUT"
-                    "/site"
-                    (Encode.encode 0
-                        (Encode.object
-                            [ ( "default_post_upvotes"
-                              , Encode.string
-                                    (if model.upvotesEnabled then
-                                        "all"
+                            else
+                                [ ( key
+                                  , Encode.string
+                                        (if current then
+                                            "all"
 
-                                     else
-                                        "disable"
-                                    )
-                              )
-                            , ( "default_post_downvotes"
-                              , Encode.string
-                                    (if model.downvotesEnabled then
-                                        "all"
+                                         else
+                                            "disable"
+                                        )
+                                  )
+                                ]
 
-                                     else
-                                        "disable"
-                                    )
-                              )
-                            ]
+                        fields =
+                            changed "default_post_upvotes" model.upvotesEnabled original.defaultPostUpvotes
+                                ++ changed "default_post_downvotes" model.downvotesEnabled original.defaultPostDownvotes
+                    in
+                    if model.settingsBusy || List.isEmpty fields then
+                        ( state, Cmd.none )
+
+                    else
+                        ( { state | model = { model | settingsBusy = True, settingsProblem = Nothing } }
+                        , Api.send context.csrf "PUT" "/site" (Encode.encode 0 (Encode.object fields)) SettingsSaved
                         )
-                    )
-                    SettingsSaved
-                )
+
+                _ ->
+                    ( state, Cmd.none )
 
         SettingsSaved response ->
-            case Api.decodeResponse Domain.siteView response of
+            case Api.decodeResponse (Decode.field "site_view" Domain.siteView) response of
                 Ok settings ->
                     ( { state
                         | model =

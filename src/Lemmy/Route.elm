@@ -49,6 +49,20 @@ type Route
     | Modlog (Maybe Int)
     | AdminBans
     | AdminSettings
+    | Legal
+    | Instances
+    | ExternalInteraction
+    | PendingFollows
+    | RegistrationApplications
+    | Setup
+    | AdminTaglines
+    | AdminEmoji
+    | AdminOAuthProviders
+    | AdminUsers
+    | AdminMedia
+    | AdminConfiguration
+    | AdminFederation
+    | OAuthCallback
     | Login
     | Register
     | VerifyEmail String
@@ -88,9 +102,23 @@ parser =
         , Parser.map AccountBlocks (s "account" </> s "blocks")
         , Parser.map AdminBans (s "admin" </> s "bans")
         , Parser.map AdminSettings (s "admin" </> s "settings")
+        , Parser.map AdminTaglines (s "admin" </> s "taglines")
+        , Parser.map AdminEmoji (s "admin" </> s "emoji")
+        , Parser.map AdminOAuthProviders (s "admin" </> s "oauth")
+        , Parser.map AdminUsers (s "admin" </> s "users")
+        , Parser.map AdminMedia (s "admin" </> s "media")
+        , Parser.map AdminConfiguration (s "admin" </> s "configuration")
+        , Parser.map AdminFederation (s "admin" </> s "federation")
         , Parser.map Reports (s "admin" </> s "reports")
         , Parser.map (Modlog Nothing) (s "admin" </> s "modlog")
         , Parser.map Admin (s "admin")
+        , Parser.map Legal (s "legal")
+        , Parser.map Instances (s "instances")
+        , Parser.map ExternalInteraction (s "activitypub" </> s "externalInteraction")
+        , Parser.map PendingFollows (s "pending_follows")
+        , Parser.map RegistrationApplications (s "registration_applications")
+        , Parser.map Setup (s "setup")
+        , Parser.map OAuthCallback (s "oauth" </> s "callback")
         , Parser.map Reports (s "reports")
         , Parser.map (\communityId -> Modlog (Just communityId)) (s "modlog" </> int)
         , Parser.map (Modlog Nothing) (s "modlog")
@@ -231,6 +259,48 @@ path route =
         AdminSettings ->
             "/admin/settings"
 
+        Legal ->
+            "/legal"
+
+        Instances ->
+            "/instances"
+
+        ExternalInteraction ->
+            "/activitypub/externalInteraction"
+
+        PendingFollows ->
+            "/pending_follows"
+
+        RegistrationApplications ->
+            "/registration_applications"
+
+        Setup ->
+            "/setup"
+
+        AdminTaglines ->
+            "/admin/taglines"
+
+        AdminEmoji ->
+            "/admin/emoji"
+
+        AdminOAuthProviders ->
+            "/admin/oauth"
+
+        AdminUsers ->
+            "/admin/users"
+
+        AdminMedia ->
+            "/admin/media"
+
+        AdminConfiguration ->
+            "/admin/configuration"
+
+        AdminFederation ->
+            "/admin/federation"
+
+        OAuthCallback ->
+            "/oauth/callback"
+
         Login ->
             "/login"
 
@@ -346,6 +416,10 @@ cursorUrl url cursorValue =
                 ++ optionalQuery "community_id" url
                 ++ optionalQuery "q" url
                 ++ optionalQuery "kind" url
+                ++ optionalQuery "domain_filter" url
+                ++ optionalQuery "all_communities" url
+                ++ optionalQuery "unread_only" url
+                ++ optionalQuery "banned_only" url
             )
 
 

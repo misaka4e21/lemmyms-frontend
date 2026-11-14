@@ -38,7 +38,9 @@ try {
   for (const name of fs.readdirSync(temporaryAssets)) {
     const deployed = path.join(root, 'public', 'assets', 'i18n', name);
     if (!fs.existsSync(deployed)) throw new Error(`Missing translation asset ${name}`);
-    if (!fs.readFileSync(deployed).equals(fs.readFileSync(path.join(temporaryAssets, name)))) {
+    const actualAsset = fs.readFileSync(deployed);
+    const generatedAsset = fs.readFileSync(path.join(temporaryAssets, name));
+    if (!actualAsset.equals(generatedAsset) && !actualAsset.equals(Buffer.concat([generatedAsset, Buffer.from('\n')]))) {
       throw new Error(`Translation asset is stale: ${name}`);
     }
   }

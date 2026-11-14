@@ -12,10 +12,27 @@ port outgoing : Encode.Value -> Cmd msg
 port incoming : (Decode.Value -> msg) -> Sub msg
 
 
+consumeOAuth : Cmd msg
+consumeOAuth =
+    outgoing (Encode.object [ ( "action", Encode.string "oauth-callback" ) ])
+
+
 type IncomingData
     = IncomingFormatting Formatting
     | IncomingLayout Bool
+    | IncomingOAuthCallback (Maybe OAuthCallback)
+    | IncomingOAuthStartFailed
     | IncomingIgnored
+
+
+type alias OAuthCallback =
+    { providerId : Int
+    , code : String
+    , redirectUri : String
+    , verifier : Maybe String
+    , username : String
+    , answer : String
+    }
 
 
 incomingDecoder : Decode.Decoder IncomingData
@@ -30,9 +47,26 @@ incomingDecoder =
                     "layout" ->
                         Decode.map IncomingLayout (Decode.field "wide" Decode.bool)
 
+                    "oauth-callback" ->
+                        Decode.map IncomingOAuthCallback (Decode.field "result" (Decode.nullable oauthCallbackDecoder))
+
+                    "oauth-start-failed" ->
+                        Decode.succeed IncomingOAuthStartFailed
+
                     _ ->
                         Decode.succeed IncomingIgnored
             )
+
+
+oauthCallbackDecoder : Decode.Decoder OAuthCallback
+oauthCallbackDecoder =
+    Decode.map6 OAuthCallback
+        (Decode.field "providerId" Decode.int)
+        (Decode.field "code" Decode.string)
+        (Decode.field "redirectUri" Decode.string)
+        (Decode.field "verifier" (Decode.nullable Decode.string))
+        (Decode.field "username" Decode.string)
+        (Decode.field "answer" Decode.string)
 
 
 formattingDecoder : Decode.Decoder Formatting

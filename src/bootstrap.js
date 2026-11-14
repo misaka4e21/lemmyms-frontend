@@ -1,4 +1,5 @@
 import "./style.css";
+import { beginOAuth, consumeOAuthCallback } from "./oauth.js";
 import {
   normalizeResponse,
   formatTime,
@@ -65,6 +66,33 @@ document.addEventListener(
 app.ports.outgoing.subscribe((message) => {
   if (!message || typeof message.action !== "string") return;
   switch (message.action) {
+    case "oauth-start": {
+      try {
+        beginOAuth(message.provider, message.details, {
+          storage: window.sessionStorage,
+          crypto: window.crypto,
+          origin: window.location.origin,
+        }).then((url) => window.location.assign(url)).catch(() => {
+          app.ports.incoming.send({ kind: "oauth-start-failed" });
+        });
+      } catch {
+        app.ports.incoming.send({ kind: "oauth-start-failed" });
+      }
+      break;
+    }
+    case "oauth-callback": {
+      const url = window.location.href;
+      window.history.replaceState(window.history.state, "", window.location.pathname);
+      let result = null;
+      try {
+        result = consumeOAuthCallback(url, {
+          storage: window.sessionStorage,
+          origin: window.location.origin,
+        });
+      } catch { /* Storage can be unavailable. */ }
+      app.ports.incoming.send({ kind: "oauth-callback", result });
+      break;
+    }
     case "decode": {
       try {
         app.ports.incoming.send({

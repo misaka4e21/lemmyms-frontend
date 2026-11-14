@@ -14,16 +14,28 @@ import Feature.Auth.Update as Auth
 import Feature.Community as Community
 import Feature.CommunityCreate as CommunityCreate
 import Feature.CommunityManage.State
+import Feature.CustomEmoji as CustomEmoji
 import Feature.Editor.State
 import Feature.Editor.Update as Editor
+import Feature.FederationPolicy as FederationPolicy
 import Feature.Feed as Feed
+import Feature.Instances as Instances
 import Feature.MultiCommunity as MultiCommunity
 import Feature.Notifications as Notifications
+import Feature.OAuthLogin as OAuthLogin
+import Feature.OAuthProviders as OAuthProviders
+import Feature.PendingFollows as PendingFollows
 import Feature.Post as Post
 import Feature.Profile as Profile
+import Feature.RegistrationApplications as RegistrationApplications
 import Feature.Report as Report
 import Feature.Search as Search
 import Feature.SiteAdmin.State as SiteAdminState
+import Feature.SiteConfiguration as SiteConfiguration
+import Feature.SiteMedia as SiteMedia
+import Feature.SiteSetup as SiteSetup
+import Feature.SiteUsers as SiteUsers
+import Feature.Taglines as Taglines
 import Json.Decode as Decode
 import Lemmy.Route as Route
 import Locale exposing (Locale(..))
@@ -90,6 +102,18 @@ init rawFlags url key =
             , feed = Feed.initial
             , communityPage = Community.initial
             , searchPage = Search.initial
+            , instances = Instances.initial
+            , pendingFollows = PendingFollows.initial
+            , registrationApplications = RegistrationApplications.initial
+            , siteSetup = SiteSetup.initial
+            , taglines = Taglines.initial
+            , customEmoji = CustomEmoji.initial
+            , oauthProviders = OAuthProviders.initial
+            , oauthLogin = OAuthLogin.initial
+            , siteUsers = SiteUsers.initial
+            , siteMedia = SiteMedia.initial
+            , siteConfiguration = SiteConfiguration.initial
+            , federationPolicy = FederationPolicy.initial
             , notificationsPage = Notifications.initial
             , multiCommunity = MultiCommunity.initial
             , profile = Profile.initial
@@ -102,6 +126,7 @@ init rawFlags url key =
             , report = Report.initial
             , siteAdmin = SiteAdminState.initial
             , commentTarget = NotAsked
+            , externalInteraction = NotAsked
             }
     in
     ( model, Cmd.batch [ loadCatalog request, loadSession model ] )
