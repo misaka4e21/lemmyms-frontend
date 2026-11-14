@@ -5,6 +5,7 @@
 The interface SHALL use consistent Material Design 3 color, typography, elevation, shape, and interaction states. At 1200 CSS pixels and wider, the layout SHALL present a permanent navigation drawer, a bounded discussion column, and contextual information. Below 1200 CSS pixels, the layout SHALL present a single content column whose navigation is available through an accessible modal drawer. Source order SHALL remain meaningful across layouts and directions.
 
 The application bar SHALL present a distinct branded surface that is visually separate from the page surface. It SHALL be a single flat color (not a gradient), SHALL remain fully opaque, and SHALL stay visible while page content scrolls beneath it. Foreground text, icons, and control boundaries inside the application bar SHALL meet the contrast thresholds in the accessibility conformance requirement against that surface.
+It SHALL contain only the menu affordance and the product wordmark.
 
 The branded palette SHALL be pink: the primary, container, on-surface, outline, focus, and application-bar tokens SHALL resolve to pink hues in both light and dark themes. The page surface (`--md-surface`) SHALL be pure white in light mode. Decorative accent color SHALL be confined to emphasis that does not carry meaning alone and SHALL NOT be used for small text on light surfaces unless it meets the text contrast threshold. The current-page state in the navigation drawer SHALL be conveyed by at least one non-color cue in addition to any color change.
 
@@ -14,10 +15,6 @@ The branded palette SHALL be pink: the primary, container, on-surface, outline, 
 - **THEN** navigation and actions remain available without page-level horizontal scrolling, except inherently two-dimensional content in its own labeled region
 
 #### Scenario: Branded opaque application bar
-- **WHEN** a reader loads any implemented page at any supported viewport
-- **THEN** the application bar is visually distinct from the page surface, remains fully opaque and sticky, and its menu affordance and wordmark keep at least a 4.5:1 contrast ratio against the lightest point of its background
-
-#### Scenario: Branded flat application bar
 
 - **WHEN** a reader loads any implemented page at any supported viewport
 - **THEN** the application bar is visually distinct from the page surface, is a single flat color, remains fully opaque and sticky, and its menu affordance and wordmark keep at least a 4.5:1 contrast ratio against that background
