@@ -34,6 +34,7 @@ import Feature.SiteAdmin.State as SiteAdminState
 import Feature.SiteAdmin.Update as SiteAdmin
 import Feature.SiteConfiguration as SiteConfiguration
 import Feature.SiteMedia as SiteMedia
+import Feature.SitePurge as SitePurge
 import Feature.SiteUsers as SiteUsers
 import Feature.Taglines as Taglines
 import Json.Decode as Decode
@@ -109,12 +110,15 @@ loadRoute model =
             in
             ( { reset | siteConfiguration = state }, command )
 
+        Route.AdminPurge ->
+            ( { reset | sitePurge = SitePurge.initial }, Cmd.none )
+
         Route.AdminMedia ->
             let
                 ( state, command ) =
                     SiteMedia.load model.auth model.url (SiteMediaLoaded epoch)
             in
-            ( { reset | siteMedia = state }, command )
+            ( { reset | siteMedia = state, siteMediaBusy = False }, command )
 
         Route.AdminUsers ->
             let

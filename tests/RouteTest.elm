@@ -127,6 +127,7 @@ suite =
                         , Route.AdminOAuthProviders
                         , Route.AdminUsers
                         , Route.AdminMedia
+                        , Route.AdminPurge
                         , Route.AdminConfiguration
                         , Route.AdminFederation
                         , Route.OAuthCallback

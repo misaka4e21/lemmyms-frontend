@@ -468,6 +468,12 @@ confirmationTitle active action =
             else
                 Translations.siteRemoveBanner active.texts
 
+        RemoveSiteMediaDialog _ ->
+            Translations.remove active.texts
+
+        PurgeDialog _ _ _ ->
+            Translations.purgeSubmit active.texts
+
 
 confirmationHelp : Active -> ConfirmationAction -> String
 confirmationHelp active action =
@@ -508,6 +514,28 @@ confirmationHelp active action =
 
         RemoveSiteImageDialog _ ->
             Translations.confirmSiteImageHelp active.texts
+
+        RemoveSiteMediaDialog filename ->
+            Translations.confirmSiteImageHelp active.texts ++ " " ++ filename
+
+        PurgeDialog kind id _ ->
+            Translations.purgeHelp active.texts
+                ++ " "
+                ++ (case kind of
+                        "person" ->
+                            Translations.purgePerson active.texts
+
+                        "community" ->
+                            Translations.purgeCommunity active.texts
+
+                        "post" ->
+                            Translations.purgePost active.texts
+
+                        _ ->
+                            Translations.purgeComment active.texts
+                   )
+                ++ " #"
+                ++ String.fromInt id
 
 
 viewDonationPrompt : Active -> Html Msg

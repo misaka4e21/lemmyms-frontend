@@ -10,19 +10,19 @@
 
 - [x] 2.1 Implement setup authority and site-state handling; verify configured, anonymous, non-admin, and unconfigured-admin cases in browser tests.
 - [x] 2.2 Implement the setup form and failure recovery; verify submission and draft preservation with an isolated fixture.
-- [ ] 2.3 Add site identity, description, legal, media, and language settings; verify changes and untouched field preservation with mocked responses.
+- [x] 2.3 Add site identity, description, legal, media, and language settings; verify changes and untouched field preservation with mocked responses.
 - [x] 2.4 Add supported registration, federation, content policy, and rate-limit settings; verify validation, denied responses, and current-site refresh.
 - [x] 2.5 Preserve existing admin votes, reports, modlog, and bans; verify existing regression tests remain passing.
 
 ## 3. Administrative collections
 
-- [ ] 3.1 Implement registration application listing, filtering, approval, and rejection; verify pagination, decision reason, conflict, and non-admin access.
+- [x] 3.1 Implement registration application listing, filtering, approval, and rejection; verify pagination, decision reason, conflict, and non-admin access.
 - [x] 3.2 Implement tagline list and supported create, edit, and delete actions; verify request bodies and failure recovery.
 - [x] 3.3 Implement custom emoji list and supported create, edit, and delete actions; verify image and optional field handling with fixtures.
 - [x] 3.4 Implement OAuth provider management; verify secret omission, create, edit, deletion confirmation, and denied responses.
 - [x] 3.5 Implement user inventory and authorized administrator assignment; verify filtering, pagination, and permission failures.
-- [ ] 3.6 Implement media inventory and supported actions; verify pagination, access control, and error states.
-- [ ] 3.7 Add supported person, community, post, and comment purge actions; verify target-specific confirmation and cancellation in isolated fixtures.
+- [x] 3.6 Implement media inventory and supported actions; verify pagination, access control, and error states.
+- [x] 3.7 Add supported person, community, post, and comment purge actions; verify target-specific confirmation and cancellation in isolated fixtures.
 - [x] 3.8 Add federation allow and block administration; verify its policy is distinguished from personal blocks and refreshes on success.
 
 ## 4. Federation and review entry points
@@ -35,12 +35,12 @@
 ## 5. OAuth authentication
 
 - [x] 5.1 Add provider selection and authorization initiation with random, expiring, provider-bound state; verify redirect URI and state creation.
-- [ ] 5.2 Implement `/oauth/callback` validation and exchange; verify mismatch, expiry, replay, denial, and successful session restoration.
+- [x] 5.2 Implement `/oauth/callback` validation and exchange; verify mismatch, expiry, replay, denial, and successful session restoration.
 - [x] 5.3 Support backend-required OAuth registration details and application answers; verify prompts, failure recovery, and callback data removal.
 
 ## 6. Accessibility and acceptance
 
-- [ ] 6.1 Add localized messages and accessible labels, status feedback, and keyboard confirmations; verify locale generation and keyboard browser tests.
+- [x] 6.1 Add localized messages and accessible labels, status feedback, and keyboard confirmations; verify locale generation and keyboard browser tests.
 - [x] 6.2 Run Elm and JavaScript tests, compilation, and browser regression tests; record commands and results in the change.
-- [ ] 6.3 Exercise reversible current-site workflows against the running backend and verify tenant isolation; use isolated fixtures for setup and destructive actions and record any environment limitations.
+- [x] 6.3 Exercise reversible current-site workflows against the running backend and verify tenant isolation; use isolated fixtures for setup and destructive actions and record any environment limitations.
 - [x] 6.4 Validate the change with `openspec validate complete-site-administration-and-federation --strict` and check repository whitespace with `git diff --check`.

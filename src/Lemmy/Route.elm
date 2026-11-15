@@ -60,6 +60,7 @@ type Route
     | AdminOAuthProviders
     | AdminUsers
     | AdminMedia
+    | AdminPurge
     | AdminConfiguration
     | AdminFederation
     | OAuthCallback
@@ -107,6 +108,7 @@ parser =
         , Parser.map AdminOAuthProviders (s "admin" </> s "oauth")
         , Parser.map AdminUsers (s "admin" </> s "users")
         , Parser.map AdminMedia (s "admin" </> s "media")
+        , Parser.map AdminPurge (s "admin" </> s "purge")
         , Parser.map AdminConfiguration (s "admin" </> s "configuration")
         , Parser.map AdminFederation (s "admin" </> s "federation")
         , Parser.map Reports (s "admin" </> s "reports")
@@ -291,6 +293,9 @@ path route =
 
         AdminMedia ->
             "/admin/media"
+
+        AdminPurge ->
+            "/admin/purge"
 
         AdminConfiguration ->
             "/admin/configuration"

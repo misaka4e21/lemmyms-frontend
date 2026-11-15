@@ -89,6 +89,7 @@ adminNav active =
         , ( Route.AdminOAuthProviders, Translations.oauthProviders active.texts )
         , ( Route.AdminUsers, Translations.siteUsers active.texts )
         , ( Route.AdminMedia, Translations.siteMedia active.texts )
+        , ( Route.AdminPurge, Translations.purgeTitle active.texts )
         , ( Route.AdminConfiguration, Translations.siteConfiguration active.texts )
         , ( Route.AdminFederation, Translations.federationPolicy active.texts )
         , ( Route.AdminSettings, Translations.adminVoteSettings active.texts )

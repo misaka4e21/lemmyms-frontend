@@ -4,8 +4,9 @@ import Api
 import App.Context exposing (Active)
 import App.Session exposing (AuthState(..))
 import Generated.I18n as T
-import Html exposing (Html, a, div, img, p, section, text)
+import Html exposing (Html, a, button, div, img, p, section, text)
 import Html.Attributes as A
+import Html.Events as Events
 import Json.Decode as D
 import Lemmy.Domain as Domain
 import Lemmy.Route as Route
@@ -69,8 +70,8 @@ load auth url loaded =
             ( initial, Cmd.none )
 
 
-page : msg -> Active -> AuthState -> Url -> Model -> Html msg
-page retry active auth url model =
+page : msg -> (String -> msg) -> Bool -> Active -> AuthState -> Url -> Model -> Html msg
+page retry delete busy active auth url model =
     pageHeading (T.siteMedia active.texts)
         (case auth of
             Authenticated user ->
@@ -84,7 +85,7 @@ page retry active auth url model =
                                     p [ A.class "empty-state" ] [ text (T.noContent active.texts) ]
 
                                   else
-                                    div [ A.class "stack" ] (List.map (mediaView active) results.items)
+                                    div [ A.class "stack" ] (List.map (mediaView delete busy active) results.items)
                                 , viewPagination active.texts url results.prevPage results.nextPage
                                 ]
                         )
@@ -97,8 +98,8 @@ page retry active auth url model =
         )
 
 
-mediaView : Active -> Media -> Html msg
-mediaView active media =
+mediaView : (String -> msg) -> Bool -> Active -> Media -> Html msg
+mediaView delete busy active media =
     let
         imageUrl =
             Builder.absolute [ "api", "v4", "image", media.filename ] []
@@ -108,4 +109,5 @@ mediaView active media =
         , p [] [ text media.filename ]
         , p [] [ text (T.mediaUploadedBy (Domain.acctOf media.person) active.texts) ]
         , p [] [ text media.publishedAt ]
+        , button [ A.id ("site-media-delete-" ++ media.filename), A.type_ "button", A.disabled busy, Events.onClick (delete media.filename) ] [ text (T.remove active.texts) ]
         ]

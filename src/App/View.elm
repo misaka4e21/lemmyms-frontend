@@ -27,6 +27,7 @@ import Feature.SiteAdmin.Update as SiteAdmin
 import Feature.SiteAdmin.View as SiteAdminView
 import Feature.SiteConfiguration as SiteConfiguration
 import Feature.SiteMedia as SiteMedia
+import Feature.SitePurge as SitePurge
 import Feature.SiteSetup as SiteSetup
 import Feature.SiteUsers as SiteUsers
 import Feature.Taglines as Taglines
@@ -224,6 +225,9 @@ routeTitle model active =
         Route.AdminMedia ->
             Translations.siteMedia texts
 
+        Route.AdminPurge ->
+            Translations.purgeTitle texts
+
         Route.AdminConfiguration ->
             Translations.siteConfiguration texts
 
@@ -255,7 +259,10 @@ pageView model active =
                 model.federationPolicy
 
         Route.AdminMedia ->
-            SiteMedia.page RetryPage active model.auth model.url model.siteMedia
+            SiteMedia.page RetryPage (OpenConfirmation << RemoveSiteMediaDialog) model.siteMediaBusy active model.auth model.url model.siteMedia
+
+        Route.AdminPurge ->
+            SitePurge.page { change = SitePurgeChanged, confirm = SitePurgeConfirm } active model.auth model.sitePurge
 
         Route.AdminConfiguration ->
             SiteConfiguration.page

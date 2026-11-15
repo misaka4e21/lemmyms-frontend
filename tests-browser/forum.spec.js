@@ -475,7 +475,9 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     if (path === '/api/v4/site') return json(route, 200, { ...(state.configSite || site), admin_oauth_providers: state.providers || [], oauth_providers: state.publicProviders || [] });
     if (path === '/api/v4/oauth/authenticate') {
       if (state.oauthFail) return json(route, 400, { error: state.oauthFail === true ? 'oauth_authorization_invalid' : state.oauthFail });
-      if (state.oauthEstablishSession) state.signedIn = true;
+      if (state.oauthEstablishSession) {
+        return route.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', headers: { 'set-cookie': 'jwt=oauth-session; Path=/; HttpOnly; SameSite=Lax' }, body: JSON.stringify(state.oauthResult || { jwt: 'mock-token', registration_created: false, verify_email_sent: false }) });
+      }
       return json(route, 200, state.oauthResult || { jwt: 'mock-token', registration_created: false, verify_email_sent: false });
     }
     if (path === '/api/v4/admin/users') {
@@ -486,6 +488,15 @@ async function mockApi(page, state, { authenticated = false } = {}) {
       if (state.failMedia) return json(route, 403, { error: 'forbidden' });
       const cursor = url.searchParams.get('page_cursor');
       return json(route, 200, { items: state.siteMedia || [], prev_page: cursor ? 'first' : null, next_page: cursor ? null : 'next-media' });
+    }
+    if (path === '/api/v4/image' && method === 'DELETE') {
+      if (state.failMediaDelete) return json(route, 403, { error: 'forbidden' });
+      state.siteMedia = state.siteMedia.filter(item => item.local_image.pictrs_alias !== body.filename);
+      return json(route, 200, { success: true });
+    }
+    if (path.startsWith('/api/v4/admin/purge/') && method === 'POST') {
+      if (state.failPurge) return json(route, 409, { error: 'conflict' });
+      return json(route, 200, { success: true });
     }
     if (path === '/api/v4/admin/add') {
       if (state.failAdminChange) return json(route, 403, { error: 'forbidden' });
@@ -557,7 +568,10 @@ async function mockApi(page, state, { authenticated = false } = {}) {
       if (path.endsWith('/block')) item.blocked = body.block ? {} : null;
       return json(route, 200, item);
     }
-    if (path === '/api/v4/account' && method === 'GET') return state.signedIn ? json(route, 200, state.identity || myUser) : json(route, 401, { error: 'not_logged_in' });
+    if (path === '/api/v4/account' && method === 'GET') {
+      if (request.headers().cookie?.includes('jwt=oauth-session')) state.signedIn = true;
+      return state.signedIn ? json(route, 200, state.identity || myUser) : json(route, 401, { error: 'not_logged_in' });
+    }
     if (path === '/api/v4/account/unread_counts') return json(route, 200, { notification_count: 1 });
     if (path === '/api/v4/account/notification/list') {
       if (url.searchParams.get('type_') === 'private_message') return json(route, 200, pageOf([privateMessageNotification(state)]));
@@ -1159,6 +1173,7 @@ test('validates and consumes an OAuth callback before exchanging the code', asyn
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/oauth/authenticate' && call.body.code === 'auth-code' && call.body.oauth_provider_id === 15 && call.body.redirect_uri === `${origin}/oauth/callback` && call.body.pkce_code_verifier === 'v'.repeat(64) && call.body.username === 'newuser' && call.body.answer === 'Application' && call.body.totp_2fa_token === '123456')).toBeTruthy();
   await expect(page).toHaveURL(/\/$/);
+  await expect.poll(async () => page.context().cookies()).toContainEqual(expect.objectContaining({ name: 'jwt', value: 'oauth-session', httpOnly: true }));
   await page.goto('/oauth/callback?code=auth-code&state=test-state');
   await expect(page.getByRole('alert')).toContainText('invalid or expired');
   expect(state.calls.filter(call => call.path === '/api/v4/oauth/authenticate')).toHaveLength(1);
@@ -1292,11 +1307,81 @@ test('lists current site media with paging and reports access failures', async (
   await expect(page.getByRole('heading', { name: 'Site media' })).toBeVisible();
   await expect(page.getByText('Uploaded by bob@forum.test')).toBeVisible();
   await expect(page.getByRole('link', { name: 'photo.png' })).toHaveAttribute('href', '/api/v4/image/photo.png');
+  await page.locator('#site-media-delete-photo\\.png').click();
+  await expect(page.getByRole('dialog')).toContainText('photo.png');
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+  expect(state.calls.some(call => call.path === '/api/v4/image' && call.method === 'DELETE')).toBe(false);
+  state.failMediaDelete = true;
+  await page.locator('#site-media-delete-photo\\.png').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect(page.getByText('This action is not allowed, or your access has changed.')).toBeVisible();
+  await expect(page.getByText('Uploaded by bob@forum.test')).toBeVisible();
+  state.failMediaDelete = false;
+  await page.locator('#site-media-delete-photo\\.png').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/image' && call.method === 'DELETE' && call.body.filename === 'photo.png')).toBeTruthy();
+  await expect(page.getByText('Uploaded by bob@forum.test')).toHaveCount(0);
   await page.getByRole('link', { name: 'Next page' }).click();
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/image/list' && call.search.includes('page_cursor=next-media'))).toBeTruthy();
   state.failMedia = true;
   await page.reload();
   await expect(page.getByRole('alert')).toBeVisible();
+});
+
+test('site media controls are unavailable to non-admins', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.identity = { ...myUser, local_user_view: { ...myUser.local_user_view, local_user: { ...myUser.local_user_view.local_user, admin: false } } };
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/media');
+  await expect(page.getByRole('alert')).toBeVisible();
+  expect(state.calls.some(call => call.path === '/api/v4/image/list' || (call.path === '/api/v4/image' && call.method === 'DELETE'))).toBe(false);
+});
+
+test('purge requires target confirmation and handles errors for every kind', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/purge');
+  await expect(page.getByRole('heading', { level: 1, name: 'Permanently purge content' })).toBeVisible();
+  await page.locator('#purge-target').fill('0');
+  await expect(page.locator('#purge-target')).toHaveAttribute('aria-describedby', 'purge-target-error');
+  await expect(page.locator('#purge-target-error')).toBeVisible();
+  await expect(page.locator('#purge-submit')).toBeDisabled();
+  for (const [kind, label] of [['person', 'Person'], ['community', 'Community'], ['post', 'Post'], ['comment', 'Comment']]) {
+    await page.locator('#purge-kind').selectOption(kind);
+    await page.locator('#purge-target').fill('23');
+    await page.locator('#purge-reason').fill('Test reason');
+    await page.locator('#purge-submit').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog')).toContainText(`${label} #23`);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#purge-submit')).toBeFocused();
+    expect(state.calls.some(call => call.path === `/api/v4/admin/purge/${kind}`)).toBe(false);
+    if (kind === 'person') {
+      state.failPurge = true;
+      await page.locator('#purge-submit').click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+      await expect(page.getByRole('alert')).toBeVisible();
+      await expect(page.locator('#purge-reason')).toHaveValue('Test reason');
+      state.failPurge = false;
+    }
+    await page.locator('#purge-submit').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+    await expect.poll(() => state.calls.some(call => call.path === `/api/v4/admin/purge/${kind}` && call.body[`${kind}_id`] === 23 && call.body.reason === 'Test reason')).toBeTruthy();
+    await expect(page.locator('#purge-target')).toHaveValue('');
+  }
+});
+
+test('purge controls are unavailable to non-admins', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.identity = { ...myUser, local_user_view: { ...myUser.local_user_view, local_user: { ...myUser.local_user_view.local_user, admin: false } } };
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/purge');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.locator('#purge-submit')).toHaveCount(0);
+  expect(state.calls.some(call => call.path.startsWith('/api/v4/admin/purge/'))).toBe(false);
 });
 
 test('updates site federation policies independently of personal blocks', async ({ page }) => {
@@ -2054,6 +2139,7 @@ test('P4 administration and federation pages have no automated accessibility vio
     ['/legal', 'Legal information'],
     ['/admin/users', 'Site users'],
     ['/admin/media', 'Site media'],
+    ['/admin/purge', 'Permanently purge content'],
     ['/admin/federation', 'Federation policy'],
     ['/admin/oauth', 'OAuth providers'],
     ['/admin/taglines', 'Taglines'],

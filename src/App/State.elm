@@ -35,6 +35,7 @@ import Feature.SiteAdmin.State
 import Feature.SiteAdmin.Update as SiteAdmin
 import Feature.SiteConfiguration as SiteConfiguration
 import Feature.SiteMedia as SiteMedia
+import Feature.SitePurge as SitePurge
 import Feature.SiteSetup as SiteSetup
 import Feature.SiteUsers as SiteUsers
 import Feature.Taglines as Taglines
@@ -91,6 +92,8 @@ type alias Model =
     , oauthLogin : OAuthLogin.Model
     , siteUsers : SiteUsers.Model
     , siteMedia : SiteMedia.Model
+    , siteMediaBusy : Bool
+    , sitePurge : SitePurge.Model
     , siteConfiguration : SiteConfiguration.Model
     , federationPolicy : FederationPolicy.Model
     , notificationsPage : Notifications.Model
@@ -116,6 +119,8 @@ type ConfirmationAction
     | DeleteOAuthProviderDialog Int String
     | ChangeSiteAdminDialog Int String Bool
     | RemoveSiteImageDialog String
+    | RemoveSiteMediaDialog String
+    | PurgeDialog String Int String
 
 
 type Msg
@@ -197,6 +202,10 @@ type Msg
     | SiteUsersLoaded Int Api.Response
     | SiteAdminChanged Int Api.Response
     | SiteMediaLoaded Int Api.Response
+    | SiteMediaDeleted Int Api.Response
+    | SitePurgeChanged String String
+    | SitePurgeConfirm
+    | SitePurgeFinished Int Api.Response
     | SiteConfigurationLoaded Int Api.Response
     | SiteConfigurationChanged String String
     | SiteConfigurationToggled String Bool

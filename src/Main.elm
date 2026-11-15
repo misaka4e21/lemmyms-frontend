@@ -30,6 +30,7 @@ import Feature.RegistrationApplications as RegistrationApplications
 import Feature.SiteAdmin.Update as SiteAdmin
 import Feature.SiteConfiguration as SiteConfiguration
 import Feature.SiteMedia as SiteMedia
+import Feature.SitePurge as SitePurge
 import Feature.SiteSetup as SiteSetup
 import Feature.SiteUsers as SiteUsers
 import Feature.Taglines as Taglines
@@ -517,6 +518,71 @@ update message model =
 
             else
                 ( model, Cmd.none )
+
+        SiteMediaDeleted epoch response ->
+            if epoch /= model.routeEpoch then
+                ( model, Cmd.none )
+
+            else
+                case Api.decodeUnit response of
+                    Ok _ ->
+                        let
+                            ( state, command ) =
+                                SiteMedia.load model.auth model.url (SiteMediaLoaded epoch)
+                        in
+                        ( { model | siteMedia = state, siteMediaBusy = False }, command )
+
+                    Err problem ->
+                        ( { model | siteMediaBusy = False, flash = FlashProblem problem }, Cmd.none )
+
+        SitePurgeChanged field value ->
+            let
+                previous =
+                    model.sitePurge
+
+                updated =
+                    case field of
+                        "kind" ->
+                            { previous | kind = value, problem = Nothing }
+
+                        "target" ->
+                            { previous | target = value, problem = Nothing }
+
+                        "reason" ->
+                            { previous | reason = value, problem = Nothing }
+
+                        _ ->
+                            previous
+            in
+            ( { model | sitePurge = updated }, Cmd.none )
+
+        SitePurgeConfirm ->
+            case ( model.auth, String.toInt model.sitePurge.target ) of
+                ( Authenticated account, Just id ) ->
+                    if Domain.isAdmin account && model.route == Route.AdminPurge && SitePurge.valid model.sitePurge && not model.sitePurge.busy then
+                        update (OpenConfirmation (PurgeDialog model.sitePurge.kind id model.sitePurge.reason)) model
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        SitePurgeFinished epoch response ->
+            if epoch /= model.routeEpoch then
+                ( model, Cmd.none )
+
+            else
+                case Api.decodeUnit response of
+                    Ok _ ->
+                        ( { model | sitePurge = SitePurge.initial, flash = FlashDeleted }, Cmd.none )
+
+                    Err problem ->
+                        let
+                            previous =
+                                model.sitePurge
+                        in
+                        ( { model | sitePurge = { previous | busy = False, problem = Just problem } }, Cmd.none )
 
         SiteConfigurationLoaded epoch response ->
             if epoch == model.routeEpoch then
@@ -1263,6 +1329,41 @@ confirmAction action model =
                 _ ->
                     ( model, Cmd.none )
 
+        RemoveSiteMediaDialog filename ->
+            case model.auth of
+                Authenticated account ->
+                    if Domain.isAdmin account && model.route == Route.AdminMedia && not model.siteMediaBusy then
+                        ( { model | siteMediaBusy = True }
+                        , Api.send "" "DELETE" "/image" (Encode.encode 0 (Encode.object [ ( "filename", Encode.string filename ) ])) (SiteMediaDeleted model.routeEpoch)
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        PurgeDialog kind id reason ->
+            case model.auth of
+                Authenticated account ->
+                    if Domain.isAdmin account && model.route == Route.AdminPurge && List.member kind [ "person", "community", "post", "comment" ] && id > 0 && id <= 2147483647 && not (String.isEmpty (String.trim reason)) && not model.sitePurge.busy then
+                        let
+                            previous =
+                                model.sitePurge
+
+                            payload =
+                                Encode.object [ ( kind ++ "_id", Encode.int id ), ( "reason", Encode.string (String.trim reason) ) ]
+                        in
+                        ( { model | sitePurge = { previous | busy = True, problem = Nothing } }
+                        , Api.send "" "POST" ("/admin/purge/" ++ kind) (Encode.encode 0 payload) (SitePurgeFinished model.routeEpoch)
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
 
 confirmationTriggerId : ConfirmationAction -> String
 confirmationTriggerId action =
@@ -1299,6 +1400,12 @@ confirmationTriggerId action =
 
         RemoveSiteImageDialog kind ->
             "site-remove-" ++ kind
+
+        RemoveSiteMediaDialog filename ->
+            "site-media-delete-" ++ filename
+
+        PurgeDialog _ _ _ ->
+            "purge-submit"
 
 
 oauthProviderRequest : String -> String -> Model -> ( Model, Cmd Msg )

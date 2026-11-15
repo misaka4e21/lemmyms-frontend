@@ -33,6 +33,7 @@ import Feature.Search as Search
 import Feature.SiteAdmin.State as SiteAdminState
 import Feature.SiteConfiguration as SiteConfiguration
 import Feature.SiteMedia as SiteMedia
+import Feature.SitePurge as SitePurge
 import Feature.SiteSetup as SiteSetup
 import Feature.SiteUsers as SiteUsers
 import Feature.Taglines as Taglines
@@ -112,6 +113,8 @@ init rawFlags url key =
             , oauthLogin = OAuthLogin.initial
             , siteUsers = SiteUsers.initial
             , siteMedia = SiteMedia.initial
+            , siteMediaBusy = False
+            , sitePurge = SitePurge.initial
             , siteConfiguration = SiteConfiguration.initial
             , federationPolicy = FederationPolicy.initial
             , notificationsPage = Notifications.initial
