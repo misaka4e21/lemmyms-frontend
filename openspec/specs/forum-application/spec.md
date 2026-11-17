@@ -135,6 +135,21 @@ The application SHALL provide public profiles through the v4 person endpoint by 
 - **WHEN** an authenticated reader marks all notifications read
 - **THEN** the application calls the v4 mark-all endpoint and refreshes the unread counts without inventing a snapshot cursor
 
+### Requirement: Local username editing
+The application SHALL let an authenticated reader view and change their own username from account settings through the v4 user-settings endpoint. The form SHALL initialize from the authenticated account, explain the current site's username rules, and retain the submitted value while showing a rejected update.
+
+#### Scenario: Change own username with federation disabled
+- **WHEN** an authenticated reader changes their username to a name accepted by the current site's non-federated rules
+- **THEN** the application submits the new username through user settings and refreshes the displayed account identity after success
+
+#### Scenario: Username violates the active rules
+- **WHEN** the backend rejects a username under the current site's federation setting
+- **THEN** the application keeps the submitted value and presents the returned validation failure beside the username field
+
+#### Scenario: Username is already taken
+- **WHEN** the backend rejects a username because it is already in use on the site
+- **THEN** the application keeps the submitted value and presents the returned duplicate-name failure without claiming the name changed
+
 ### Requirement: Drawer profile entry
 For an authenticated reader, the drawer identity header SHALL link to the reader's own profile. The header SHALL keep showing the reader's avatar, display name, username, and role text. The drawer account destinations SHALL NOT include a separate Profile destination. The application bar SHALL NOT include a profile control.
 
@@ -172,6 +187,25 @@ The application SHALL support community creation with `name`, `title`, `sidebar`
 #### Scenario: Community moderation scope
 - **WHEN** a community manager opens reports or modlog for the managed community
 - **THEN** only that community's review controls are available and site-wide controls remain unavailable without site-admin authority
+
+### Requirement: Federation-aware community names
+The application SHALL explain the current site's local actor name rules when creating or editing a community, based on `local_site.federation_enabled`. The backend SHALL remain authoritative for validation, and the application SHALL associate rejected name updates with the relevant field while preserving the draft. A successful community rename SHALL render the returned community name and keep navigation and management state associated with that community.
+
+#### Scenario: Create a Chinese-named community without federation
+- **WHEN** federation is disabled and a reader submits a community name accepted by the backend's non-federated rules
+- **THEN** the application creates the community and navigates using the returned community name
+
+#### Scenario: Rename a community without federation
+- **WHEN** an authorized manager changes a local community name to a name accepted by the backend's non-federated rules
+- **THEN** the application updates the community and reflects the returned name in the current view and route
+
+#### Scenario: Community name violates active rules or is already used
+- **WHEN** community creation or rename is rejected for an invalid or duplicate name
+- **THEN** the application preserves the name draft and displays the backend failure beside the name field
+
+#### Scenario: Federation is enabled
+- **WHEN** a reader creates or edits a community while federation is enabled
+- **THEN** the form explains the federated naming rules and rejected names are reported from the backend without losing other form values
 
 ### Requirement: Voting and content state
 The application SHALL expose upvote, downvote, and clear-vote actions through one merged vote control on each post and comment. It SHALL display the net score from `score`, expose the selected direction from `vote_is_upvote`, and submit `is_upvote: true`, `false`, or `null`. Repeating the selected direction SHALL clear the vote. A direction disabled by the community's vote mode SHALL not be offered as a new mutation, but an existing vote in that direction SHALL remain clearable. The application SHALL derive saved, read, hidden, and vote state from `post_actions` and `comment_actions`.
