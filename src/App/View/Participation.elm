@@ -55,7 +55,10 @@ pageManage model active id =
         , manageIconSelected = ManageMessage << Manage.ManageIconSelected
         , manageBannerSelected = ManageMessage << Manage.ManageBannerSelected
         }
-        { auth = model.auth, manage = model.management.manage }
+        { auth = model.auth
+        , manage = model.management.manage
+        , federationEnabled = model.site |> Maybe.map (\site -> site.localSite.federationEnabled) |> Maybe.withDefault True
+        }
         active
         id
 
@@ -112,7 +115,13 @@ pageMessageComposer model active =
 
 pageNewCommunity : Model -> Active -> Html Msg
 pageNewCommunity model active =
-    CommunityCreate.pageNewCommunity (communityCreateViewConfig model) { createCommunity = model.communityCreate.createCommunity, auth = model.auth } active
+    CommunityCreate.pageNewCommunity
+        (communityCreateViewConfig model)
+        { createCommunity = model.communityCreate.createCommunity
+        , auth = model.auth
+        , federationEnabled = model.site |> Maybe.map (\site -> site.localSite.federationEnabled) |> Maybe.withDefault True
+        }
+        active
 
 
 communityCreateViewConfig : Model -> CommunityCreate.Config Msg

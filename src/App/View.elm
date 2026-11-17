@@ -279,7 +279,14 @@ pageView model active =
 
         Route.AdminUsers ->
             SiteUsers.page
-                { retry = RetryPage, changeAdmin = \id name added -> OpenConfirmation (ChangeSiteAdminDialog id name added) }
+                { retry = RetryPage
+                , changeAdmin = \id name added -> OpenConfirmation (ChangeSiteAdminDialog id name added)
+                , editUsername = SiteUsernameEdit
+                , usernameChanged = SiteUsernameChanged
+                , saveUsername = \_ -> SiteUsernameSubmit
+                , cancelUsername = SiteUsernameCancel
+                }
+                (model.site |> Maybe.map (\site -> site.localSite.federationEnabled) |> Maybe.withDefault True)
                 active
                 model.auth
                 model.url

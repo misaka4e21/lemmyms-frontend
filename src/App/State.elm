@@ -200,6 +200,11 @@ type Msg
     | OAuthFinished Int Api.Response
     | OAuthAccountLoaded Int (Result Api.Problem Domain.MyUserInfo)
     | SiteUsersLoaded Int Api.Response
+    | SiteUsernameEdit Int String
+    | SiteUsernameChanged String
+    | SiteUsernameSubmit
+    | SiteUsernameCancel
+    | SiteUsernameSaved Int Int Api.Response
     | SiteAdminChanged Int Api.Response
     | SiteMediaLoaded Int Api.Response
     | SiteMediaDeleted Int Api.Response

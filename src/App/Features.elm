@@ -103,6 +103,14 @@ updateManage message model =
 
                 Nothing ->
                     model
+
+        navigation =
+            case outcome.navigation of
+                Just target ->
+                    Navigation.pushUrl model.key target
+
+                Nothing ->
+                    Cmd.none
     in
     ( { base
         | flash =
@@ -125,7 +133,7 @@ updateManage message model =
             )
                 base.management
       }
-    , Cmd.map (ManageResponse model.routeEpoch) command
+    , Cmd.batch [ Cmd.map (ManageResponse model.routeEpoch) command, navigation ]
     )
 
 
@@ -170,6 +178,26 @@ updateAccountSettings message model =
                         outcome.flash
                 , accountSettings = state
             }
+
+        refreshIdentity =
+            case ( message, model.auth, state.form ) of
+                ( AccountSettings.Saved response, Authenticated identity, Just form ) ->
+                    response.status
+                        >= 200
+                        && response.status
+                        < 300
+                        && form.username
+                        /= identity.localUserView.person.name
+
+                _ ->
+                    False
+
+        identityCommand =
+            if refreshIdentity then
+                Api.get "/account" (SessionLoaded model.authGeneration << Api.decodeResponse Domain.myUserInfo)
+
+            else
+                Cmd.none
     in
     if outcome.deleted then
         ( clearPrivate { changed | auth = Anonymous, authGeneration = changed.authGeneration + 1, routeEpoch = changed.routeEpoch + 1 }
@@ -177,7 +205,12 @@ updateAccountSettings message model =
         )
 
     else
-        ( changed, Cmd.map (AccountSettingsResponse model.routeEpoch) command )
+        ( changed
+        , Cmd.batch
+            [ Cmd.map (AccountSettingsResponse model.routeEpoch) command
+            , identityCommand
+            ]
+        )
 
 
 updateAccountBlocks : AccountBlocks.Msg -> Model -> ( Model, Cmd Msg )

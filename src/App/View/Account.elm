@@ -109,7 +109,12 @@ pagePublicProfile postCard model active username =
 
 pageSettings : Model -> Active -> Html Msg
 pageSettings model active =
-    Html.map AccountSettingsMessage (AccountSettings.view active model.auth model.accountSettings)
+    Html.map AccountSettingsMessage
+        (AccountSettings.view active
+            (model.site |> Maybe.map (\site -> site.localSite.federationEnabled) |> Maybe.withDefault True)
+            model.auth
+            model.accountSettings
+        )
 
 
 profileViewConfig : (Domain.PostView -> Html Msg) -> Model -> Profile.Config Msg

@@ -15,7 +15,7 @@ import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
 import Ui.CommunityPolicy exposing (policyFields)
-import Ui.Feedback exposing (loginRequired, viewFormProblem, viewRemote)
+import Ui.Feedback exposing (loginRequired, problemText, viewFormProblem, viewFormProblemWithId, viewRemote)
 import Ui.Formatting exposing (modeLabel, policyLabel)
 import Ui.Layout exposing (pageHeading)
 
@@ -65,7 +65,7 @@ type alias Config msg =
 
 
 type alias ViewModel =
-    { auth : AuthState, manage : Maybe ManageState }
+    { auth : AuthState, manage : Maybe ManageState, federationEnabled : Bool }
 
 
 pageManage : Config msg -> ViewModel -> Active -> String -> Html msg
@@ -87,7 +87,7 @@ pageManage config model active communityIdValue =
                         _ ->
                             text ""
                     , if canManageCommunity manage then
-                        managePolicy config active manage
+                        managePolicy config model.federationEnabled active manage
 
                       else
                         text ""
@@ -258,10 +258,43 @@ manageTags config active manage =
             text ""
 
 
-managePolicy : Config msg -> Active -> ManageState -> Html msg
-managePolicy config active manage =
+managePolicy : Config msg -> Bool -> Active -> ManageState -> Html msg
+managePolicy config federationEnabled active manage =
     form [ Events.onSubmit config.manageApplyPolicy, A.class "card form-stack" ]
         [ h2 [] [ text (Translations.readPolicy active.texts) ]
+        , div []
+            [ label [ A.for "manage-community-name" ] [ text (Translations.communityName active.texts) ]
+            , input
+                [ A.id "manage-community-name"
+                , A.type_ "text"
+                , A.required True
+                , A.attribute "minlength" "2"
+                , A.attribute "maxlength" "20"
+                , A.attribute "aria-describedby" "manage-community-name-help manage-community-name-error"
+                , A.attribute "aria-invalid"
+                    (if manage.nameProblem == Nothing then
+                        "false"
+
+                     else
+                        "true"
+                    )
+                , A.value manage.name
+                , Events.onInput (config.manageFieldChanged "name")
+                ]
+                []
+            , p [ A.id "manage-community-name-help", A.class "muted" ]
+                [ text
+                    (if federationEnabled then
+                        Translations.usernameRulesFederated active.texts
+
+                     else
+                        Translations.usernameRulesNonFederated active.texts
+                    )
+                ]
+            , viewFormProblemWithId active.texts
+                "manage-community-name-error"
+                (Maybe.map (problemText active.texts) manage.nameProblem)
+            ]
         , manageText "manage-title" (Translations.communityTitle active.texts) manage.title "title" config
         , manageText "manage-sidebar" (Translations.communitySidebar active.texts) manage.sidebar "sidebar" config
         , manageText "manage-summary" (Translations.communitySummary active.texts) manage.summary "summary" config

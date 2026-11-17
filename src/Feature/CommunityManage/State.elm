@@ -19,6 +19,9 @@ type alias ManageState =
     , readPolicy : String
     , postPolicy : String
     , followPolicy : String
+    , name : String
+    , originalName : String
+    , nameProblem : Maybe Api.Problem
     , title : String
     , sidebar : String
     , summary : String
@@ -77,6 +80,9 @@ emptyManage =
     , readPolicy = "eligible_users"
     , postPolicy = "eligible_users"
     , followPolicy = "open"
+    , name = ""
+    , originalName = ""
+    , nameProblem = Nothing
     , title = ""
     , sidebar = ""
     , summary = ""

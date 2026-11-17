@@ -13,7 +13,7 @@ import Json.Encode as Encode
 import Lemmy.Domain as Domain
 import Lemmy.Route as Route
 import Ui.CommunityPolicy exposing (policyFields)
-import Ui.Feedback exposing (loginRequired, viewFormProblem)
+import Ui.Feedback exposing (loginRequired, problemText, viewFormProblem, viewFormProblemWithId)
 import Ui.Layout exposing (pageHeading)
 
 
@@ -266,6 +266,7 @@ type alias Config msg =
 type alias ViewModel =
     { createCommunity : CommunityForm
     , auth : AuthState
+    , federationEnabled : Bool
     }
 
 
@@ -277,9 +278,45 @@ pageNewCommunity config model active =
                 form [ Events.onSubmit config.communityCreate, A.class "card form-stack" ]
                     [ div []
                         [ label [ A.for "community-name" ] [ text (Translations.communityName active.texts) ]
-                        , input [ A.id "community-name", A.type_ "text", A.required True, A.value model.createCommunity.name, Events.onInput config.communityNameChanged ]
+                        , input
+                            [ A.id "community-name"
+                            , A.type_ "text"
+                            , A.required True
+                            , A.attribute "minlength" "2"
+                            , A.attribute "maxlength" "20"
+                            , A.attribute "aria-describedby" "community-name-help community-name-error"
+                            , A.attribute "aria-invalid"
+                                (if isNameProblem model.createCommunity.problem then
+                                    "true"
+
+                                 else
+                                    "false"
+                                )
+                            , A.value model.createCommunity.name
+                            , Events.onInput config.communityNameChanged
+                            ]
                             []
-                        , p [ A.class "muted" ] [ text (Translations.communityNameHelp active.texts) ]
+                        , p [ A.id "community-name-help", A.class "muted" ]
+                            [ text
+                                (if model.federationEnabled then
+                                    Translations.usernameRulesFederated active.texts
+
+                                 else
+                                    Translations.usernameRulesNonFederated active.texts
+                                )
+                            ]
+                        , viewFormProblemWithId active.texts
+                            "community-name-error"
+                            (model.createCommunity.problem
+                                |> Maybe.andThen
+                                    (\problem ->
+                                        if isNameProblem (Just problem) then
+                                            Just (problemText active.texts problem)
+
+                                        else
+                                            Nothing
+                                    )
+                            )
                         ]
                     , div []
                         [ label [ A.for "community-title" ] [ text (Translations.communityTitle active.texts) ]
@@ -306,7 +343,13 @@ pageNewCommunity config model active =
                     , voteSelect "community-post-downvotes" (Translations.postDownvotes active.texts) model.createCommunity.postDownvotes "postDownvotes" config active
                     , voteSelect "community-comment-upvotes" (Translations.commentUpvotes active.texts) model.createCommunity.commentUpvotes "commentUpvotes" config active
                     , voteSelect "community-comment-downvotes" (Translations.commentDownvotes active.texts) model.createCommunity.commentDownvotes "commentDownvotes" config active
-                    , viewFormProblem active.texts model.createCommunity.problem
+                    , viewFormProblem active.texts
+                        (if isNameProblem model.createCommunity.problem then
+                            Nothing
+
+                         else
+                            model.createCommunity.problem
+                        )
                     , button [ A.type_ "submit", A.class "filled-button", A.disabled model.createCommunity.busy ]
                         [ text (Translations.create active.texts) ]
                     ]
@@ -314,6 +357,13 @@ pageNewCommunity config model active =
             _ ->
                 loginRequired active.texts
         )
+
+
+isNameProblem : Maybe Api.Problem -> Bool
+isNameProblem maybeProblem =
+    maybeProblem
+        |> Maybe.map (.detail >> (\detail -> String.contains "invalid_name" detail || String.contains "already_exists" detail))
+        |> Maybe.withDefault False
 
 
 fieldInput : String -> String -> String -> String -> Config msg -> Html msg

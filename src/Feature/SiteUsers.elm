@@ -18,12 +18,26 @@ import Url.Builder as Builder
 
 
 type alias Model =
-    { users : Remote (Domain.Page Domain.LocalUserView), busy : Bool, problem : Maybe Api.Problem }
+    { users : Remote (Domain.Page Domain.LocalUserView)
+    , busy : Bool
+    , problem : Maybe Api.Problem
+    , editingUsername : Maybe Int
+    , usernameDraft : String
+    , usernameBusy : Bool
+    , usernameProblem : Maybe Api.Problem
+    }
 
 
 initial : Model
 initial =
-    { users = NotAsked, busy = False, problem = Nothing }
+    { users = NotAsked
+    , busy = False
+    , problem = Nothing
+    , editingUsername = Nothing
+    , usernameDraft = ""
+    , usernameBusy = False
+    , usernameProblem = Nothing
+    }
 
 
 load : AuthState -> Url -> (Api.Response -> msg) -> ( Model, Cmd msg )
@@ -73,8 +87,8 @@ sort url =
         "new"
 
 
-page : { retry : msg, changeAdmin : Int -> String -> Bool -> msg } -> Active -> AuthState -> Url -> Model -> Html msg
-page config active auth url model =
+page : { retry : msg, changeAdmin : Int -> String -> Bool -> msg, editUsername : Int -> String -> msg, usernameChanged : String -> msg, saveUsername : Int -> msg, cancelUsername : msg } -> Bool -> Active -> AuthState -> Url -> Model -> Html msg
+page config federationEnabled active auth url model =
     pageHeading (T.siteUsers active.texts)
         (case auth of
             Authenticated user ->
@@ -102,7 +116,11 @@ page config active auth url model =
                                         p [ A.class "empty-state" ] [ text (T.noContent active.texts) ]
 
                                       else
-                                        ul [ A.class "roster-list" ] (List.map (userView config active model.busy user.localUserView.person.id) results.items)
+                                        ul [ A.class "roster-list" ]
+                                            (List.map
+                                                (userView config active federationEnabled model user.localUserView.person.id)
+                                                results.items
+                                            )
                                     , viewPagination active.texts url results.prevPage results.nextPage
                                     ]
                             )
@@ -116,8 +134,8 @@ page config active auth url model =
         )
 
 
-userView : { a | changeAdmin : Int -> String -> Bool -> msg } -> Active -> Bool -> Int -> Domain.LocalUserView -> Html msg
-userView config active busy ownId user =
+userView : { a | changeAdmin : Int -> String -> Bool -> msg, editUsername : Int -> String -> msg, usernameChanged : String -> msg, saveUsername : Int -> msg, cancelUsername : msg } -> Active -> Bool -> Model -> Int -> Domain.LocalUserView -> Html msg
+userView config active federationEnabled model ownId user =
     let
         action =
             not user.localUser.admin
@@ -132,7 +150,7 @@ userView config active busy ownId user =
         , button
             [ A.id ("site-admin-" ++ String.fromInt user.person.id)
             , A.type_ "button"
-            , A.disabled (busy || user.person.id == ownId)
+            , A.disabled (model.busy || user.person.id == ownId)
             , Events.onClick (config.changeAdmin user.person.id (Domain.acctOf user.person) action)
             ]
             [ text
@@ -143,4 +161,51 @@ userView config active busy ownId user =
                     T.removeSiteAdmin active.texts
                 )
             ]
+        , if model.editingUsername == Just user.person.id then
+            form [ A.class "form-stack", Events.onSubmit (config.saveUsername user.person.id) ]
+                [ label [ A.for ("site-username-" ++ String.fromInt user.person.id) ] [ text (T.username active.texts) ]
+                , input
+                    [ A.id ("site-username-" ++ String.fromInt user.person.id)
+                    , A.type_ "text"
+                    , A.required True
+                    , A.attribute "minlength" "2"
+                    , A.attribute "maxlength" "20"
+                    , A.attribute "aria-describedby" "site-username-help site-username-error"
+                    , A.attribute "aria-invalid"
+                        (if model.usernameProblem == Nothing then
+                            "false"
+
+                         else
+                            "true"
+                        )
+                    , A.value model.usernameDraft
+                    , Events.onInput config.usernameChanged
+                    ]
+                    []
+                , p [ A.id "site-username-help", A.class "muted" ]
+                    [ text
+                        (if federationEnabled then
+                            T.usernameRulesFederated active.texts
+
+                         else
+                            T.usernameRulesNonFederated active.texts
+                        )
+                    ]
+                , Ui.Feedback.viewFormProblemWithId active.texts
+                    "site-username-error"
+                    (Maybe.map (Ui.Feedback.problemText active.texts) model.usernameProblem)
+                , div [ A.class "actions wrap" ]
+                    [ button [ A.type_ "submit", A.class "filled-button", A.disabled model.usernameBusy ] [ text (T.saveChanges active.texts) ]
+                    , button [ A.type_ "button", A.class "outlined-button", A.disabled model.usernameBusy, Events.onClick config.cancelUsername ] [ text (T.cancel active.texts) ]
+                    ]
+                ]
+
+          else
+            button
+                [ A.type_ "button"
+                , A.class "text-button"
+                , A.disabled model.usernameBusy
+                , Events.onClick (config.editUsername user.person.id user.person.name)
+                ]
+                [ text (T.usernameChange active.texts) ]
         ]

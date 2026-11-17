@@ -16,13 +16,15 @@ import List
 import Ports exposing (closeDialog, download, focus, openDialog, setTheme)
 import Remote exposing (Remote(..))
 import Task
-import Ui.Feedback exposing (loginRequired, viewFormProblem)
+import Ui.Feedback exposing (loginRequired, problemText, viewFormProblem, viewFormProblemWithId)
 import Ui.Layout exposing (pageHeading)
 import Url
 
 
 type alias SettingsForm =
-    { displayName : String
+    { username : String
+    , originalUsername : String
+    , displayName : String
     , email : String
     , matrixUserId : String
     , bio : String
@@ -81,6 +83,7 @@ type alias Model =
     { form : Maybe SettingsForm
     , loading : Bool
     , problem : Maybe Api.Problem
+    , usernameProblem : Maybe Api.Problem
     , saving : Bool
     , avatarUploading : Bool
     , bannerUploading : Bool
@@ -104,6 +107,7 @@ initial =
     { form = Nothing
     , loading = False
     , problem = Nothing
+    , usernameProblem = Nothing
     , saving = False
     , avatarUploading = False
     , bannerUploading = False
@@ -193,7 +197,7 @@ update message model =
                             formFrom user
                     in
                     keep
-                        { model | form = Just form, loading = False, problem = Nothing }
+                        { model | form = Just form, loading = False, problem = Nothing, usernameProblem = Nothing }
                         (setTheme form.theme)
 
                 Err problem ->
@@ -203,7 +207,17 @@ update message model =
                     )
 
         FieldChanged name value ->
-            keep { model | form = Maybe.map (setField name value) model.form } Cmd.none
+            if name == "username" then
+                keep
+                    { model
+                        | form = Maybe.map (setField name value) model.form
+                        , problem = Nothing
+                        , usernameProblem = Nothing
+                    }
+                    Cmd.none
+
+            else
+                keep { model | form = Maybe.map (setField name value) model.form } Cmd.none
 
         ToggleChanged name value ->
             keep { model | form = Maybe.map (setToggle name value) model.form } Cmd.none
@@ -232,7 +246,20 @@ update message model =
                     )
 
                 Err problem ->
-                    ( { model | saving = False, problem = Just problem }
+                    ( { model
+                        | saving = False
+                        , problem = Just problem
+                        , usernameProblem =
+                            model.form
+                                |> Maybe.andThen
+                                    (\form ->
+                                        if form.username /= form.originalUsername then
+                                            Just problem
+
+                                        else
+                                            Nothing
+                                    )
+                      }
                     , Cmd.none
                     , { flash = FlashProblem problem
                       , sessionProblem = sessionProblem problem
@@ -534,7 +561,9 @@ formFrom user =
         person =
             user.localUserView.person
     in
-    { displayName = Maybe.withDefault "" person.displayName
+    { username = person.name
+    , originalUsername = person.name
+    , displayName = Maybe.withDefault "" person.displayName
     , email = Maybe.withDefault "" local.email
     , matrixUserId = Maybe.withDefault "" person.matrixUserId
     , bio = Maybe.withDefault "" person.bio
@@ -577,6 +606,9 @@ formFrom user =
 setField : String -> String -> SettingsForm -> SettingsForm
 setField name value form =
     case name of
+        "username" ->
+            { form | username = value }
+
         "display_name" ->
             { form | displayName = value }
 
@@ -693,7 +725,8 @@ setToggle name value form =
 saveBody : SettingsForm -> Encode.Value
 saveBody form =
     Encode.object
-        [ ( "display_name", nullableString form.displayName )
+        [ ( "username", Encode.string form.username )
+        , ( "display_name", nullableString form.displayName )
         , ( "email", nullableString form.email )
         , ( "matrix_user_id", nullableString form.matrixUserId )
         , ( "bio", nullableString form.bio )
@@ -784,8 +817,8 @@ inviteBody model =
     ]
 
 
-view : Active -> AuthState -> Model -> Html Msg
-view active auth model =
+view : Active -> Bool -> AuthState -> Model -> Html Msg
+view active federationEnabled auth model =
     pageHeading (Translations.accountSettings active.texts)
         (case auth of
             Authenticated _ ->
@@ -800,7 +833,7 @@ view active auth model =
                     Just settings ->
                         div [ A.class "stack" ]
                             [ form [ Events.onSubmit Save, A.class "stack" ]
-                                [ identitySection active settings
+                                [ identitySection active federationEnabled model.usernameProblem settings
                                 , appearanceSection active settings
                                 , contentSection active settings
                                 , notificationsSection active settings
@@ -823,10 +856,44 @@ view active auth model =
         )
 
 
-identitySection : Active -> SettingsForm -> Html Msg
-identitySection active form =
+identitySection : Active -> Bool -> Maybe Api.Problem -> SettingsForm -> Html Msg
+identitySection active federationEnabled usernameProblem form =
     fieldset [ A.class "card form-stack" ]
         [ legend [] [ text (Translations.identitySection active.texts) ]
+        , div []
+            [ label [ A.for "account-username" ] [ text (Translations.username active.texts) ]
+            , input
+                [ A.id "account-username"
+                , A.type_ "text"
+                , A.required True
+                , A.attribute "minlength" "2"
+                , A.attribute "maxlength" "20"
+                , A.attribute "autocomplete" "username"
+                , A.attribute "aria-describedby" "account-username-rules account-username-error"
+                , A.attribute "aria-invalid"
+                    (if usernameProblem == Nothing then
+                        "false"
+
+                     else
+                        "true"
+                    )
+                , A.value form.username
+                , Events.onInput (FieldChanged "username")
+                ]
+                []
+            , p [ A.id "account-username-rules", A.class "muted" ]
+                [ text
+                    (if federationEnabled then
+                        Translations.usernameRulesFederated active.texts
+
+                     else
+                        Translations.usernameRulesNonFederated active.texts
+                    )
+                ]
+            , viewFormProblemWithId active.texts
+                "account-username-error"
+                (Maybe.map (problemText active.texts) usernameProblem)
+            ]
         , textField active "display-name" Translations.displayName form.displayName (FieldChanged "display_name")
         , textField active "account-email" Translations.email form.email (FieldChanged "email")
         , textField active "matrix-user-id" Translations.matrixId form.matrixUserId (FieldChanged "matrix_user_id")

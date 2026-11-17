@@ -79,20 +79,28 @@ type alias Context =
 
 
 type alias Outcome =
-    { flash : Flash, sessionProblem : Maybe Api.Problem }
+    { flash : Flash, sessionProblem : Maybe Api.Problem, navigation : Maybe String }
 
 
 type alias Working =
-    { manage : Maybe ManageState, busy : Set String, flash : Flash, sessionProblem : Maybe Api.Problem }
+    { manage : Maybe ManageState
+    , busy : Set String
+    , flash : Flash
+    , sessionProblem : Maybe Api.Problem
+    , navigation : Maybe String
+    }
 
 
 update : Context -> Msg -> Model -> ( Model, Cmd Msg, Outcome )
 update context message state =
     let
         ( next, command ) =
-            updateWorking context message { manage = state.manage, busy = state.busy, flash = NoFlash, sessionProblem = Nothing }
+            updateWorking context message { manage = state.manage, busy = state.busy, flash = NoFlash, sessionProblem = Nothing, navigation = Nothing }
     in
-    ( { manage = next.manage, busy = next.busy }, command, { flash = next.flash, sessionProblem = next.sessionProblem } )
+    ( { manage = next.manage, busy = next.busy }
+    , command
+    , { flash = next.flash, sessionProblem = next.sessionProblem, navigation = next.navigation }
+    )
 
 
 load : String -> ManageState -> Model -> ( Model, Cmd Msg )
@@ -201,6 +209,7 @@ updateWorking context message model =
                         (Encode.encode 0
                             (Encode.object
                                 [ ( "community_id", Encode.int context.communityId )
+                                , ( "name", Encode.string manage.name )
                                 , ( "title", Encode.string manage.title )
                                 , ( "sidebar", Encode.string manage.sidebar )
                                 , ( "summary", Encode.string manage.summary )
@@ -460,18 +469,35 @@ updateWorking context message model =
                     ( problemState model problem, Cmd.none )
 
         ActionDone (ManageAction key) response ->
+            let
+                completedModel =
+                    { model | busy = Set.remove key model.busy }
+            in
             case Api.decodeUnit response of
                 Ok () ->
                     let
                         changed =
-                            { model | flash = FlashSaved }
+                            { completedModel | flash = FlashSaved }
                     in
                     case context.route of
-                        Route.CommunitySettings name ->
-                            loadManageState 0
-                                name
-                                (Maybe.withDefault emptyManage (model.manage |> Maybe.map (\manage -> { manage | problem = Nothing })))
-                                changed
+                        Route.CommunitySettings currentName ->
+                            case completedModel.manage of
+                                Just manage ->
+                                    if manage.name /= currentName then
+                                        ( { changed
+                                            | navigation = Just (Route.path (Route.CommunitySettings manage.name))
+                                          }
+                                        , Cmd.none
+                                        )
+
+                                    else
+                                        loadManageState 0
+                                            currentName
+                                            { manage | problem = Nothing, nameProblem = Nothing }
+                                            changed
+
+                                Nothing ->
+                                    ( changed, Cmd.none )
 
                         _ ->
                             ( changed, Cmd.none )
@@ -479,11 +505,24 @@ updateWorking context message model =
                 Err problem ->
                     let
                         base =
-                            authProblem model problem
+                            authProblem completedModel problem
                     in
                     ( { base
                         | flash = FlashProblem problem
-                        , manage = model.manage |> Maybe.map (\manage -> { manage | problem = Just problem })
+                        , manage =
+                            completedModel.manage
+                                |> Maybe.map
+                                    (\manage ->
+                                        { manage
+                                            | problem = Just problem
+                                            , nameProblem =
+                                                if manage.name /= manage.originalName then
+                                                    Just problem
+
+                                                else
+                                                    Nothing
+                                        }
+                                    )
                       }
                     , Cmd.none
                     )
@@ -600,6 +639,9 @@ updateWorking context message model =
                                                     else
                                                         "open"
                                                 , title = Maybe.withDefault "" data.communityView.community.title
+                                                , name = data.communityView.community.name
+                                                , originalName = data.communityView.community.name
+                                                , nameProblem = Nothing
                                                 , sidebar = Maybe.withDefault "" data.communityView.community.sidebar
                                                 , summary = Maybe.withDefault "" data.communityView.community.summary
                                                 , nsfw = data.communityView.community.nsfw
@@ -819,6 +861,9 @@ setManage model transform command =
 setField : String -> String -> ManageState -> ManageState
 setField field value manage =
     case field of
+        "name" ->
+            { manage | name = value, nameProblem = Nothing, problem = Nothing }
+
         "title" ->
             { manage | title = value, problem = Nothing }
 

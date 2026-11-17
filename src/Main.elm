@@ -512,6 +512,131 @@ update message model =
             else
                 ( model, Cmd.none )
 
+        SiteUsernameEdit personId username ->
+            case model.auth of
+                Authenticated identity ->
+                    if Domain.isAdmin identity && siteUserIsListed personId model.siteUsers then
+                        let
+                            users =
+                                model.siteUsers
+                        in
+                        ( { model
+                            | siteUsers =
+                                { users
+                                    | editingUsername = Just personId
+                                    , usernameDraft = username
+                                    , usernameBusy = False
+                                    , usernameProblem = Nothing
+                                }
+                          }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        SiteUsernameChanged username ->
+            case model.siteUsers.editingUsername of
+                Just _ ->
+                    let
+                        users =
+                            model.siteUsers
+                    in
+                    ( { model | siteUsers = { users | usernameDraft = username, usernameProblem = Nothing } }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        SiteUsernameCancel ->
+            let
+                users =
+                    model.siteUsers
+            in
+            ( { model
+                | siteUsers =
+                    { users
+                        | editingUsername = Nothing
+                        , usernameDraft = ""
+                        , usernameBusy = False
+                        , usernameProblem = Nothing
+                    }
+              }
+            , Cmd.none
+            )
+
+        SiteUsernameSubmit ->
+            case ( model.auth, model.siteUsers.editingUsername ) of
+                ( Authenticated identity, Just personId ) ->
+                    if
+                        Domain.isAdmin identity
+                            && siteUserIsListed personId model.siteUsers
+                            && not model.siteUsers.usernameBusy
+                            && not (String.isEmpty (String.trim model.siteUsers.usernameDraft))
+                    then
+                        let
+                            users =
+                                model.siteUsers
+                        in
+                        ( { model | siteUsers = { users | usernameBusy = True, usernameProblem = Nothing } }
+                        , Api.send
+                            ""
+                            "PUT"
+                            "/username"
+                            (Encode.encode 0
+                                (Encode.object
+                                    [ ( "person_id", Encode.int personId )
+                                    , ( "username", Encode.string model.siteUsers.usernameDraft )
+                                    ]
+                                )
+                            )
+                            (SiteUsernameSaved model.routeEpoch personId)
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        SiteUsernameSaved epoch personId response ->
+            if epoch /= model.routeEpoch || model.siteUsers.editingUsername /= Just personId then
+                ( model, Cmd.none )
+
+            else
+                case Api.decodeUnit response of
+                    Ok () ->
+                        let
+                            ( loading, command ) =
+                                SiteUsers.load model.auth model.url (SiteUsersLoaded epoch)
+                        in
+                        ( { model
+                            | siteUsers =
+                                { loading
+                                    | usernameBusy = False
+                                    , usernameProblem = Nothing
+                                }
+                          }
+                        , command
+                        )
+
+                    Err problem ->
+                        let
+                            users =
+                                model.siteUsers
+                        in
+                        ( { model
+                            | siteUsers =
+                                { users
+                                    | usernameBusy = False
+                                    , usernameProblem = Just problem
+                                }
+                          }
+                        , Cmd.none
+                        )
+
         SiteMediaLoaded epoch response ->
             if epoch == model.routeEpoch then
                 ( { model | siteMedia = Remote.fromResult (Api.decodeResponse SiteMedia.decoder response) }, Cmd.none )
@@ -1446,6 +1571,16 @@ emojiRequest method body model =
 
         _ ->
             ( model, Cmd.none )
+
+
+siteUserIsListed : Int -> SiteUsers.Model -> Bool
+siteUserIsListed personId siteUsers =
+    case siteUsers.users of
+        Ready page ->
+            List.any (\user -> user.person.id == personId) page.items
+
+        _ ->
+            False
 
 
 taglineRequest : String -> List ( String, Encode.Value ) -> Model -> ( Model, Cmd Msg )

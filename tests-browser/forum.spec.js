@@ -230,6 +230,7 @@ function fixtures() {
     entryLimit: false,
     privateReport: false,
     failSettings: false,
+    nameFailure: null,
     calls: []
   };
 }
@@ -495,6 +496,12 @@ async function mockApi(page, state, { authenticated = false } = {}) {
       const cursor = url.searchParams.get('page_cursor');
       return json(route, 200, { items: state.siteUsers || [], prev_page: cursor ? 'first' : null, next_page: cursor ? null : 'next-user' });
     }
+    if (path === '/api/v4/username' && method === 'PUT') {
+      if (state.nameFailure) return json(route, 400, { error: state.nameFailure });
+      const target = state.siteUsers?.find(item => item.person.id === body.person_id);
+      if (target) target.person.name = body.username;
+      return json(route, 200, { success: true });
+    }
     if (path === '/api/v4/image/list') {
       if (state.failMedia) return json(route, 403, { error: 'forbidden' });
       const cursor = url.searchParams.get('page_cursor');
@@ -631,6 +638,8 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     if (path === '/api/v4/account/notification/mark_as_read/all') return route.fulfill({ status: 204 });
     if (path === '/api/v4/account/settings/save' && method === 'PUT') {
       if (state.failSettings) return json(route, 400, { error: 'invalid_input' });
+      if (state.nameFailure) return json(route, 400, { error: state.nameFailure });
+      if (body.username) myUser.local_user_view.person.name = body.username;
       myUser.local_user_view.person.display_name = body.display_name || 'Alice';
       myUser.local_user_view.person.bio = body.bio || '';
       myUser.local_user_view.local_user.theme = body.theme || 'browser';
@@ -733,10 +742,15 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     if (path === '/api/v4/community/list') return json(route, 200, pageOf([communityView(state)]));
     if (path === '/api/v4/community' && method === 'GET') return json(route, 200, { community_view: communityView(state), moderators: [{ community, moderator: person }], discussion_languages: [0] });
     if (path === '/api/v4/community' && method === 'POST') {
+      if (state.nameFailure) return json(route, 400, { error: state.nameFailure });
       state.community = { ...community, id: 2, name: body.name, title: body.title, visibility: body.visibility };
       return json(route, 200, { community_view: communityView(state), moderators: [{ community: state.community, moderator: person }], discussion_languages: [0] });
     }
-    if (path === '/api/v4/community' && method === 'PUT') return json(route, 200, { community_view: communityView(state), moderators: [{ community, moderator: person }], discussion_languages: [0] });
+    if (path === '/api/v4/community' && method === 'PUT') {
+      if (state.nameFailure) return json(route, 400, { error: state.nameFailure });
+      state.community = { ...state.community, name: body.name };
+      return json(route, 200, { community_view: communityView(state), moderators: [{ community: state.community, moderator: person }], discussion_languages: [0] });
+    }
     if (path === '/api/v4/community/follow') return route.fulfill({ status: 204 });
     if (path === '/api/v4/community/tag') return route.fulfill({ status: 204 });
     if (path === '/api/v4/community/notifications') return route.fulfill({ status: 204 });
@@ -1772,6 +1786,103 @@ test('saves complete account settings and applies the theme', async ({ page }) =
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/settings/save' && call.body.display_name === 'Alice P2' && call.body.theme === 'dark' && call.body.default_listing_type === 'subscribed' && call.body.default_items_per_page === 30)).toBeTruthy();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+});
+
+test('changes own username through account settings and preserves rejected drafts', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/settings');
+  await expect(page.getByLabel('Username')).toHaveValue('alice');
+  await expect(page.getByText('Use 2–20 characters from one script:', { exact: false })).toBeVisible();
+  const accountReadsBeforeSave = state.calls.filter(call => call.path === '/api/v4/account' && call.method === 'GET').length;
+  await page.getByLabel('Username').fill('alice2');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/settings/save' && call.method === 'PUT' && call.body.username === 'alice2')).toBeTruthy();
+  await expect(page.getByLabel('Username')).toHaveValue('alice2');
+  await expect.poll(() => state.calls.filter(call => call.path === '/api/v4/account' && call.method === 'GET').length).toBeGreaterThan(accountReadsBeforeSave);
+
+  state.nameFailure = 'invalid_name';
+  await page.getByLabel('Username').fill('a中');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByLabel('Username')).toHaveValue('a中');
+  await expect(page.locator('#account-username-error')).toBeVisible();
+  await expect(page.getByLabel('Username')).toHaveAttribute('aria-invalid', 'true');
+});
+
+test('shows non-federated name guidance for account, community creation, and site users', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const originalFederation = site.site_view.local_site.federation_enabled;
+  site.site_view.local_site.federation_enabled = false;
+  try {
+    const state = fixtures();
+    state.siteUsers = [{ ...myUser.local_user_view, person: replyPerson, local_user: { ...myUser.local_user_view.local_user, id: 2, person_id: 2, admin: false } }];
+    await mockApi(page, state, { authenticated: true });
+    await page.goto('/settings');
+    await expect(page.getByText('Use 2–20 characters: Chinese characters, Latin letters, numbers, or underscores. No spaces or punctuation.', { exact: true })).toBeVisible();
+    await page.goto('/create_community');
+    await expect(page.getByText('Use 2–20 characters: Chinese characters, Latin letters, numbers, or underscores. No spaces or punctuation.', { exact: true })).toBeVisible();
+    await page.getByLabel('Community name').fill('中文社区');
+    await page.getByLabel('Community title').fill('中文社区标题');
+    state.nameFailure = 'already_exists';
+    await page.getByRole('button', { name: 'Create' }).click();
+    await expect(page.getByLabel('Community name')).toHaveValue('中文社区');
+    await expect(page.locator('#community-name-error')).toBeVisible();
+    await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community' && call.method === 'POST' && call.body.name === '中文社区')).toBeTruthy();
+    state.nameFailure = null;
+    await page.getByRole('button', { name: 'Create' }).click();
+    await expect(page).toHaveURL(/\/c\/%E4%B8%AD%E6%96%87%E7%A4%BE%E5%8C%BA$/i);
+    await page.goto('/c/中文社区/settings');
+    await expect(page.getByText('Use 2–20 characters: Chinese characters, Latin letters, numbers, or underscores. No spaces or punctuation.', { exact: true })).toBeVisible();
+    await page.goto('/admin/users');
+    await page.getByRole('button', { name: 'Change username' }).click();
+    await expect(page.getByText('Use 2–20 characters: Chinese characters, Latin letters, numbers, or underscores. No spaces or punctuation.', { exact: true })).toBeVisible();
+  } finally {
+    site.site_view.local_site.federation_enabled = originalFederation;
+  }
+});
+
+test('site administrator changes a listed user username and keeps rejected input', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.siteUsers = [{ ...myUser.local_user_view, person: { ...replyPerson }, local_user: { ...myUser.local_user_view.local_user, id: 2, person_id: 2, admin: false } }];
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/admin/users');
+  await page.getByRole('button', { name: 'Change username' }).click();
+  await page.getByLabel('Username').fill('bobby');
+  state.nameFailure = 'already_exists';
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByLabel('Username')).toHaveValue('bobby');
+  await expect(page.locator('#site-username-error')).toBeVisible();
+  expect(state.calls.some(call => call.path === '/api/v4/username' && call.method === 'PUT' && call.body.person_id === 2 && call.body.username === 'bobby')).toBeTruthy();
+  state.nameFailure = null;
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.filter(call => call.path === '/api/v4/username').length).toBe(2);
+  await expect(page.getByRole('button', { name: 'Change username' })).toBeVisible();
+  state.identity = { ...myUser, local_user_view: { ...myUser.local_user_view, local_user: { ...myUser.local_user_view.local_user, admin: false } } };
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Change username' })).toHaveCount(0);
+});
+
+test('renames a community and preserves a rejected name draft', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.community = { ...community };
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/c/news/settings');
+  await expect(page.getByText('Use 2–20 characters from one script:', { exact: false })).toBeVisible();
+  await page.getByLabel('Community name').fill('new-news');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community' && call.method === 'PUT' && call.body.community_id === 1 && call.body.name === 'new-news')).toBeTruthy();
+  await expect(page).toHaveURL(/\/c\/new-news\/settings$/);
+
+  state.nameFailure = 'invalid_name';
+  await page.getByLabel('Community name').fill('坏 name');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community' && call.method === 'PUT' && call.body.name === '坏 name')).toBeTruthy();
+  await expect(page.getByLabel('Community name')).toHaveValue('坏 name');
+  await expect(page.getByLabel('Community name')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('#manage-community-name-error')).toBeVisible();
 });
 
 test('preserves unsaved settings and sends cleared optional fields', async ({ page }) => {
