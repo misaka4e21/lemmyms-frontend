@@ -1,7 +1,7 @@
 module Ui.PostCard exposing (Config, deleteTriggerId, postCard)
 
 import Generated.I18n as Translations
-import Html exposing (Html, a, article, bdi, button, details, div, h2, h3, img, p, section, span, summary, text, time)
+import Html exposing (Html, a, article, bdi, button, details, div, h2, h3, img, li, p, section, span, summary, text, time, ul)
 import Html.Attributes as A
 import Html.Events as Events
 import Lemmy.Domain as Domain
@@ -17,6 +17,7 @@ type alias Config msg =
     , viewerActor : Maybe String
     , viewerId : Maybe Int
     , blurNsfw : Bool
+    , showDocumentAttachments : Bool
     , mode : String
     , isBusy : String -> Bool
     , isExpanded : String -> Bool
@@ -307,15 +308,15 @@ nsfwGate config texts post =
     if post.nsfw && config.blurNsfw then
         details [ A.class "nsfw-gate" ]
             [ summary [ A.class "text-button" ] [ text (Translations.showNsfw texts) ]
-            , content texts post
+            , content config texts post
             ]
 
     else
-        content texts post
+        content config texts post
 
 
-content : Translations.I18n -> Domain.Post -> Html msg
-content texts post =
+content : Config msg -> Translations.I18n -> Domain.Post -> Html msg
+content config texts post =
     div [ A.class "post-content" ]
         [ case post.thumbnailUrl of
             Just thumbnail ->
@@ -330,8 +331,35 @@ content texts post =
             Nothing ->
                 text ""
         , Maybe.withDefault "" post.body |> Markdown.render
+        , if config.showDocumentAttachments then
+            documentAttachments texts (Maybe.withDefault "" post.body)
+
+          else
+            text ""
         , linkSection texts post.url
         ]
+
+
+documentAttachments : Translations.I18n -> String -> Html msg
+documentAttachments texts source =
+    case Markdown.extractFileAttachments source of
+        [] ->
+            text ""
+
+        attachments ->
+            section [ A.class "attachments" ]
+                [ h3 [] [ text (Translations.attachments texts) ]
+                , ul []
+                    (List.map
+                        (\attachment ->
+                            li []
+                                [ a [ A.href attachment.url, A.rel "noopener noreferrer", A.attribute "download" "" ]
+                                    [ text attachment.name ]
+                                ]
+                        )
+                        attachments
+                    )
+                ]
 
 
 tagsRow : Translations.I18n -> List Domain.CommunityTag -> Html msg

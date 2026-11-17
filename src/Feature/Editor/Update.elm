@@ -1,4 +1,4 @@
-module Feature.Editor.Update exposing (Msg(..), Outcome, load, loadComment, update)
+module Feature.Editor.Update exposing (Msg(..), Outcome, UploadKind(..), load, loadComment, update)
 
 import Api
 import App.Feedback exposing (Flash(..))
@@ -10,10 +10,12 @@ import Html exposing (label)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
+import Lemmy.Markdown as Markdown
 import Lemmy.Route as Route
 import List
 import Ports exposing (focus)
 import Remote exposing (Remote(..))
+import Ui.Rich
 import Url exposing (Url)
 
 
@@ -29,9 +31,14 @@ type Msg
     | EditorKeepDraft
     | Saved EditorMode Api.Response
     | Reloaded Api.Response
-    | Uploaded EditorMode Api.Response
+    | Uploaded EditorMode UploadKind Api.Response
     | SourceLoaded String Api.Response
     | CommentSourceLoaded String Api.Response
+
+
+type UploadKind
+    = ImageUploadKind
+    | DocumentUploadKind
 
 
 type alias Outcome =
@@ -92,6 +99,89 @@ postSource =
             )
 
 
+decodeUploaded : UploadKind -> Api.Response -> Result Api.Problem ( EditorAttachment, String )
+decodeUploaded kind response =
+    case kind of
+        ImageUploadKind ->
+            Api.decodeResponse Domain.imageUpload response
+                |> Result.andThen
+                    (\image ->
+                        if String.isEmpty (String.trim image.filename) || not (Ui.Rich.safeUrl image.imageUrl) then
+                            Err invalidUploadResponse
+
+                        else
+                            Ok
+                                ( { id = image.filename
+                                  , name = image.filename
+                                  , reference = image.imageUrl
+                                  , kind = ImageAttachment
+                                  , contentType = Nothing
+                                  , sizeBytes = Nothing
+                                  }
+                                , "![" ++ escapeMarkdownLabel image.filename ++ "](" ++ image.imageUrl ++ ")"
+                                )
+                    )
+
+        DocumentUploadKind ->
+            Api.decodeResponse Domain.fileUpload response
+                |> Result.andThen
+                    (\file ->
+                        let
+                            markdown =
+                                "[" ++ escapeMarkdownLabel file.filename ++ "](" ++ file.url ++ ")"
+
+                            isFileLink =
+                                Markdown.extractFileAttachments markdown
+                                    |> List.any (\attachment -> attachment.id == file.publicId)
+                        in
+                        if
+                            String.isEmpty (String.trim file.publicId)
+                                || String.isEmpty (String.trim file.filename)
+                                || not (Ui.Rich.safeUrl file.url)
+                                || not isFileLink
+                        then
+                            Err invalidUploadResponse
+
+                        else
+                            Ok
+                                ( { id = file.publicId
+                                  , name = file.filename
+                                  , reference = file.url
+                                  , kind = DocumentAttachment
+                                  , contentType = Just file.contentType
+                                  , sizeBytes = Just file.sizeBytes
+                                  }
+                                , markdown
+                                )
+                    )
+
+
+invalidUploadResponse : Api.Problem
+invalidUploadResponse =
+    { status = 400, detail = "bad_request" }
+
+
+appendMarkdown : String -> String -> String
+appendMarkdown source link =
+    let
+        separator =
+            if String.isEmpty (String.trim source) then
+                ""
+
+            else
+                "\n\n"
+    in
+    String.trimRight source ++ separator ++ link ++ "\n"
+
+
+escapeMarkdownLabel : String -> String
+escapeMarkdownLabel value =
+    value
+        |> String.replace "\\" "\\\\"
+        |> String.replace "[" "\\["
+        |> String.replace "]" "\\]"
+
+
 commentSource : Decode.Decoder Source
 commentSource =
     Decode.field "comment_view" Domain.commentView
@@ -125,6 +215,7 @@ updateWorking csrf message model =
                             Just
                                 { editor
                                     | authoring = authoring
+                                    , attachments = syncAttachments editor.attachments (AuthoringState.value authoring)
                                     , problem =
                                         if outcome.changed then
                                             Nothing
@@ -150,9 +241,23 @@ updateWorking csrf message model =
         EditorFileSelected maybeFile ->
             case ( maybeFile, model.editor ) of
                 ( Just file, Just editor ) ->
-                    ( { model | editor = Just { editor | uploading = True, problem = Nothing } }
-                    , Api.upload csrf "post" file (Uploaded editor.mode)
-                    )
+                    let
+                        kind =
+                            if String.startsWith "image/" (String.toLower (File.mime file)) then
+                                ImageUploadKind
+
+                            else
+                                DocumentUploadKind
+
+                        command =
+                            case kind of
+                                ImageUploadKind ->
+                                    Api.upload csrf "post" file (Uploaded editor.mode kind)
+
+                                DocumentUploadKind ->
+                                    Api.uploadFile file (Uploaded editor.mode kind)
+                    in
+                    ( { model | editor = Just { editor | uploading = True, problem = Nothing } }, command )
 
                 _ ->
                     ( model, Cmd.none )
@@ -252,59 +357,46 @@ updateWorking csrf message model =
                 Err problem ->
                     ( { model | flash = FlashProblem problem }, Cmd.none )
 
-        Uploaded mode response ->
-            case Api.decodeResponse Domain.imageUpload response of
-                Ok uploaded ->
-                    case model.editor of
-                        Just editor ->
-                            if editor.mode /= mode then
-                                ( model, Cmd.none )
+        Uploaded mode kind response ->
+            case model.editor of
+                Just editor ->
+                    if editor.mode /= mode then
+                        ( model, Cmd.none )
 
-                            else
+                    else
+                        case decodeUploaded kind response of
+                            Ok ( attachment, markdown ) ->
                                 let
-                                    label =
-                                        if String.isEmpty uploaded.filename then
-                                            uploaded.filename
+                                    nextBody =
+                                        appendMarkdown (body editor) markdown
 
-                                        else
-                                            uploaded.filename
-
-                                    markdown =
-                                        "![" ++ label ++ "](" ++ uploaded.imageUrl ++ ")"
-
-                                    currentBody =
-                                        body editor
-
-                                    separator =
-                                        if String.isEmpty (String.trim currentBody) then
-                                            ""
-
-                                        else
-                                            "\n\n"
+                                    nextAttachments =
+                                        syncAttachments (editor.attachments ++ [ attachment ]) nextBody
                                 in
                                 ( { model
                                     | editor =
                                         Just
                                             { editor
                                                 | uploading = False
-                                                , authoring = AuthoringState.setValue (String.trimRight currentBody ++ separator ++ markdown ++ "\n") editor.authoring
-                                                , attachments = editor.attachments ++ [ { id = uploaded.filename, name = uploaded.filename, reference = uploaded.imageUrl } ]
+                                                , authoring = AuthoringState.setValue nextBody editor.authoring
+                                                , attachments = nextAttachments
+                                                , problem = Nothing
                                             }
                                     , flash = FlashUploaded
                                   }
                                 , focus "editor-body"
                                 )
 
-                        Nothing ->
-                            ( model, Cmd.none )
+                            Err problem ->
+                                ( { model
+                                    | flash = FlashUploadFailed
+                                    , editor = Just { editor | uploading = False, problem = Just problem }
+                                  }
+                                , Cmd.none
+                                )
 
-                Err problem ->
-                    ( { model
-                        | flash = FlashUploadFailed
-                        , editor = model.editor |> Maybe.map (\editor -> { editor | uploading = False, problem = Just problem })
-                      }
-                    , Cmd.none
-                    )
+                Nothing ->
+                    ( model, Cmd.none )
 
         SourceLoaded id response ->
             case Api.decodeResponse postSource response of
@@ -343,7 +435,7 @@ updateWorking csrf message model =
                                 , authoring = AuthoringState.init "editor-body" source.body
                                 , format = "markdown"
                                 , version = Just source.version
-                                , attachments = []
+                                , attachments = sourceAttachments source
                                 , uploading = False
                                 , saving = False
                                 , problem = Nothing

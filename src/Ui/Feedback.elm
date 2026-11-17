@@ -61,6 +61,31 @@ viewFormProblemWithId _ identifier maybeMessage =
 
 problemText : Translations.I18n -> Api.Problem -> String
 problemText texts problem =
+    case problem.detail of
+        "file_upload_disabled" ->
+            Translations.uploadFileDisabled texts
+
+        "file_too_large" ->
+            Translations.uploadFileTooLarge texts
+
+        "file_type_not_allowed" ->
+            Translations.uploadFileTypeNotAllowed texts
+
+        "file_type_must_use_image_endpoint" ->
+            Translations.uploadFileUseImage texts
+
+        "file_storage_unavailable" ->
+            Translations.uploadFileStorageUnavailable texts
+
+        "file_storage_unauthorized" ->
+            Translations.uploadFileStorageUnavailable texts
+
+        _ ->
+            problemStatusText texts problem
+
+
+problemStatusText : Translations.I18n -> Api.Problem -> String
+problemStatusText texts problem =
     case problem.status of
         0 ->
             Translations.connectionError texts

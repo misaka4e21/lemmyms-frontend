@@ -30,6 +30,11 @@ import Url exposing (Url)
 
 postCard : Model -> Active -> Domain.PostView -> Html Msg
 postCard model active =
+    postCardWithAttachments False model active
+
+
+postCardWithAttachments : Bool -> Model -> Active -> Domain.PostView -> Html Msg
+postCardWithAttachments showDocumentAttachments model active =
     Ui.PostCard.postCard
         { formatted = model.formatted
         , viewerActor =
@@ -41,6 +46,7 @@ postCard model active =
                     Nothing
         , viewerId = viewerIdOf model
         , blurNsfw = blurNsfwOf model
+        , showDocumentAttachments = showDocumentAttachments
         , mode = normalizedView (Route.query "view" model.url)
         , isBusy = \id -> Post.isBusy id model.posts.busy
         , isExpanded = \id -> Set.member id model.posts.expandedReplies
@@ -243,7 +249,7 @@ viewNested active parent _ =
 postViewConfig : Model -> Active -> Post.Config Msg
 postViewConfig model active =
     { retry = RetryPage
-    , postCard = postCard model active
+    , postCard = postCardWithAttachments True model active
     , threadedPostCard = threadedPostCard model active
     , startReply = EditorMessage << Editor.StartReply
     , editor =

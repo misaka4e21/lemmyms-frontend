@@ -449,6 +449,17 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     try { body = request.postDataJSON() || {}; } catch { body = {}; }
     state.calls.push({ method, path, search: url.search, body });
 
+    if (path === '/api/v4/file' && method === 'POST') {
+      state.calls.at(-1).multipart = request.postData() || '';
+      return json(route, 200, {
+        public_id: '550e8400-e29b-41d4-a716-446655440000',
+        url: 'https://forum.test/api/v4/file/550e8400-e29b-41d4-a716-446655440000/brief.pdf',
+        filename: 'brief.pdf',
+        content_type: 'application/pdf',
+        size_bytes: 7
+      });
+    }
+
     if (['/api/v4/site/icon', '/api/v4/site/banner'].includes(path)) {
       const target = state.configSite || site;
       const kind = path.split('/').at(-1);
@@ -1470,8 +1481,12 @@ test('logs in, posts, replies and edits a comment', async ({ page }) => {
   await page.goto('/create_post?community_id=1');
   await page.getByLabel('Topic title').fill('New topic');
   await page.getByLabel('Message').fill('New body');
+  await page.locator('#editor-file').setInputFiles({ name: 'brief.pdf', mimeType: 'application/pdf', buffer: Buffer.from('a brief') });
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/file' && call.multipart.includes('name="file"') && call.multipart.includes('filename="brief.pdf"'))).toBeTruthy();
+  await expect(page.locator('.attachments').getByRole('link', { name: 'brief.pdf' })).toBeVisible();
   await page.getByRole('button', { name: 'Publish topic' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'New topic' })).toBeVisible();
+  await expect(page.locator('.attachments').getByRole('link', { name: 'brief.pdf' })).toBeVisible();
   await page.getByRole('button', { name: 'Reply', exact: true }).click();
   await page.getByLabel('Message').fill('New reply');
   await page.getByRole('button', { name: 'Publish reply' }).click();

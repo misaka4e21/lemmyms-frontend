@@ -3,6 +3,7 @@ module Feature.Editor.State exposing (..)
 import Api
 import Feature.Authoring.State as Authoring
 import Lemmy.Domain as Domain
+import Lemmy.Markdown as Markdown
 import Remote exposing (Remote(..))
 
 
@@ -20,8 +21,19 @@ type alias Source =
     }
 
 
+type AttachmentKind
+    = ImageAttachment
+    | DocumentAttachment
+
+
 type alias EditorAttachment =
-    { id : String, name : String, reference : String }
+    { id : String
+    , name : String
+    , reference : String
+    , kind : AttachmentKind
+    , contentType : Maybe String
+    , sizeBytes : Maybe Int
+    }
 
 
 type alias EditorState =
@@ -59,8 +71,45 @@ body editor =
 
 
 sourceAttachments : Source -> List EditorAttachment
-sourceAttachments _ =
-    []
+sourceAttachments source =
+    Markdown.extractFileAttachments source.body
+        |> List.map
+            (\attachment ->
+                { id = attachment.id
+                , name = attachment.name
+                , reference = attachment.url
+                , kind = DocumentAttachment
+                , contentType = Nothing
+                , sizeBytes = Nothing
+                }
+            )
+
+
+syncAttachments : List EditorAttachment -> String -> List EditorAttachment
+syncAttachments existing source =
+    let
+        images =
+            List.filter (\attachment -> attachment.kind == ImageAttachment) existing
+
+        documents =
+            Markdown.extractFileAttachments source
+                |> List.map
+                    (\attachment ->
+                        case List.filter (\current -> current.kind == DocumentAttachment && current.id == attachment.id) existing of
+                            current :: _ ->
+                                { current | name = attachment.name, reference = attachment.url }
+
+                            [] ->
+                                { id = attachment.id
+                                , name = attachment.name
+                                , reference = attachment.url
+                                , kind = DocumentAttachment
+                                , contentType = Nothing
+                                , sizeBytes = Nothing
+                                }
+                    )
+    in
+    images ++ documents
 
 
 type alias Model =

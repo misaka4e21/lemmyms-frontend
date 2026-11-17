@@ -683,6 +683,15 @@ type alias ImageUpload =
     { imageUrl : String, filename : String }
 
 
+type alias FileUpload =
+    { publicId : String
+    , url : String
+    , filename : String
+    , contentType : String
+    , sizeBytes : Int
+    }
+
+
 and : Decoder a -> Decoder (a -> b) -> Decoder b
 and =
     D.map2 (|>)
@@ -1656,6 +1665,16 @@ imageUpload =
     D.map2 ImageUpload
         (D.field "image_url" D.string)
         (D.field "filename" D.string)
+
+
+fileUpload : Decoder FileUpload
+fileUpload =
+    D.map5 FileUpload
+        (D.field "public_id" D.string)
+        (D.field "url" D.string)
+        (D.field "filename" D.string)
+        (D.field "content_type" D.string)
+        (D.field "size_bytes" D.int)
 
 
 acctOf : Person -> String

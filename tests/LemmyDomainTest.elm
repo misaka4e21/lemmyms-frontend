@@ -88,6 +88,28 @@ suite =
                     (decode Domain.imageUpload Fixtures.imageJson
                         |> Result.map (\image -> ( image.imageUrl, image.filename ))
                     )
+        , test "decodes document upload response" <|
+            \_ ->
+                Expect.equal
+                    (Ok
+                        { publicId = "550e8400-e29b-41d4-a716-446655440000"
+                        , url = "https://forum.test/api/v4/file/550e8400-e29b-41d4-a716-446655440000/report.pdf"
+                        , filename = "report.pdf"
+                        , contentType = "application/pdf"
+                        , sizeBytes = 1024
+                        }
+                    )
+                    (decode Domain.fileUpload "{\"public_id\":\"550e8400-e29b-41d4-a716-446655440000\",\"url\":\"https://forum.test/api/v4/file/550e8400-e29b-41d4-a716-446655440000/report.pdf\",\"filename\":\"report.pdf\",\"content_type\":\"application/pdf\",\"size_bytes\":1024}"
+                        |> Result.map identity
+                    )
+        , test "rejects document upload response missing a required field" <|
+            \_ ->
+                case decode Domain.fileUpload "{\"public_id\":\"550e8400-e29b-41d4-a716-446655440000\",\"url\":\"https://forum.test/file\",\"filename\":\"report.pdf\",\"content_type\":\"application/pdf\"}" of
+                    Ok _ ->
+                        Expect.fail "expected a missing size_bytes field to fail decoding"
+
+                    Err _ ->
+                        Expect.pass
         , test "decodes a reply notification with comment data" <|
             \_ ->
                 Expect.equal (Ok ( Domain.ReplyNotification, 20 ))

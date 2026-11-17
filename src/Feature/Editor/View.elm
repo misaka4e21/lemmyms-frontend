@@ -118,23 +118,47 @@ viewEditor config active editor =
 
               else
                 text ""
-            , ul [ A.class "attachment-list" ]
-                (List.map
-                    (\attachment ->
-                        li []
-                            [ text
-                                (if String.isEmpty attachment.name then
-                                    attachment.id
+            , if List.isEmpty editor.attachments then
+                text ""
 
-                                 else
-                                    attachment.name
-                                )
-                            , button [ A.type_ "button", A.class "text-button", Events.onClick (config.editorRemoveAttachment attachment.id) ]
-                                [ text (Translations.remove active.texts) ]
-                            ]
-                    )
-                    editor.attachments
-                )
+              else
+                section [ A.class "attachments" ]
+                    [ h3 [] [ text (Translations.attachments active.texts) ]
+                    , ul [ A.class "attachment-list" ]
+                        (List.map
+                            (\attachment ->
+                                li []
+                                    [ if String.isEmpty attachment.reference then
+                                        text
+                                            (if String.isEmpty attachment.name then
+                                                attachment.id
+
+                                             else
+                                                attachment.name
+                                            )
+
+                                      else
+                                        Html.a [ A.href attachment.reference, A.rel "noopener noreferrer" ]
+                                            [ text
+                                                (if String.isEmpty attachment.name then
+                                                    attachment.id
+
+                                                 else
+                                                    attachment.name
+                                                )
+                                            ]
+                                    , case attachment.kind of
+                                        ImageAttachment ->
+                                            button [ A.type_ "button", A.class "text-button", Events.onClick (config.editorRemoveAttachment attachment.id) ]
+                                                [ text (Translations.remove active.texts) ]
+
+                                        DocumentAttachment ->
+                                            text ""
+                                    ]
+                            )
+                            editor.attachments
+                        )
+                    ]
             ]
         , case editor.problem of
             Just problem ->
