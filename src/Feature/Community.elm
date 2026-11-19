@@ -146,11 +146,14 @@ update csrf message model =
             case Api.decodeResponse Domain.communityResponse response of
                 Ok community ->
                     let
+                        topicsQuery =
+                            communityTopicsQuery model community.communityView.community.id
+
                         ( topics, command ) =
                             if model.communityTopics == Loading then
                                 ( Loading
                                 , Api.get
-                                    (model.topicsQuery ++ cursorQueryFrom model.topicsCursor)
+                                    (topicsQuery ++ cursorQueryFrom model.topicsCursor)
                                     TopicsLoaded
                                 )
 
@@ -161,14 +164,7 @@ update csrf message model =
                         | community = Ready community.communityView
                         , moderators = community.moderators
                         , communityTopics = topics
-                        , topicsQuery =
-                            "/post/list?type="
-                                ++ model.topicsListing
-                                ++ "&sort="
-                                ++ model.topicsSort
-                                ++ "&limit=20&community_id="
-                                ++ String.fromInt community.communityView.community.id
-                                ++ model.topicsTimeRange
+                        , topicsQuery = topicsQuery
                       }
                     , command
                     , { flash = NoFlash, sessionProblem = Nothing }
@@ -293,6 +289,17 @@ cursorQueryFrom cursorValue =
 
         Nothing ->
             ""
+
+
+communityTopicsQuery : Model -> Int -> String
+communityTopicsQuery model communityId =
+    "/post/list?type_="
+        ++ model.topicsListing
+        ++ "&sort="
+        ++ model.topicsSort
+        ++ "&limit=20&community_id="
+        ++ String.fromInt communityId
+        ++ model.topicsTimeRange
 
 
 allowedListing : String -> String
