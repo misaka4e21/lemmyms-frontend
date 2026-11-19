@@ -753,6 +753,7 @@ urlEncode =
 type alias Config msg =
     { retry : msg
     , postCard : Domain.PostView -> Html msg
+    , topicPostCard : Domain.PostView -> Html msg
     , threadedPostCard : Domain.CommentView -> Html msg -> Html msg
     , startReply : String -> msg
     , editor : Html msg
@@ -841,7 +842,7 @@ crossPostsSection config active posts =
     else
         section [ A.class "stack" ]
             [ h2 [] [ text (Translations.crossPosts active.texts) ]
-            , div [ A.class "stack" ] (List.map config.postCard posts)
+            , div [ A.class "stack" ] (List.map config.topicPostCard posts)
             ]
 
 

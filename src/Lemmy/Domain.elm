@@ -313,6 +313,7 @@ type alias Post =
     , name : String
     , url : Maybe String
     , body : Maybe String
+    , embedDescription : Maybe String
     , creatorId : Id
     , communityId : Id
     , removed : Bool
@@ -1150,6 +1151,7 @@ post =
         |> and (D.field "name" D.string)
         |> and (maybeField "url" D.string)
         |> and (maybeField "body" D.string)
+        |> and (maybeField "embed_description" D.string)
         |> and (D.field "creator_id" identifier)
         |> and (D.field "community_id" identifier)
         |> and (defaultField "removed" False D.bool)

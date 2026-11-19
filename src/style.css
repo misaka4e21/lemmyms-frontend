@@ -223,7 +223,7 @@ textarea {
 .page-content {
   display: grid;
   gap: 1.25rem;
-  width: min(100%, 760px);
+  width: min(100%, 1100px);
   margin-inline: auto;
 }
 
@@ -336,6 +336,7 @@ h2 { margin-block: 0 0.5rem; }
 .form-stack {
   display: grid;
   gap: 1rem;
+  min-width: 0;
 }
 
 .form-grid {
@@ -380,6 +381,17 @@ h2 { margin-block: 0 0.5rem; }
 
 .post-card h2,
 .post-card h3 { overflow-wrap: anywhere; }
+.post-card,
+.comment-card { min-width: 0; }
+.rich,
+.post-content { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.rich pre { max-width: 100%; overflow-x: auto; overflow-wrap: normal; white-space: pre; }
+.rich table { display: block; max-width: 100%; overflow-x: auto; }
+.rich img,
+.rich video,
+.rich iframe { max-width: 100%; }
+.rich img,
+.rich video { height: auto; }
 .comment-card > .rich { margin-block: 1rem; }
 .post-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
 .post-actions .icon-button {

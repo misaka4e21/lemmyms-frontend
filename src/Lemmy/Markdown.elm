@@ -1,4 +1,4 @@
-module Lemmy.Markdown exposing (FileAttachment, extractFileAttachments, render, renderer)
+module Lemmy.Markdown exposing (FileAttachment, excerpt, extractFileAttachments, render, renderer)
 
 import Char
 import Html exposing (Html)
@@ -41,6 +41,61 @@ render source =
 
         Err _ ->
             fallback source
+
+
+excerpt : Int -> String -> ( String, Bool )
+excerpt limit source =
+    let
+        plainText =
+            case Markdown.Parser.parse source of
+                Ok blocks ->
+                    blocks |> List.concatMap blockText |> String.join " " |> String.words |> String.join " "
+
+                Err _ ->
+                    source |> String.words |> String.join " "
+
+        characters =
+            String.toList plainText
+
+        shortened =
+            List.length characters > limit
+    in
+    ( if shortened then
+        List.take limit characters |> String.fromList |> String.trimRight |> (\value -> value ++ "…")
+
+      else
+        plainText
+    , shortened
+    )
+
+
+blockText : Markdown.Block.Block -> List String
+blockText block =
+    case block of
+        Markdown.Block.Heading _ inlines ->
+            [ Markdown.Block.extractInlineText inlines ]
+
+        Markdown.Block.Paragraph inlines ->
+            [ Markdown.Block.extractInlineText inlines ]
+
+        Markdown.Block.UnorderedList _ items ->
+            List.concatMap (\(Markdown.Block.ListItem _ nested) -> List.concatMap blockText nested) items
+
+        Markdown.Block.OrderedList _ _ items ->
+            List.concatMap (List.concatMap blockText) items
+
+        Markdown.Block.BlockQuote nested ->
+            List.concatMap blockText nested
+
+        Markdown.Block.Table headers rows ->
+            List.map (.label >> Markdown.Block.extractInlineText) headers
+                ++ List.concatMap (List.map Markdown.Block.extractInlineText) rows
+
+        Markdown.Block.CodeBlock code ->
+            [ code.body ]
+
+        _ ->
+            []
 
 
 extractFileAttachments : String -> List FileAttachment

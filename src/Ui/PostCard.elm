@@ -18,6 +18,7 @@ type alias Config msg =
     , viewerId : Maybe Int
     , blurNsfw : Bool
     , showDocumentAttachments : Bool
+    , showExcerpt : Bool
     , mode : String
     , isBusy : String -> Bool
     , isExpanded : String -> Bool
@@ -330,13 +331,47 @@ content config texts post =
 
             Nothing ->
                 text ""
-        , Maybe.withDefault "" post.body |> Markdown.render
+        , if config.showExcerpt then
+            excerpt post
+
+          else
+            Maybe.withDefault "" post.body |> Markdown.render
         , if config.showDocumentAttachments then
             documentAttachments texts (Maybe.withDefault "" post.body)
 
           else
             text ""
         , linkSection texts post.url
+        ]
+
+
+excerpt : Domain.Post -> Html msg
+excerpt post =
+    let
+        summary =
+            post.embedDescription
+                |> Maybe.map String.trim
+                |> Maybe.andThen
+                    (\value ->
+                        if String.isEmpty value then
+                            Nothing
+
+                        else
+                            Just value
+                    )
+
+        bodyExcerpt =
+            Maybe.withDefault "" post.body |> Markdown.excerpt 280
+    in
+    div [ A.class "post-excerpt", A.dir "auto" ]
+        [ text
+            (case summary of
+                Just value ->
+                    value
+
+                Nothing ->
+                    Tuple.first bodyExcerpt
+            )
         ]
 
 

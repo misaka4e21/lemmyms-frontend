@@ -1518,6 +1518,43 @@ test('browses latest, community, post and search', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Hello world' })).toBeVisible();
 });
 
+test('uses topic descriptions and excerpts while keeping discussion content full width', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  const fullBody = 'Full discussion text '.repeat(30);
+  state.posts[1] = { ...post, body: fullBody, embed_description: 'Link description for the card' };
+  await mockApi(page, state, { authenticated: true });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await open(page, '/');
+
+  const cardExcerpt = page.locator('#post-1 .post-excerpt');
+  await expect(cardExcerpt).toHaveText('Link description for the card');
+  await expect(cardExcerpt).not.toContainText('Full discussion text');
+  await expect.poll(() => page.locator('.page-content').evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(760);
+
+  await page.goto('/post/1');
+  await expect(page.locator('#post-1 .rich')).toContainText(fullBody);
+
+  state.posts[1] = { ...post, body: `# Intro\n\n${fullBody}` };
+  await page.goto('/');
+  const fallbackExcerpt = page.locator('#post-1 .post-excerpt');
+  await expect(fallbackExcerpt).toContainText('Intro');
+  await expect(fallbackExcerpt).toContainText('…');
+  await expect(fallbackExcerpt).not.toContainText('# Intro');
+
+  state.posts[1] = { ...post, body: 'Short **body**', embed_description: '   ' };
+  await page.goto('/');
+  await expect(page.locator('#post-1 .post-excerpt')).toHaveText('Short body');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+  state.posts[1] = { ...post, body: `\`\`\`\n${'W'.repeat(1000)}\n\`\`\`` };
+  await page.goto('/post/1');
+  await expect.poll(() => page.locator('#post-1 .rich pre').evaluate(node => node.scrollWidth > node.clientWidth)).toBeTruthy();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
 test('logs in, posts, replies and edits a comment', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
   const state = fixtures();

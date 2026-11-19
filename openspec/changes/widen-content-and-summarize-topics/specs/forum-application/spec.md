@@ -64,6 +64,8 @@ The application SHALL treat post `body`, comment `content`, person `bio`, commun
 - **WHEN** a post body contains script, event-handler attributes, or an unsafe URL scheme
 - **THEN** the renderer omits the unsafe content while preserving the surrounding readable text
 
+## ADDED Requirements
+
 ### Requirement: Main content width follows available layout space
 The main content area SHALL grow with the available width to the right of the navigation drawer, while retaining readable horizontal margins and a sensible maximum width. It SHALL adapt to the viewport and drawer state without horizontal page overflow.
 
