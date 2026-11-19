@@ -21,7 +21,7 @@ suite =
     describe "Lemmy v4 domain"
         [ test "decodes site and local-site fields" <|
             \_ ->
-                Expect.equal (Ok { name = "Forum", hostname = "forum.test", mode = Domain.OpenRegistration, federation = True })
+                Expect.equal (Ok { name = "Forum", hostname = "forum.test", mode = Domain.OpenRegistration, federation = True, languages = [ ( 0, "Undetermined", "und" ), ( 1, "English", "en" ) ] })
                     (decode Domain.getSiteResponse Fixtures.siteJson
                         |> Result.map
                             (\response ->
@@ -29,6 +29,7 @@ suite =
                                 , hostname = response.siteView.localSite.hostname
                                 , mode = response.siteView.localSite.registrationMode
                                 , federation = response.siteView.localSite.federationEnabled
+                                , languages = List.map (\language -> ( language.id, language.name, language.code )) response.allLanguages
                                 }
                             )
                     )

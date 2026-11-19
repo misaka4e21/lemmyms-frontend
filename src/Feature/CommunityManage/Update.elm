@@ -22,6 +22,7 @@ type Msg
     | ManageContextChanged String
     | ManageFollowPolicyChanged String
     | ManageFieldChanged String String
+    | ManageLanguageChanged Int Bool
     | ManageApplyPolicy
     | ManageAddMember
     | ManageRemoveMember String
@@ -166,6 +167,21 @@ updateWorking context message model =
         ManageFieldChanged field value ->
             setManage model (\manage -> setField field value manage) Cmd.none
 
+        ManageLanguageChanged id checked ->
+            setManage model
+                (\manage ->
+                    let
+                        ids =
+                            if checked then
+                                id :: manage.discussionLanguages
+
+                            else
+                                List.filter ((/=) id) manage.discussionLanguages
+                    in
+                    { manage | discussionLanguages = Set.fromList ids |> Set.toList, problem = Nothing }
+                )
+                Cmd.none
+
         ManageApplyPolicy ->
             case model.manage of
                 Just manage ->
@@ -184,7 +200,7 @@ updateWorking context message model =
                                 , ( "nsfw", Encode.bool manage.nsfw )
                                 , ( "visibility", Encode.string manage.visibility )
                                 , ( "posting_restricted_to_mods", Encode.bool manage.postingRestricted )
-                                , ( "discussion_languages", Encode.list Encode.int (parseIds manage.discussionLanguages) )
+                                , ( "discussion_languages", Encode.list Encode.int manage.discussionLanguages )
                                 , ( "post_upvotes", Encode.string manage.postUpvotes )
                                 , ( "post_downvotes", Encode.string manage.postDownvotes )
                                 , ( "comment_upvotes", Encode.string manage.commentUpvotes )
@@ -601,7 +617,7 @@ updateWorking context message model =
                                                 , nsfw = data.communityView.community.nsfw
                                                 , visibility = visibilityText data.communityView.community.visibility
                                                 , postingRestricted = data.communityView.community.postingRestrictedToMods
-                                                , discussionLanguages = String.join "," (List.map String.fromInt data.discussionLanguages)
+                                                , discussionLanguages = data.discussionLanguages
                                                 , postUpvotes = voteModeText data.communityView.community.postUpvotes
                                                 , postDownvotes = voteModeText data.communityView.community.postDownvotes
                                                 , commentUpvotes = voteModeText data.communityView.community.commentUpvotes
@@ -836,9 +852,6 @@ setField field value manage =
         "postingRestricted" ->
             { manage | postingRestricted = value == "true", problem = Nothing }
 
-        "discussionLanguages" ->
-            { manage | discussionLanguages = value, problem = Nothing }
-
         "postUpvotes" ->
             { manage | postUpvotes = value, problem = Nothing }
 
@@ -903,13 +916,6 @@ voteModeText mode =
 
         Domain.DisabledVotes ->
             "disable"
-
-
-parseIds : String -> List Int
-parseIds value =
-    value
-        |> String.split ","
-        |> List.filterMap (String.trim >> String.toInt)
 
 
 followerIdFor : String -> ManageState -> Int

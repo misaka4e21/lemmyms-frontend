@@ -108,6 +108,10 @@ type alias SiteView =
     { site : Site, localSite : LocalSite }
 
 
+type alias Language =
+    { id : Id, name : String, code : String }
+
+
 type alias Tagline =
     { id : Id, content : String, publishedAt : String, updatedAt : Maybe String }
 
@@ -120,6 +124,7 @@ type alias GetSiteResponse =
     , myFeedToken : Maybe String
     , captchaEnabled : Bool
     , oauthProviders : List PublicOAuthProvider
+    , allLanguages : List Language
     }
 
 
@@ -913,6 +918,15 @@ getSiteResponse =
         |> and (maybeField "my_feed_token" D.string)
         |> and (defaultField "captcha_enabled" False D.bool)
         |> and (defaultField "oauth_providers" [] (D.list publicOAuthProvider))
+        |> and (D.field "all_languages" (D.list language))
+
+
+language : Decoder Language
+language =
+    D.map3 Language
+        (D.field "id" identifier)
+        (D.field "name" D.string)
+        (D.field "code" D.string)
 
 
 publicOAuthProvider : Decoder PublicOAuthProvider

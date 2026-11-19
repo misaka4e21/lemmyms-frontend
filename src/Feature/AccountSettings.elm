@@ -15,8 +15,10 @@ import Lemmy.Domain as Domain
 import List
 import Ports exposing (closeDialog, download, focus, openDialog, setTheme)
 import Remote exposing (Remote(..))
+import Set
 import Task
 import Ui.Feedback exposing (loginRequired, problemText, viewFormProblem, viewFormProblemWithId)
+import Ui.LanguageSelect
 import Ui.Layout exposing (pageHeading)
 import Url
 
@@ -53,7 +55,7 @@ type alias SettingsForm =
     , hidePostsWithMedia : Bool
     , sendNotificationsToEmail : Bool
     , privateMessagesEnabled : Bool
-    , discussionLanguages : String
+    , discussionLanguages : List Int
     , blockingKeywords : String
     , showScore : Bool
     , showUpvotes : Bool
@@ -129,6 +131,8 @@ initial =
 type Msg
     = Loaded Api.Response
     | FieldChanged String String
+    | DiscussionLanguageChanged Int Bool
+    | RetryLanguageCatalog
     | ToggleChanged String Bool
     | Save
     | Saved Api.Response
@@ -218,6 +222,12 @@ update message model =
 
             else
                 keep { model | form = Maybe.map (setField name value) model.form } Cmd.none
+
+        DiscussionLanguageChanged id checked ->
+            keep { model | form = Maybe.map (setDiscussionLanguage id checked) model.form } Cmd.none
+
+        RetryLanguageCatalog ->
+            keep model Cmd.none
 
         ToggleChanged name value ->
             keep { model | form = Maybe.map (setToggle name value) model.form } Cmd.none
@@ -592,7 +602,7 @@ formFrom user =
     , hidePostsWithMedia = local.hidePostsWithMedia
     , sendNotificationsToEmail = local.sendNotificationsToEmail
     , privateMessagesEnabled = local.privateMessagesEnabled
-    , discussionLanguages = String.join "," (List.map String.fromInt user.discussionLanguages)
+    , discussionLanguages = user.discussionLanguages
     , blockingKeywords = String.join "\n" user.keywordBlocks
     , showScore = local.showScore
     , showUpvotes = local.showUpvotes
@@ -644,9 +654,6 @@ setField name value form =
 
         "default_items_per_page" ->
             { form | defaultItemsPerPage = value }
-
-        "discussion_languages" ->
-            { form | discussionLanguages = value }
 
         "blocking_keywords" ->
             { form | blockingKeywords = value }
@@ -753,7 +760,7 @@ saveBody form =
         , ( "hide_posts_with_media", Encode.bool form.hidePostsWithMedia )
         , ( "send_notifications_to_email", Encode.bool form.sendNotificationsToEmail )
         , ( "private_messages_enabled", Encode.bool form.privateMessagesEnabled )
-        , ( "discussion_languages", Encode.list Encode.int (parseIds form.discussionLanguages) )
+        , ( "discussion_languages", Encode.list Encode.int form.discussionLanguages )
         , ( "blocking_keywords", Encode.list Encode.string (keywordList form.blockingKeywords) )
         , ( "show_score", Encode.bool form.showScore )
         , ( "show_upvotes", Encode.bool form.showUpvotes )
@@ -782,11 +789,17 @@ nullableInt value =
             Encode.null
 
 
-parseIds : String -> List Int
-parseIds value =
-    value
-        |> String.split ","
-        |> List.filterMap (String.trim >> String.toInt)
+setDiscussionLanguage : Int -> Bool -> SettingsForm -> SettingsForm
+setDiscussionLanguage id checked form =
+    let
+        ids =
+            if checked then
+                id :: form.discussionLanguages
+
+            else
+                List.filter ((/=) id) form.discussionLanguages
+    in
+    { form | discussionLanguages = Set.fromList ids |> Set.toList }
 
 
 keywordList : String -> List String
@@ -817,8 +830,8 @@ inviteBody model =
     ]
 
 
-view : Active -> Bool -> AuthState -> Model -> Html Msg
-view active federationEnabled auth model =
+view : Active -> Bool -> List Domain.Language -> AuthState -> Model -> Html Msg
+view active federationEnabled languages auth model =
     pageHeading (Translations.accountSettings active.texts)
         (case auth of
             Authenticated _ ->
@@ -837,7 +850,7 @@ view active federationEnabled auth model =
                                 , appearanceSection active settings
                                 , contentSection active settings
                                 , notificationsSection active settings
-                                , languagesSection active settings
+                                , languagesSection active languages settings
                                 , votesSection active settings
                                 , viewFormProblem active.texts model.problem
                                 , button [ A.type_ "submit", A.class "filled-button", A.disabled model.saving ]
@@ -1027,14 +1040,19 @@ notificationsSection active form =
         ]
 
 
-languagesSection : Active -> SettingsForm -> Html Msg
-languagesSection active form =
+languagesSection : Active -> List Domain.Language -> SettingsForm -> Html Msg
+languagesSection active languages form =
     fieldset [ A.class "card form-stack" ]
         [ legend [] [ text (Translations.languagesSection active.texts) ]
-        , div []
-            [ label [ A.for "discussion-languages" ] [ text (Translations.discussionLanguages active.texts) ]
-            , input [ A.id "discussion-languages", A.type_ "text", A.value form.discussionLanguages, Events.onInput (FieldChanged "discussion_languages") ] []
-            ]
+        , Ui.LanguageSelect.view
+            { id = "discussion-languages"
+            , label = Translations.discussionLanguages active.texts
+            , languages = languages
+            , selected = form.discussionLanguages
+            , changed = DiscussionLanguageChanged
+            , retry = RetryLanguageCatalog
+            }
+            active.texts
         , div []
             [ label [ A.for "blocking-keywords" ] [ text (Translations.blockingKeywords active.texts) ]
             , textarea [ A.id "blocking-keywords", A.value form.blockingKeywords, Events.onInput (FieldChanged "blocking_keywords") ] []

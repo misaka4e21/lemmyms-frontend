@@ -109,9 +109,18 @@ pagePublicProfile postCard model active username =
 
 pageSettings : Model -> Active -> Html Msg
 pageSettings model active =
-    Html.map AccountSettingsMessage
+    Html.map
+        (\message ->
+            case message of
+                AccountSettings.RetryLanguageCatalog ->
+                    RetrySiteLoad
+
+                _ ->
+                    AccountSettingsMessage message
+        )
         (AccountSettings.view active
             (model.site |> Maybe.map (\site -> site.localSite.federationEnabled) |> Maybe.withDefault True)
+            model.languageCatalog
             model.auth
             model.accountSettings
         )

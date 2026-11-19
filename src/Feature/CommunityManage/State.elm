@@ -26,7 +26,7 @@ type alias ManageState =
     , nsfw : Bool
     , visibility : String
     , postingRestricted : Bool
-    , discussionLanguages : String
+    , discussionLanguages : List Int
     , postUpvotes : String
     , postDownvotes : String
     , commentUpvotes : String
@@ -85,7 +85,7 @@ emptyManage =
     , nsfw = False
     , visibility = "public"
     , postingRestricted = False
-    , discussionLanguages = ""
+    , discussionLanguages = []
     , postUpvotes = "all"
     , postDownvotes = "all"
     , commentUpvotes = "all"

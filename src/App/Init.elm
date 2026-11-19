@@ -86,6 +86,7 @@ init rawFlags url key =
             , authGeneration = 0
             , auth = CheckingSession
             , site = Nothing
+            , languageCatalog = []
             , captchaEnabled = False
             , donationPrompt = False
             , active = Nothing

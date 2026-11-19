@@ -16,11 +16,15 @@ import List
 import Remote exposing (Remote(..))
 import Ui.Feedback exposing (loginRequired, problemText, viewFormProblem, viewFormProblemWithId, viewRemote)
 import Ui.Formatting exposing (communityPolicySummary, postingPolicyLabel, visibilityLabel)
+import Ui.LanguageSelect
 import Ui.Layout exposing (pageHeading)
 
 
 type alias Config msg =
     { retry : msg
+    , retryLanguages : msg
+    , languages : List Domain.Language
+    , languageChanged : Int -> Bool -> msg
     , manageActorChanged : String -> msg
     , managePostChanged : String -> msg
     , manageContextChanged : String -> msg
@@ -304,7 +308,15 @@ managePolicy config federationEnabled active manage =
             ]
             config
         , manageCheckbox "manage-posting-restricted" (Translations.postingRestricted active.texts) manage.postingRestricted "postingRestricted" config
-        , manageText "manage-languages" (Translations.discussionLanguages active.texts) manage.discussionLanguages "discussionLanguages" config
+        , Ui.LanguageSelect.view
+            { id = "manage-languages"
+            , label = Translations.discussionLanguages active.texts
+            , languages = config.languages
+            , selected = manage.discussionLanguages
+            , changed = config.languageChanged
+            , retry = config.retryLanguages
+            }
+            active.texts
         , manageVote "manage-post-upvotes" (Translations.postUpvotes active.texts) manage.postUpvotes "postUpvotes" config active
         , manageVote "manage-post-downvotes" (Translations.postDownvotes active.texts) manage.postDownvotes "postDownvotes" config active
         , manageVote "manage-comment-upvotes" (Translations.commentUpvotes active.texts) manage.commentUpvotes "commentUpvotes" config active

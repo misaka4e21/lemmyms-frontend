@@ -15,6 +15,9 @@ pageManage : Model -> Active -> String -> Html Msg
 pageManage model active id =
     Feature.CommunityManage.View.pageManage
         { retry = RetryPage
+        , retryLanguages = RetrySiteLoad
+        , languages = model.languageCatalog
+        , languageChanged = \languageId checked -> ManageMessage (Manage.ManageLanguageChanged languageId checked)
         , manageActorChanged = ManageMessage << Manage.ManageActorChanged
         , managePostChanged = ManageMessage << Manage.ManagePostChanged
         , manageContextChanged = ManageMessage << Manage.ManageContextChanged
@@ -118,6 +121,7 @@ pageNewCommunity model active =
         { createCommunity = model.communityCreate.createCommunity
         , auth = model.auth
         , federationEnabled = model.site |> Maybe.map (\site -> site.localSite.federationEnabled) |> Maybe.withDefault True
+        , languages = model.languageCatalog
         }
         active
 
@@ -125,9 +129,11 @@ pageNewCommunity model active =
 communityCreateViewConfig : Model -> CommunityCreate.Config Msg
 communityCreateViewConfig model =
     { retry = RetryPage
+    , retryLanguages = RetrySiteLoad
     , communityNameChanged = CommunityCreateMessage << CommunityCreate.CommunityNameChanged
     , communityTitleChanged = CommunityCreateMessage << CommunityCreate.CommunityTitleChanged
     , communityFieldChanged = \field value -> CommunityCreateMessage (CommunityCreate.CommunityFieldChanged field value)
+    , communityLanguageChanged = \id checked -> CommunityCreateMessage (CommunityCreate.CommunityLanguageChanged id checked)
     , communityModeChanged = CommunityCreateMessage << CommunityCreate.CommunityModeChanged
     , communityCreate = CommunityCreateMessage CommunityCreate.CommunityCreate
     }

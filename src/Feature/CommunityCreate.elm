@@ -12,7 +12,9 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
 import Lemmy.Route as Route
+import Set
 import Ui.Feedback exposing (loginRequired, problemText, viewFormProblem, viewFormProblemWithId)
+import Ui.LanguageSelect
 import Ui.Layout exposing (pageHeading)
 
 
@@ -23,7 +25,7 @@ type alias CommunityForm =
     , summary : String
     , nsfw : Bool
     , postingRestricted : Bool
-    , discussionLanguages : String
+    , discussionLanguages : List Int
     , postUpvotes : String
     , postDownvotes : String
     , commentUpvotes : String
@@ -42,7 +44,7 @@ emptyCommunityForm =
     , summary = ""
     , nsfw = False
     , postingRestricted = False
-    , discussionLanguages = ""
+    , discussionLanguages = []
     , postUpvotes = "all"
     , postDownvotes = "all"
     , commentUpvotes = "all"
@@ -67,9 +69,6 @@ setField field value form =
 
         "postingRestricted" ->
             { form | postingRestricted = value == "true" }
-
-        "discussionLanguages" ->
-            { form | discussionLanguages = value }
 
         "postUpvotes" ->
             { form | postUpvotes = value }
@@ -104,6 +103,8 @@ type Msg
     | CommunityNameChanged String
     | CommunityTitleChanged String
     | CommunityFieldChanged String String
+    | CommunityLanguageChanged Int Bool
+    | RetryLanguageCatalog
     | CommunityModeChanged String
     | CommunityCreate
 
@@ -149,6 +150,23 @@ updateWorking csrf message model =
             , Cmd.none
             )
 
+        CommunityLanguageChanged id checked ->
+            let
+                form =
+                    model.createCommunity
+
+                languages =
+                    if checked then
+                        id :: form.discussionLanguages
+
+                    else
+                        List.filter ((/=) id) form.discussionLanguages
+            in
+            ( { model | createCommunity = { form | discussionLanguages = Set.fromList languages |> Set.toList } }, Cmd.none )
+
+        RetryLanguageCatalog ->
+            ( model, Cmd.none )
+
         CommunityModeChanged value ->
             ( { model | createCommunity = (\form -> { form | mode = value, problem = Nothing }) model.createCommunity }, Cmd.none )
 
@@ -170,7 +188,7 @@ updateWorking csrf message model =
                             , ( "nsfw", Encode.bool model.createCommunity.nsfw )
                             , ( "visibility", Encode.string model.createCommunity.mode )
                             , ( "posting_restricted_to_mods", Encode.bool model.createCommunity.postingRestricted )
-                            , ( "discussion_languages", Encode.list Encode.int (parseIds model.createCommunity.discussionLanguages) )
+                            , ( "discussion_languages", Encode.list Encode.int model.createCommunity.discussionLanguages )
                             , ( "post_upvotes", Encode.string model.createCommunity.postUpvotes )
                             , ( "post_downvotes", Encode.string model.createCommunity.postDownvotes )
                             , ( "comment_upvotes", Encode.string model.createCommunity.commentUpvotes )
@@ -190,18 +208,13 @@ updateWorking csrf message model =
                     ( { model | createCommunity = (\form -> { form | busy = False, problem = Just problem }) model.createCommunity }, Cmd.none )
 
 
-parseIds : String -> List Int
-parseIds value =
-    value
-        |> String.split ","
-        |> List.filterMap (String.trim >> String.toInt)
-
-
 type alias Config msg =
     { retry : msg
+    , retryLanguages : msg
     , communityNameChanged : String -> msg
     , communityTitleChanged : String -> msg
     , communityFieldChanged : String -> String -> msg
+    , communityLanguageChanged : Int -> Bool -> msg
     , communityModeChanged : String -> msg
     , communityCreate : msg
     }
@@ -211,6 +224,7 @@ type alias ViewModel =
     { createCommunity : CommunityForm
     , auth : AuthState
     , federationEnabled : Bool
+    , languages : List Domain.Language
     }
 
 
@@ -282,7 +296,15 @@ pageNewCommunity config model active =
                         ]
                         config
                     , checkboxField "community-posting-restricted" (Translations.postingRestricted active.texts) model.createCommunity.postingRestricted "postingRestricted" config
-                    , fieldInput "community-languages" (Translations.discussionLanguages active.texts) model.createCommunity.discussionLanguages "discussionLanguages" config
+                    , Ui.LanguageSelect.view
+                        { id = "community-languages"
+                        , label = Translations.discussionLanguages active.texts
+                        , languages = model.languages
+                        , selected = model.createCommunity.discussionLanguages
+                        , changed = config.communityLanguageChanged
+                        , retry = config.retryLanguages
+                        }
+                        active.texts
                     , voteSelect "community-post-upvotes" (Translations.postUpvotes active.texts) model.createCommunity.postUpvotes "postUpvotes" config active
                     , voteSelect "community-post-downvotes" (Translations.postDownvotes active.texts) model.createCommunity.postDownvotes "postDownvotes" config active
                     , voteSelect "community-comment-upvotes" (Translations.commentUpvotes active.texts) model.createCommunity.commentUpvotes "commentUpvotes" config active

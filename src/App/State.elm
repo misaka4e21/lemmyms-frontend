@@ -60,6 +60,7 @@ type alias Model =
     , authGeneration : Int
     , auth : AuthState
     , site : Maybe Domain.SiteView
+    , languageCatalog : List Domain.Language
     , captchaEnabled : Bool
     , donationPrompt : Bool
     , active : Maybe Active
@@ -134,6 +135,7 @@ type Msg
     | Incoming Decode.Value
     | SessionLoaded Int (Result Api.Problem Domain.MyUserInfo)
     | SiteLoaded (Result Api.Problem Domain.GetSiteResponse)
+    | RetrySiteLoad
     | DrawerProfileLoaded (Result Api.Problem Domain.PersonView)
     | OpenDrawer
     | CloseDrawer
@@ -213,6 +215,7 @@ type Msg
     | SitePurgeFinished Int Api.Response
     | SiteConfigurationLoaded Int Api.Response
     | SiteConfigurationChanged String String
+    | SiteConfigurationLanguageChanged Int Bool
     | SiteConfigurationToggled String Bool
     | SiteConfigurationSave
     | SiteConfigurationSaved Int Api.Response

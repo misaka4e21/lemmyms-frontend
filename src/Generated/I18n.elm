@@ -109,7 +109,7 @@ you can use the `decoder` instead. Pass the path and a callback to your `update`
 
     load { language = EnUS, path = "/i18n", onLoad = GotTranslations }
 
-will make a `GET` request to /i18n/messages.en-US.2838562654.json and will call GotTranslations with the decoded response.
+will make a `GET` request to /i18n/messages.en-US.4209441890.json and will call GotTranslations with the decoded response.
 
 -}
 loadMessages : (Result Http.Error (I18n -> I18n) -> msg) -> I18n -> Cmd msg
@@ -6591,10 +6591,10 @@ languageToFileName_messages : Language -> String
 languageToFileName_messages lang =
     case lang of
         EnUS ->
-            "messages.en-US.2838562654.json"
+            "messages.en-US.4209441890.json"
 
         ZhCmnHansCN ->
-            "messages.zh-cmn-Hans-CN.985830919.json"
+            "messages.zh-cmn-Hans-CN.838342030.json"
 
         ZhCmnHantTW ->
-            "messages.zh-cmn-Hant-TW.1772792669.json"
+            "messages.zh-cmn-Hant-TW.3767989561.json"

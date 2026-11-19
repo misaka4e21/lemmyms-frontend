@@ -132,10 +132,13 @@ update message model =
                         previous =
                             model.oauthLogin
                     in
-                    ( { model | site = Just site.siteView, captchaEnabled = site.captchaEnabled, oauthLogin = { previous | providers = site.oauthProviders } }, Cmd.none )
+                    ( { model | site = Just site.siteView, languageCatalog = site.allLanguages, captchaEnabled = site.captchaEnabled, oauthLogin = { previous | providers = site.oauthProviders } }, Cmd.none )
 
                 Err _ ->
                     ( model, Cmd.none )
+
+        RetrySiteLoad ->
+            ( model, Api.get "/site" (SiteLoaded << Api.decodeResponse Domain.getSiteResponse) )
 
         SessionLoaded generation result ->
             if generation /= model.authGeneration then
@@ -717,7 +720,7 @@ update message model =
                 in
                 case Api.decodeResponse SiteConfiguration.decoder response of
                     Ok snapshot ->
-                        ( { model | siteConfiguration = { previous | snapshot = Ready snapshot, fields = snapshot.fields, flags = snapshot.flags, icon = snapshot.icon, banner = snapshot.banner, dirty = Set.empty, busy = False } }, Cmd.none )
+                        ( { model | siteConfiguration = { previous | snapshot = Ready snapshot, fields = snapshot.fields, flags = snapshot.flags, icon = snapshot.icon, banner = snapshot.banner, languages = snapshot.languages, discussionLanguages = snapshot.discussionLanguages, dirty = Set.empty, busy = False } }, Cmd.none )
 
                     Err problem ->
                         ( { model | siteConfiguration = { previous | snapshot = Failed problem, busy = False } }, Cmd.none )
@@ -727,6 +730,9 @@ update message model =
 
         SiteConfigurationChanged key value ->
             ( { model | siteConfiguration = SiteConfiguration.change key value model.siteConfiguration }, Cmd.none )
+
+        SiteConfigurationLanguageChanged id checked ->
+            ( { model | siteConfiguration = SiteConfiguration.changeLanguages id checked model.siteConfiguration }, Cmd.none )
 
         SiteConfigurationToggled key value ->
             ( { model | siteConfiguration = SiteConfiguration.toggle key value model.siteConfiguration }, Cmd.none )

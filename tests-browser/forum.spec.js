@@ -207,7 +207,13 @@ const site = {
   version: '1.0.0-beta.3',
   tagline: null,
   my_feed_token: null,
-  captcha_enabled: false
+  captcha_enabled: false,
+  discussion_languages: [0],
+  all_languages: [
+    { id: 0, name: 'Undetermined', code: 'und' },
+    { id: 1, name: 'English', code: 'en' },
+    { id: 2, name: 'French', code: 'fr' }
+  ]
 };
 
 function pageOf(items) {
@@ -639,13 +645,15 @@ async function mockApi(page, state, { authenticated = false } = {}) {
     if (path === '/api/v4/account/settings/save' && method === 'PUT') {
       if (state.failSettings) return json(route, 400, { error: 'invalid_input' });
       if (state.nameFailure) return json(route, 400, { error: state.nameFailure });
-      if (body.username) myUser.local_user_view.person.name = body.username;
-      myUser.local_user_view.person.display_name = body.display_name || 'Alice';
-      myUser.local_user_view.person.bio = body.bio || '';
-      myUser.local_user_view.local_user.theme = body.theme || 'browser';
-      myUser.local_user_view.local_user.default_listing_type = body.default_listing_type || 'local';
-      myUser.local_user_view.local_user.default_items_per_page = body.default_items_per_page || 20;
-      return json(route, 200, myUser);
+      const target = state.identity || myUser;
+      if (body.username) target.local_user_view.person.name = body.username;
+      target.local_user_view.person.display_name = body.display_name || 'Alice';
+      target.local_user_view.person.bio = body.bio || '';
+      target.local_user_view.local_user.theme = body.theme || 'browser';
+      target.local_user_view.local_user.default_listing_type = body.default_listing_type || 'local';
+      target.local_user_view.local_user.default_items_per_page = body.default_items_per_page || 20;
+      if (body.discussion_languages) target.discussion_languages = body.discussion_languages;
+      return json(route, 200, target);
     }
     if (path === '/api/v4/account/login/list') {
       return json(route, 200, { logins: [{ user_id: 1, published_at: '2026-10-20T08:30:00Z', ip: '127.0.0.1', user_agent: 'Playwright' }] });
@@ -740,16 +748,18 @@ async function mockApi(page, state, { authenticated = false } = {}) {
       return route.fulfill({ status: 204 });
     }
     if (path === '/api/v4/community/list') return json(route, 200, pageOf([communityView(state)]));
-    if (path === '/api/v4/community' && method === 'GET') return json(route, 200, { community_view: communityView(state), moderators: [{ community, moderator: person }], discussion_languages: [0] });
+    if (path === '/api/v4/community' && method === 'GET') return json(route, 200, { community_view: communityView(state), moderators: [{ community, moderator: person }], discussion_languages: state.communityLanguages || [0] });
     if (path === '/api/v4/community' && method === 'POST') {
       if (state.nameFailure) return json(route, 400, { error: state.nameFailure });
       state.community = { ...community, id: 2, name: body.name, title: body.title, visibility: body.visibility };
-      return json(route, 200, { community_view: communityView(state), moderators: [{ community: state.community, moderator: person }], discussion_languages: [0] });
+      state.communityLanguages = body.discussion_languages || state.communityLanguages || [0];
+      return json(route, 200, { community_view: communityView(state), moderators: [{ community: state.community, moderator: person }], discussion_languages: state.communityLanguages });
     }
     if (path === '/api/v4/community' && method === 'PUT') {
       if (state.nameFailure) return json(route, 400, { error: state.nameFailure });
       state.community = { ...state.community, name: body.name };
-      return json(route, 200, { community_view: communityView(state), moderators: [{ community: state.community, moderator: person }], discussion_languages: [0] });
+      if (body.discussion_languages) state.communityLanguages = body.discussion_languages;
+      return json(route, 200, { community_view: communityView(state), moderators: [{ community: state.community, moderator: person }], discussion_languages: state.communityLanguages || [0] });
     }
     if (path === '/api/v4/community/follow') return route.fulfill({ status: 204 });
     if (path === '/api/v4/community/tag') return route.fulfill({ status: 204 });
@@ -992,7 +1002,7 @@ test('site configuration preserves untouched fields and failed drafts', async ({
   state.configSite = structuredClone(site);
   state.configSite.site_view.local_site.legal_information = 'Previous terms';
   Object.assign(state.configSite.site_view.local_site, { federation_signed_fetch: true, nsfw_content_disallowed: false, oauth_registration: true });
-  state.configSite.discussion_languages = [0, 1];
+  state.configSite.discussion_languages = [0, 1, 99];
   state.configSite.site_view.local_site_rate_limit = Object.fromEntries(
     ['message', 'post', 'register', 'image', 'comment', 'search', 'import_user_settings'].flatMap(category => [[`${category}_max_requests`, 10], [`${category}_interval_seconds`, 60]])
   );
@@ -1003,10 +1013,13 @@ test('site configuration preserves untouched fields and failed drafts', async ({
   await page.getByLabel('Site name').fill('Changed site');
   await page.getByLabel('Summary').fill('New summary');
   await page.getByLabel('Legal information').fill('');
-  await page.getByLabel('Discussion language IDs (comma separated)').fill('2147483648');
-  await expect(page.getByLabel('Discussion language IDs (comma separated)')).toHaveAttribute('aria-invalid', 'true');
-  await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
-  await page.getByLabel('Discussion language IDs (comma separated)').fill('0, 2');
+  const languageSelector = page.getByLabel('Discussion languages');
+  await expect(languageSelector).toContainText('ID 99');
+  await page.locator('.language-select summary').click();
+  await expect(page.getByLabel('Undetermined')).toBeChecked();
+  await expect(page.getByLabel('English')).toBeChecked();
+  await page.getByLabel('English').uncheck();
+  await page.getByLabel('French').check();
   await page.getByLabel('Private site').check();
   await page.getByLabel('Registration mode').selectOption('closed');
   await page.getByLabel('Enable federation').uncheck();
@@ -1021,7 +1034,7 @@ test('site configuration preserves untouched fields and failed drafts', async ({
   state.failSiteConfig = true;
   state.siteConfigDelay = 250;
   await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page.locator('main [role="status"]')).toBeVisible();
+  await expect(page.getByText('Loading…', { exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toBeVisible();
   state.siteConfigDelay = 0;
   await expect(page.getByLabel('Site name')).toHaveValue('Changed site');
@@ -1029,7 +1042,7 @@ test('site configuration preserves untouched fields and failed drafts', async ({
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect.poll(() => state.calls.filter(call => call.path === '/api/v4/site' && call.method === 'PUT').length).toBe(2);
   const payload = state.calls.filter(call => call.path === '/api/v4/site' && call.method === 'PUT').at(-1).body;
-  expect(payload).toEqual({ content_warning: 'Warning', discussion_languages: [0, 2], federation_enabled: false, legal_information: '', name: 'Changed site', private_instance: true, rate_limit_post_interval_seconds: 90, registration_mode: 'closed', summary: 'New summary' });
+  expect(payload).toEqual({ content_warning: 'Warning', discussion_languages: [0, 2, 99], federation_enabled: false, legal_information: '', name: 'Changed site', private_instance: true, rate_limit_post_interval_seconds: 90, registration_mode: 'closed', summary: 'New summary' });
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
   await expect(page.getByLabel('Site name')).toHaveValue('Changed site');
   await page.locator('#site-icon-file').setInputFiles({ name: 'icon.png', mimeType: 'image/png', buffer: Buffer.from('image') });
@@ -1056,6 +1069,28 @@ test('site configuration preserves untouched fields and failed drafts', async ({
   await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/site/banner' && call.method === 'DELETE')).toBeTruthy();
   await expect(page.locator('#site-remove-banner')).toBeDisabled();
+});
+
+test('site configuration retries when the language catalog is missing', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  state.configSite = structuredClone(site);
+  delete state.configSite.all_languages;
+  Object.assign(state.configSite.site_view.local_site, { federation_signed_fetch: true, nsfw_content_disallowed: false, oauth_registration: true });
+  state.configSite.site_view.local_site_rate_limit = Object.fromEntries(
+    ['message', 'post', 'register', 'image', 'comment', 'search', 'import_user_settings'].flatMap(category => [[`${category}_max_requests`, 10], [`${category}_interval_seconds`, 60]])
+  );
+  await mockApi(page, state, { authenticated: true });
+  await open(page, '/admin/configuration');
+  await expect(page.getByRole('alert')).toBeVisible();
+  state.configSite.all_languages = [
+    { id: 0, name: 'Undetermined', code: 'und' },
+    { id: 1, name: 'English', code: 'en' },
+    { id: 2, name: 'French', code: 'fr' }
+  ];
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.locator('.language-select summary')).toBeVisible();
+  expect(state.calls.filter(call => call.path === '/api/v4/site' && call.method === 'GET').length).toBeGreaterThanOrEqual(2);
 });
 
 test('site configuration does not expose controls to non-admins', async ({ page }) => {
@@ -1635,9 +1670,15 @@ test('preserves report filters across cursor pagination', async ({ page }) => {
 test('loads community management by name and uses the resolved id', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
   const state = fixtures();
+  state.communityLanguages = [0, 99];
   await mockApi(page, state, { authenticated: true });
   await page.goto('/c/news/settings');
   await expect(page.getByRole('heading', { name: 'Manage community' })).toBeVisible();
+  await expect(page.getByLabel('Discussion languages')).toContainText('ID 99');
+  await page.locator('.language-select summary').click();
+  await page.getByLabel('French').check();
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community' && call.method === 'PUT' && JSON.stringify(call.body.discussion_languages) === JSON.stringify([0, 2, 99]))).toBeTruthy();
   await page.getByLabel('Person ID').fill('2');
   await page.getByRole('button', { name: 'Add manager' }).click();
   await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community/mod' && call.body.community_id === 1)).toBeTruthy();
@@ -1777,15 +1818,34 @@ test('searches comments, users, and URLs, and switches profile tabs', async ({ p
 test('saves complete account settings and applies the theme', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
   const state = fixtures();
+  state.identity = structuredClone(myUser);
+  state.identity.discussion_languages = [0, 99];
   await mockApi(page, state, { authenticated: true });
   await page.goto('/settings');
+  await expect(page.getByLabel('Discussion languages')).toContainText('ID 99');
+  await page.locator('.language-select summary').click();
+  await page.getByLabel('French').check();
   await page.getByLabel('Display name').fill('Alice P2');
   await page.getByLabel('Theme').selectOption('dark');
   await page.getByLabel('Listing').selectOption('subscribed');
   await page.getByLabel('Items per page').fill('30');
   await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/settings/save' && call.body.display_name === 'Alice P2' && call.body.theme === 'dark' && call.body.default_listing_type === 'subscribed' && call.body.default_items_per_page === 30)).toBeTruthy();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/account/settings/save' && call.body.display_name === 'Alice P2' && call.body.theme === 'dark' && call.body.default_listing_type === 'subscribed' && call.body.default_items_per_page === 30 && JSON.stringify(call.body.discussion_languages) === JSON.stringify([0, 2, 99]))).toBeTruthy();
+  await expect(page.getByLabel('French')).toBeChecked();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+});
+
+test('creates a community with selected discussion languages', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('commune.locale', 'en-US'));
+  const state = fixtures();
+  await mockApi(page, state, { authenticated: true });
+  await page.goto('/create_community');
+  await page.getByLabel('Community name').fill('language-test');
+  await page.getByLabel('Community title').fill('Language test');
+  await page.locator('.language-select summary').click();
+  await page.getByLabel('French').check();
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect.poll(() => state.calls.some(call => call.path === '/api/v4/community' && call.method === 'POST' && JSON.stringify(call.body.discussion_languages) === JSON.stringify([2]))).toBeTruthy();
 });
 
 test('changes own username through account settings and preserves rejected drafts', async ({ page }) => {

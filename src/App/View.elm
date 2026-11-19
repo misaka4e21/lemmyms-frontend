@@ -268,6 +268,7 @@ pageView model active =
             SiteConfiguration.page
                 { retry = RetryPage
                 , changed = SiteConfigurationChanged
+                , languagesChanged = SiteConfigurationLanguageChanged
                 , toggled = SiteConfigurationToggled
                 , save = SiteConfigurationSave
                 , imageSelected = SiteConfigurationImageSelected

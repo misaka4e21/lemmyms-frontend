@@ -1,4 +1,4 @@
-module Feature.SiteConfiguration exposing (Model, Snapshot, body, change, decoder, initial, load, page, toggle, valid)
+module Feature.SiteConfiguration exposing (Model, Snapshot, body, change, changeLanguages, decoder, initial, load, page, toggle, valid)
 
 import Api
 import App.Context exposing (Active)
@@ -15,11 +15,18 @@ import Lemmy.Domain as Domain
 import Remote exposing (Remote(..))
 import Set exposing (Set)
 import Ui.Feedback exposing (loginRequired, viewFormProblem, viewRemote)
+import Ui.LanguageSelect
 import Ui.Layout exposing (pageHeading)
 
 
 type alias Snapshot =
-    { fields : Dict String String, flags : Dict String Bool, icon : Maybe String, banner : Maybe String }
+    { fields : Dict String String
+    , flags : Dict String Bool
+    , icon : Maybe String
+    , banner : Maybe String
+    , languages : List Domain.Language
+    , discussionLanguages : List Int
+    }
 
 
 type alias Model =
@@ -32,12 +39,14 @@ type alias Model =
     , problem : Maybe Api.Problem
     , icon : Maybe String
     , banner : Maybe String
+    , languages : List Domain.Language
+    , discussionLanguages : List Int
     }
 
 
 initial : Model
 initial =
-    { snapshot = NotAsked, fields = Dict.empty, flags = Dict.empty, dirty = Set.empty, busy = False, imageBusy = False, problem = Nothing, icon = Nothing, banner = Nothing }
+    { snapshot = NotAsked, fields = Dict.empty, flags = Dict.empty, dirty = Set.empty, busy = False, imageBusy = False, problem = Nothing, icon = Nothing, banner = Nothing, languages = [], discussionLanguages = [] }
 
 
 textFields : List ( String, T.I18n -> String, Bool )
@@ -48,7 +57,6 @@ textFields =
     , ( "legal_information", T.legalInformation, True )
     , ( "content_warning", T.siteContentWarning, True )
     , ( "application_question", T.siteApplicationQuestion, True )
-    , ( "discussion_languages", T.discussionLanguages, False )
     ]
 
 
@@ -84,7 +92,7 @@ rateKeys =
 
 decoder : D.Decoder Snapshot
 decoder =
-    D.map4 Snapshot
+    D.map6 Snapshot
         (D.map Dict.fromList
             (sequence
                 (List.map (\( key, _, _ ) -> D.map (Tuple.pair key) (textValue key)) textFields
@@ -96,6 +104,8 @@ decoder =
         (D.map Dict.fromList (sequence (List.map (\( key, _ ) -> D.map (Tuple.pair key) (D.at [ "site_view", "local_site", key ] D.bool)) flagFields)))
         (maybeString [ "site_view", "site", "icon" ])
         (maybeString [ "site_view", "site", "banner" ])
+        (D.field "all_languages" (D.list Domain.language))
+        (D.field "discussion_languages" (D.list Domain.identifier))
 
 
 sequence : List (D.Decoder a) -> D.Decoder (List a)
@@ -110,19 +120,15 @@ maybeString path =
 
 textValue : String -> D.Decoder String
 textValue key =
-    if key == "discussion_languages" then
-        D.field key (D.list Domain.identifier) |> D.map (List.map String.fromInt >> String.join ", ")
+    let
+        group =
+            if List.member key [ "name", "summary", "sidebar", "content_warning" ] then
+                "site"
 
-    else
-        let
-            group =
-                if List.member key [ "name", "summary", "sidebar", "content_warning" ] then
-                    "site"
-
-                else
-                    "local_site"
-        in
-        maybeString [ "site_view", group, key ] |> D.map (Maybe.withDefault "")
+            else
+                "local_site"
+    in
+    maybeString [ "site_view", group, key ] |> D.map (Maybe.withDefault "")
 
 
 load : AuthState -> (Api.Response -> msg) -> ( Model, Cmd msg )
@@ -144,31 +150,22 @@ change key value model =
     { model | fields = Dict.insert key value model.fields, dirty = Set.insert key model.dirty, problem = Nothing }
 
 
+changeLanguages : Int -> Bool -> Model -> Model
+changeLanguages id checked model =
+    let
+        languages =
+            if checked then
+                id :: model.discussionLanguages
+
+            else
+                List.filter ((/=) id) model.discussionLanguages
+    in
+    { model | discussionLanguages = Set.fromList languages |> Set.toList, dirty = Set.insert "discussion_languages" model.dirty, problem = Nothing }
+
+
 toggle : String -> Bool -> Model -> Model
 toggle key value model =
     { model | flags = Dict.insert key value model.flags, dirty = Set.insert key model.dirty, problem = Nothing }
-
-
-languageIds : String -> Maybe (List Int)
-languageIds value =
-    if String.isEmpty (String.trim value) then
-        Just []
-
-    else
-        String.split "," value
-            |> List.map
-                (String.trim
-                    >> String.toInt
-                    >> Maybe.andThen
-                        (\id ->
-                            if id >= 0 && id <= 2147483647 then
-                                Just id
-
-                            else
-                                Nothing
-                        )
-                )
-            |> List.foldr (Maybe.map2 (::)) (Just [])
 
 
 validField : Model -> String -> Bool
@@ -179,9 +176,6 @@ validField model key =
     in
     if key == "name" then
         not (String.isEmpty (String.trim value))
-
-    else if key == "discussion_languages" then
-        languageIds value /= Nothing
 
     else if List.member key rateKeys then
         String.toInt value
@@ -221,29 +215,30 @@ body model =
     Set.toList model.dirty
         |> List.filterMap
             (\key ->
-                case Dict.get key model.flags of
-                    Just value ->
-                        Just ( key, E.bool value )
+                if key == "discussion_languages" then
+                    Just ( key, E.list E.int model.discussionLanguages )
 
-                    Nothing ->
-                        Dict.get key model.fields
-                            |> Maybe.andThen
-                                (\value ->
-                                    if key == "discussion_languages" then
-                                        languageIds value |> Maybe.map (\ids -> ( key, E.list E.int ids ))
+                else
+                    case Dict.get key model.flags of
+                        Just value ->
+                            Just ( key, E.bool value )
 
-                                    else if List.member key rateKeys then
-                                        String.toInt value |> Maybe.map (\number -> ( key, E.int number ))
+                        Nothing ->
+                            Dict.get key model.fields
+                                |> Maybe.andThen
+                                    (\value ->
+                                        if List.member key rateKeys then
+                                            String.toInt value |> Maybe.map (\number -> ( key, E.int number ))
 
-                                    else
-                                        Just ( key, E.string value )
-                                )
+                                        else
+                                            Just ( key, E.string value )
+                                    )
             )
         |> E.object
         |> E.encode 0
 
 
-page : { retry : msg, changed : String -> String -> msg, toggled : String -> Bool -> msg, save : msg, imageSelected : String -> Maybe File -> msg, imageRemove : String -> msg } -> Active -> AuthState -> Model -> Html msg
+page : { retry : msg, changed : String -> String -> msg, languagesChanged : Int -> Bool -> msg, toggled : String -> Bool -> msg, save : msg, imageSelected : String -> Maybe File -> msg, imageRemove : String -> msg } -> Active -> AuthState -> Model -> Html msg
 page config active auth model =
     pageHeading (T.siteConfiguration active.texts)
         (case auth of
@@ -262,7 +257,7 @@ page config active auth model =
         )
 
 
-configurationView : { a | changed : String -> String -> msg, toggled : String -> Bool -> msg, save : msg, imageSelected : String -> Maybe File -> msg, imageRemove : String -> msg } -> Active -> Model -> Html msg
+configurationView : { a | retry : msg, changed : String -> String -> msg, languagesChanged : Int -> Bool -> msg, toggled : String -> Bool -> msg, save : msg, imageSelected : String -> Maybe File -> msg, imageRemove : String -> msg } -> Active -> Model -> Html msg
 configurationView config active model =
     div [ A.class "stack" ]
         [ if model.busy || model.imageBusy then
@@ -274,6 +269,7 @@ configurationView config active model =
             [ fieldset [ A.class "card form-stack", A.disabled model.busy ]
                 (legend [] [ text (T.siteConfiguration active.texts) ]
                     :: List.map (textField config active model) textFields
+                    ++ [ languageField config active model ]
                 )
             , fieldset [ A.class "card form-stack", A.disabled model.busy ]
                 ([ legend [] [ text (T.siteRegistrationMode active.texts) ]
@@ -301,6 +297,19 @@ configurationView config active model =
             , imageField config active model "banner" model.banner T.uploadBanner T.siteRemoveBanner
             ]
         ]
+
+
+languageField : { a | retry : msg, languagesChanged : Int -> Bool -> msg } -> Active -> Model -> Html msg
+languageField config active model =
+    Ui.LanguageSelect.view
+        { id = "site-config-discussion-languages"
+        , label = T.discussionLanguages active.texts
+        , languages = model.languages
+        , selected = model.discussionLanguages
+        , changed = config.languagesChanged
+        , retry = config.retry
+        }
+        active.texts
 
 
 fieldValue : String -> Model -> String
