@@ -7,7 +7,7 @@ Replies currently use a more abbreviated card than topic posts: they omit commun
 ## What Changes
 
 - Align reply cards with the topic post card's surface, spacing, title and metadata hierarchy, content spacing, and action row.
-- Show the reply author, community, and publication time in the reply card's metadata, while retaining the reply's own content and available actions.
+- Show the reply author prominently and include the community and publication time in the reply card's metadata, while retaining the reply's own content and available actions.
 - Keep reply-specific behavior such as nested replies, moderation controls, voting, and saving intact.
 - Limit the work to the frontend; do not change backend code or API behavior.
 
@@ -23,5 +23,5 @@ None.
 
 ## Impact
 
-- Frontend rendering in `src/Ui/CommentCard.elm` and shared card styles in `src/style.css`; the discussion card composition in `src/App/View/Content.elm` may need adjustment.
+- Frontend rendering in `src/Ui/CommentCard.elm` and `src/Feature/Profile.elm`, plus shared card styles in `src/style.css`.
 - No API, dependency, or backend changes.
