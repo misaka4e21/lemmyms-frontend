@@ -9,7 +9,7 @@ import Feature.Authoring.Update as Authoring
 import Feature.Authoring.View as AuthoringView
 import File exposing (File)
 import Generated.I18n as Translations
-import Html exposing (Html, a, article, bdi, button, div, form, h2, img, input, label, nav, p, section, text)
+import Html exposing (Html, a, article, bdi, button, div, form, h2, img, input, label, nav, p, section, text, time)
 import Html.Attributes as A
 import Html.Events as Events
 import Json.Decode as Decode
@@ -518,10 +518,21 @@ personContentItem config item =
             config.postCard post
 
         Domain.PersonComment comment ->
-            article [ A.class "card" ]
+            article
+                [ A.id ("comment-" ++ String.fromInt comment.comment.id)
+                , A.class "card comment-card"
+                , A.tabindex -1
+                ]
                 [ p [ A.class "metadata" ]
-                    [ a [ A.href (Route.path (Route.Post comment.post.id (Just comment.comment.id))) ]
-                        [ text (Domain.displayNameOf comment.creator) ]
+                    [ bdi []
+                        [ a [ A.href (Route.path (Route.Post comment.post.id (Just comment.comment.id))) ]
+                            [ text (Domain.displayNameOf comment.creator ++ " (" ++ Domain.acctOf comment.creator ++ ")") ]
+                        ]
+                    , text " · "
+                    , a [ A.href (Route.path (Route.Community comment.community.name)) ]
+                        [ text (Maybe.withDefault comment.community.name comment.community.title) ]
+                    , text " · "
+                    , time [ A.datetime comment.comment.publishedAt, A.attribute "data-commune-time" "" ] [ text comment.comment.publishedAt ]
                     ]
                 , Markdown.render comment.comment.content
                 ]

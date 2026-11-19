@@ -380,6 +380,7 @@ h2 { margin-block: 0 0.5rem; }
 
 .post-card h2,
 .post-card h3 { overflow-wrap: anywhere; }
+.comment-card > .rich { margin-block: 1rem; }
 .post-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
 .post-actions .icon-button {
   display: inline-flex;

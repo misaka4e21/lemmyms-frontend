@@ -2,12 +2,12 @@
 
 ## Why
 
-Replies currently use a more abbreviated card than topic posts: they omit community context and their heading, metadata, body, and action area do not follow the same visual hierarchy. This makes replies harder to scan and gives them a visibly different treatment in the discussion.
+Reply cards currently display the author as a large heading, while topic cards place author identity in the metadata row. This gives replies a different hierarchy and gives author information more prominence than the reply itself.
 
 ## What Changes
 
-- Align reply cards with the topic post card's surface, spacing, title and metadata hierarchy, content spacing, and action row.
-- Show the reply author prominently and include the community and publication time in the reply card's metadata, while retaining the reply's own content and available actions.
+- Align reply cards with the topic post card's surface, spacing, metadata hierarchy, content spacing, and action row.
+- Remove the large author heading. Show the author name and account, community, and publication time in a metadata row styled like the topic post metadata; keep the reply content in the regular body text.
 - Keep reply-specific behavior such as nested replies, moderation controls, voting, and saving intact.
 - Limit the work to the frontend; do not change backend code or API behavior.
 

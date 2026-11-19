@@ -1,7 +1,7 @@
 module Ui.CommentCard exposing (Config, commentCard)
 
 import Generated.I18n as Translations
-import Html exposing (Html, a, article, bdi, button, details, div, h2, p, span, summary, text, time)
+import Html exposing (Html, a, article, bdi, button, details, div, p, span, summary, text, time)
 import Html.Attributes as A
 import Html.Events as Events
 import Lemmy.Domain as Domain
@@ -80,14 +80,17 @@ commentCard config texts view =
         [ A.id ("comment-" ++ commentId)
         , A.class "card comment-card"
         , A.tabindex -1
-        , A.attribute "aria-labelledby" ("comment-heading-" ++ commentId)
         ]
-        [ h2 [ A.id ("comment-heading-" ++ commentId), A.dir "auto" ]
-            [ a [ A.href (Route.path (Route.Profile (Domain.profileHandle view.creator))) ]
-                [ bdi [] [ text (Translations.authorLabel authorText texts) ] ]
-            ]
-        , p [ A.class "metadata" ]
-            [ time [ A.datetime comment.publishedAt, A.attribute "data-commune-time" "" ] [ text comment.publishedAt ]
+        [ p [ A.class "metadata" ]
+            [ bdi []
+                [ a [ A.href (Route.path (Route.Profile (Domain.profileHandle view.creator))) ]
+                    [ text authorText ]
+                ]
+            , text " · "
+            , a [ A.href (Route.path (Route.Community view.community.name)) ]
+                [ text (Maybe.withDefault view.community.name view.community.title) ]
+            , text " · "
+            , time [ A.datetime comment.publishedAt, A.attribute "data-commune-time" "" ] [ text comment.publishedAt ]
             ]
         , Markdown.render comment.content
         , div [ A.class "post-actions" ]
