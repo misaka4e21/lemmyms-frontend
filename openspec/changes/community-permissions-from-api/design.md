@@ -21,7 +21,7 @@ See proposal.md for the motivation. The current Elm forms keep `readPolicy` and 
 
 - Keep visibility and posting restriction as separate values throughout the interface. Visibility describes who can access the community; `posting_restricted_to_mods` describes who may create posts when enabled.
 - Remove the read/post policy values from create and manage forms and request payloads. The existing API request fields remain the form contract.
-- Render the same two API-backed values on directory cards and community detail pages. Do not use visibility as a substitute for the post policy.
+- Render visibility on directory cards and community detail pages. Show a posting label only when the API restricts posts to moderators; omit it when no moderator-only restriction applies.
 - Treat server-returned viewer roles/actions as the only basis for personalized controls. Let authorization failures from mutations update the visible state through existing error handling.
 
 ## Risks / Trade-offs

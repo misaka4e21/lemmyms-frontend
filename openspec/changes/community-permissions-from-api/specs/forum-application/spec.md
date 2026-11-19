@@ -19,7 +19,7 @@ The application SHALL support community creation with `name`, `title`, `sidebar`
 
 #### Scenario: Community policy display
 - **WHEN** a community card or detail page displays access information
-- **THEN** it identifies visibility from the returned `visibility` and posting restriction from `posting_restricted_to_mods`, without claiming an `eligible_users` or `members` policy
+- **THEN** it identifies visibility from the returned `visibility`, shows "Only moderators can post" when `posting_restricted_to_mods` is true, and shows no extra posting label when it is false
 
 #### Scenario: Community creation and management policy controls
 - **WHEN** a reader creates or manages a community
