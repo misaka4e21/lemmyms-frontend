@@ -18,7 +18,7 @@ import Remote exposing (Remote(..))
 import Set exposing (Set)
 import Ui.CommunityCard exposing (communityCard)
 import Ui.Feedback exposing (problemText, viewRemote)
-import Ui.Formatting exposing (policyLabel)
+import Ui.Formatting exposing (communityPolicySummary)
 import Ui.Layout exposing (entityHeading, pageHeading)
 import Ui.Pagination exposing (emptyWithPagination, viewPagination)
 import Url exposing (Url)
@@ -401,13 +401,6 @@ pageCommunity config model active id =
                         visibility =
                             visibilityText value.visibility
 
-                        postPolicy =
-                            if value.postingRestrictedToMods then
-                                "managers"
-
-                            else
-                                "eligible_users"
-
                         description =
                             case value.sidebar of
                                 Just sidebar ->
@@ -431,12 +424,7 @@ pageCommunity config model active id =
                                 text ""
                         , p [ A.class "metadata" ]
                             [ text
-                                (Translations.policySummary
-                                    { read = policyLabel active.texts visibility
-                                    , post = policyLabel active.texts postPolicy
-                                    }
-                                    active.texts
-                                )
+                                (communityPolicySummary active.texts visibility value.postingRestrictedToMods)
                             ]
                         , tagsRow active.texts community.tags
                         , if String.isEmpty description then

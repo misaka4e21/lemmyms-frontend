@@ -84,19 +84,46 @@ boolText value =
         "false"
 
 
-policyLabel : Translations.I18n -> String -> String
-policyLabel texts policy =
-    if policy == "members" then
-        Translations.membersOnly texts
+visibilityLabel : Translations.I18n -> String -> String
+visibilityLabel texts visibility =
+    case visibility of
+        "public" ->
+            Translations.visibilityPublic texts
+
+        "unlisted" ->
+            Translations.visibilityUnlisted texts
+
+        "local_only_public" ->
+            Translations.visibilityLocalPublic texts
+
+        "local_only_private" ->
+            Translations.visibilityLocalPrivate texts
+
+        "private" ->
+            Translations.visibilityPrivate texts
+
+        unknown ->
+            unknown
+
+
+postingPolicyLabel : Translations.I18n -> Bool -> Maybe String
+postingPolicyLabel texts restrictedToModerators =
+    if restrictedToModerators then
+        Just (Translations.postingModeratorsOnly texts)
 
     else
-        Translations.eligibleUsers texts
+        Nothing
 
 
-modeLabel : Translations.I18n -> String -> String
-modeLabel texts mode =
-    if mode == "local_only" then
-        Translations.localOnly texts
+communityPolicySummary : Translations.I18n -> String -> Bool -> String
+communityPolicySummary texts visibility restrictedToModerators =
+    case postingPolicyLabel texts restrictedToModerators of
+        Just posting ->
+            Translations.policySummary
+                { read = visibilityLabel texts visibility
+                , post = posting
+                }
+                texts
 
-    else
-        Translations.federated texts
+        Nothing ->
+            visibilityLabel texts visibility

@@ -20,8 +20,6 @@ type Msg
     | ManageActorChanged String
     | ManagePostChanged String
     | ManageContextChanged String
-    | ManageReadChanged String
-    | ManagePostPolicyChanged String
     | ManageFollowPolicyChanged String
     | ManageFieldChanged String String
     | ManageApplyPolicy
@@ -161,36 +159,6 @@ updateWorking context message model =
 
         ManageContextChanged value ->
             setManage model (\manage -> { manage | contextId = value, problem = Nothing }) Cmd.none
-
-        ManageReadChanged value ->
-            setManage model
-                (\manage ->
-                    { manage
-                        | readPolicy = value
-                        , postPolicy =
-                            if value == "members" && manage.postPolicy == "eligible_users" then
-                                "members"
-
-                            else
-                                manage.postPolicy
-                    }
-                )
-                Cmd.none
-
-        ManagePostPolicyChanged value ->
-            setManage model
-                (\manage ->
-                    { manage
-                        | postPolicy = value
-                        , readPolicy =
-                            if value == "eligible_users" && manage.readPolicy == "members" then
-                                "eligible_users"
-
-                            else
-                                manage.readPolicy
-                    }
-                )
-                Cmd.none
 
         ManageFollowPolicyChanged value ->
             setManage model (\manage -> { manage | followPolicy = value, problem = Nothing }) Cmd.none
@@ -565,13 +533,6 @@ updateWorking context message model =
                                 (\manage ->
                                     { manage
                                         | community = Ready community
-                                        , readPolicy = visibilityText community.community.visibility
-                                        , postPolicy =
-                                            if community.community.postingRestrictedToMods then
-                                                "managers"
-
-                                            else
-                                                "eligible_users"
                                         , followPolicy =
                                             if community.community.visibility == Domain.PrivateCommunity then
                                                 "approval"
@@ -625,13 +586,6 @@ updateWorking context message model =
                                             { manage
                                                 | community = Ready data.communityView
                                                 , managers = Ready { items = data.moderators, nextPage = Nothing, prevPage = Nothing }
-                                                , readPolicy = visibilityText data.communityView.community.visibility
-                                                , postPolicy =
-                                                    if data.communityView.community.postingRestrictedToMods then
-                                                        "managers"
-
-                                                    else
-                                                        "eligible_users"
                                                 , followPolicy =
                                                     if data.communityView.community.visibility == Domain.PrivateCommunity then
                                                         "approval"

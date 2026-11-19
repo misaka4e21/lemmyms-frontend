@@ -193,7 +193,7 @@ For an authenticated reader, the drawer identity header SHALL link to the reader
 - **THEN** the identity header links to login instead of a profile route
 
 ### Requirement: Community creation and management
-The application SHALL support community creation with `name`, `title`, `sidebar`, `summary`, `nsfw`, `posting_restricted_to_mods`, `visibility`, discussion languages, and vote modes. Authorized managers SHALL edit those fields, manage moderators, manage community bans, approve or reject pending follows, and open community-scoped reports and modlog entries. Management authority SHALL not imply membership or posting permission. The application SHALL use `can_mod` and the authenticated account's moderator/admin records to gate actions.
+The application SHALL support community creation with `name`, `title`, `sidebar`, `summary`, `nsfw`, `posting_restricted_to_mods`, `visibility`, discussion languages, and vote modes. Authorized managers SHALL edit those fields, manage moderators, manage community bans, approve or reject pending follows, and open community-scoped reports and modlog entries. Management authority SHALL not imply membership or posting permission. The application SHALL use `can_mod` and the authenticated account's moderator/admin records to gate actions. Community permission controls and summaries SHALL reflect the API's supported `visibility` and `posting_restricted_to_mods` values; they SHALL NOT present client-only `eligible_users` or `members` policies as server-enforced access rules. Account-specific actions SHALL follow server-returned roles and action state, with rejected requests handled as authoritative permission outcomes.
 
 #### Scenario: Manager has no posting membership
 - **WHEN** community permissions permit management but prohibit posting
@@ -206,6 +206,14 @@ The application SHALL support community creation with `name`, `title`, `sidebar`
 #### Scenario: Community moderation scope
 - **WHEN** a community manager opens reports or modlog for the managed community
 - **THEN** only that community's review controls are available and site-wide controls remain unavailable without site-admin authority
+
+#### Scenario: Community policy display
+- **WHEN** a community card or detail page displays access information
+- **THEN** it identifies visibility from the returned `visibility`, shows "Only moderators can post" when `posting_restricted_to_mods` is true, and shows no extra posting label when it is false
+
+#### Scenario: Community creation and management policy controls
+- **WHEN** a reader creates or manages a community
+- **THEN** the form exposes the API-supported visibility and moderator-only posting settings and does not submit client-only read or post policy fields
 
 ### Requirement: Federation-aware community names
 The application SHALL explain the current site's local actor name rules when creating or editing a community, based on `local_site.federation_enabled`. The backend SHALL remain authoritative for validation, and the application SHALL associate rejected name updates with the relevant field while preserving the draft. A successful community rename SHALL render the returned community name and keep navigation and management state associated with that community.

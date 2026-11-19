@@ -14,9 +14,8 @@ import Lemmy.Domain as Domain
 import Lemmy.Route as Route
 import List
 import Remote exposing (Remote(..))
-import Ui.CommunityPolicy exposing (policyFields)
 import Ui.Feedback exposing (loginRequired, problemText, viewFormProblem, viewFormProblemWithId, viewRemote)
-import Ui.Formatting exposing (modeLabel, policyLabel)
+import Ui.Formatting exposing (communityPolicySummary, postingPolicyLabel, visibilityLabel)
 import Ui.Layout exposing (pageHeading)
 
 
@@ -25,8 +24,6 @@ type alias Config msg =
     , manageActorChanged : String -> msg
     , managePostChanged : String -> msg
     , manageContextChanged : String -> msg
-    , manageReadChanged : String -> msg
-    , managePostPolicyChanged : String -> msg
     , manageFollowPolicyChanged : String -> msg
     , manageFieldChanged : String -> String -> msg
     , manageApplyPolicy : msg
@@ -120,21 +117,17 @@ communitySection active community =
         [ h2 [] [ text (Maybe.withDefault community.community.name community.community.title) ]
         , p [ A.class "metadata" ]
             [ text
-                (Translations.policySummary
-                    { read = policyLabel active.texts (visibilityText community.community.visibility)
-                    , post =
-                        policyLabel active.texts
-                            (if community.community.postingRestrictedToMods then
-                                "managers"
-
-                             else
-                                "eligible_users"
-                            )
-                    }
-                    active.texts
-                )
+                (communityPolicySummary active.texts (visibilityText community.community.visibility) community.community.postingRestrictedToMods)
             ]
-        , p [ A.class "chips" ] [ span [ A.class "chip" ] [ text (modeLabel active.texts (visibilityText community.community.visibility)) ] ]
+        , p [ A.class "chips" ]
+            [ span [ A.class "chip" ] [ text (visibilityLabel active.texts (visibilityText community.community.visibility)) ]
+            , case postingPolicyLabel active.texts community.community.postingRestrictedToMods of
+                Just labelText ->
+                    span [ A.class "chip" ] [ text labelText ]
+
+                Nothing ->
+                    text ""
+            ]
         ]
 
 
@@ -261,7 +254,7 @@ manageTags config active manage =
 managePolicy : Config msg -> Bool -> Active -> ManageState -> Html msg
 managePolicy config federationEnabled active manage =
     form [ Events.onSubmit config.manageApplyPolicy, A.class "card form-stack" ]
-        [ h2 [] [ text (Translations.readPolicy active.texts) ]
+        [ h2 [] [ text (Translations.communityDetail active.texts) ]
         , div []
             [ label [ A.for "manage-community-name" ] [ text (Translations.communityName active.texts) ]
             , input

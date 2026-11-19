@@ -5,7 +5,7 @@ import Html exposing (Html, a, article, h2, p, span, text)
 import Html.Attributes as A
 import Lemmy.Domain as Domain
 import Lemmy.Route as Route
-import Ui.Formatting exposing (modeLabel, policyLabel)
+import Ui.Formatting exposing (communityPolicySummary, postingPolicyLabel, visibilityLabel)
 
 
 communityCard : Translations.I18n -> Domain.CommunityView -> Html msg
@@ -13,16 +13,6 @@ communityCard texts view =
     let
         community =
             view.community
-
-        visibility =
-            visibilityText community.visibility
-
-        postPolicy =
-            if community.postingRestrictedToMods then
-                "managers"
-
-            else
-                "eligible_users"
 
         description =
             case community.summary of
@@ -41,16 +31,16 @@ communityCard texts view =
             p [ A.dir "auto" ] [ text description ]
         , p [ A.class "metadata" ]
             [ text
-                (Translations.policySummary
-                    { read = policyLabel texts visibility
-                    , post = policyLabel texts postPolicy
-                    }
-                    texts
-                )
+                (communityPolicySummary texts (visibilityText community.visibility) community.postingRestrictedToMods)
             ]
         , p [ A.class "chips" ]
-            [ span [ A.class "chip" ] [ text (modeLabel texts visibility) ]
-            , span [ A.class "chip" ] [ text (policyLabel texts visibility) ]
+            [ span [ A.class "chip" ] [ text (visibilityLabel texts (visibilityText community.visibility)) ]
+            , case postingPolicyLabel texts community.postingRestrictedToMods of
+                Just labelText ->
+                    span [ A.class "chip" ] [ text labelText ]
+
+                Nothing ->
+                    text ""
             ]
         ]
 

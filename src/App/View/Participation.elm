@@ -18,8 +18,6 @@ pageManage model active id =
         , manageActorChanged = ManageMessage << Manage.ManageActorChanged
         , managePostChanged = ManageMessage << Manage.ManagePostChanged
         , manageContextChanged = ManageMessage << Manage.ManageContextChanged
-        , manageReadChanged = ManageMessage << Manage.ManageReadChanged
-        , managePostPolicyChanged = ManageMessage << Manage.ManagePostPolicyChanged
         , manageFollowPolicyChanged = ManageMessage << Manage.ManageFollowPolicyChanged
         , manageFieldChanged = \field value -> ManageMessage (Manage.ManageFieldChanged field value)
         , manageApplyPolicy = ManageMessage Manage.ManageApplyPolicy
@@ -131,7 +129,5 @@ communityCreateViewConfig model =
     , communityTitleChanged = CommunityCreateMessage << CommunityCreate.CommunityTitleChanged
     , communityFieldChanged = \field value -> CommunityCreateMessage (CommunityCreate.CommunityFieldChanged field value)
     , communityModeChanged = CommunityCreateMessage << CommunityCreate.CommunityModeChanged
-    , communityReadChanged = CommunityCreateMessage << CommunityCreate.CommunityReadChanged
-    , communityPostChanged = CommunityCreateMessage << CommunityCreate.CommunityPostChanged
     , communityCreate = CommunityCreateMessage CommunityCreate.CommunityCreate
     }

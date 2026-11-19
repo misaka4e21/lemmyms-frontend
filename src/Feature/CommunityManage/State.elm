@@ -16,8 +16,6 @@ type alias ManageState =
     , actor : String
     , postId : String
     , contextId : String
-    , readPolicy : String
-    , postPolicy : String
     , followPolicy : String
     , name : String
     , originalName : String
@@ -77,8 +75,6 @@ emptyManage =
     , actor = ""
     , postId = ""
     , contextId = ""
-    , readPolicy = "eligible_users"
-    , postPolicy = "eligible_users"
     , followPolicy = "open"
     , name = ""
     , originalName = ""
@@ -115,15 +111,6 @@ emptyManage =
     , bannerUploading = False
     , problem = Nothing
     }
-
-
-normalizeManagePolicies : ManageState -> ManageState
-normalizeManagePolicies manage =
-    if manage.postPolicy == "eligible_users" && manage.readPolicy == "members" then
-        { manage | readPolicy = "eligible_users" }
-
-    else
-        manage
 
 
 manageActionKey : ManagePostAction -> String

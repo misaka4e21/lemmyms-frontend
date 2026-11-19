@@ -1,4 +1,4 @@
-module Feature.CommunityCreate exposing (CommunityForm, Config, Model, Msg(..), Outcome, emptyCommunityForm, initial, normalizePolicies, pageNewCommunity, update)
+module Feature.CommunityCreate exposing (CommunityForm, Config, Model, Msg(..), Outcome, emptyCommunityForm, initial, pageNewCommunity, update)
 
 import Api
 import App.Context exposing (Active)
@@ -12,7 +12,6 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Lemmy.Domain as Domain
 import Lemmy.Route as Route
-import Ui.CommunityPolicy exposing (policyFields)
 import Ui.Feedback exposing (loginRequired, problemText, viewFormProblem, viewFormProblemWithId)
 import Ui.Layout exposing (pageHeading)
 
@@ -30,8 +29,6 @@ type alias CommunityForm =
     , commentUpvotes : String
     , commentDownvotes : String
     , mode : String
-    , readPolicy : String
-    , postPolicy : String
     , busy : Bool
     , problem : Maybe Api.Problem
     }
@@ -51,20 +48,9 @@ emptyCommunityForm =
     , commentUpvotes = "all"
     , commentDownvotes = "all"
     , mode = "public"
-    , readPolicy = "eligible_users"
-    , postPolicy = "eligible_users"
     , busy = False
     , problem = Nothing
     }
-
-
-normalizePolicies : CommunityForm -> CommunityForm
-normalizePolicies form =
-    if form.postPolicy == "eligible_users" && form.readPolicy == "members" then
-        { form | readPolicy = "eligible_users" }
-
-    else
-        form
 
 
 setField : String -> String -> CommunityForm -> CommunityForm
@@ -119,8 +105,6 @@ type Msg
     | CommunityTitleChanged String
     | CommunityFieldChanged String String
     | CommunityModeChanged String
-    | CommunityReadChanged String
-    | CommunityPostChanged String
     | CommunityCreate
 
 
@@ -167,44 +151,6 @@ updateWorking csrf message model =
 
         CommunityModeChanged value ->
             ( { model | createCommunity = (\form -> { form | mode = value, problem = Nothing }) model.createCommunity }, Cmd.none )
-
-        CommunityReadChanged value ->
-            ( { model
-                | createCommunity =
-                    (\form ->
-                        { form
-                            | readPolicy = value
-                            , postPolicy =
-                                if value == "members" && form.postPolicy == "eligible_users" then
-                                    "members"
-
-                                else
-                                    form.postPolicy
-                        }
-                    )
-                        model.createCommunity
-              }
-            , Cmd.none
-            )
-
-        CommunityPostChanged value ->
-            ( { model
-                | createCommunity =
-                    (\form ->
-                        { form
-                            | postPolicy = value
-                            , readPolicy =
-                                if value == "eligible_users" && form.readPolicy == "members" then
-                                    "eligible_users"
-
-                                else
-                                    form.readPolicy
-                        }
-                    )
-                        model.createCommunity
-              }
-            , Cmd.none
-            )
 
         CommunityCreate ->
             if model.createCommunity.busy then
@@ -257,8 +203,6 @@ type alias Config msg =
     , communityTitleChanged : String -> msg
     , communityFieldChanged : String -> String -> msg
     , communityModeChanged : String -> msg
-    , communityReadChanged : String -> msg
-    , communityPostChanged : String -> msg
     , communityCreate : msg
     }
 
