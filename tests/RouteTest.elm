@@ -194,6 +194,50 @@ suite =
                         , "/reset-password"
                         ]
                     )
+        , test "decodes percent-encoded dynamic route segments once" <|
+            \_ ->
+                Expect.equal
+                    [ Route.Profile "凌子卿"
+                    , Route.Profile "%E5%87%8C"
+                    , Route.Community "凌子卿"
+                    , Route.MultiCommunity "凌子卿"
+                    ]
+                    (List.map parse
+                        [ "/u/%E5%87%8C%E5%AD%90%E5%8D%BF"
+                        , "/u/%25E5%2587%258C"
+                        , "/c/%E5%87%8C%E5%AD%90%E5%8D%BF"
+                        , "/m/%E5%87%8C%E5%AD%90%E5%8D%BF"
+                        ]
+                    )
+        , test "encodes dynamic route segments for one decode on navigation" <|
+            \_ ->
+                Expect.equal
+                    [ "/u/%E5%87%8C%E5%AD%90%E5%8D%BF"
+                    , "/c/%E5%87%8C%E5%AD%90%E5%8D%BF"
+                    , "/m/%E5%87%8C%E5%AD%90%E5%8D%BF"
+                    ]
+                    [ Route.path (Route.Profile "凌子卿")
+                    , Route.path (Route.Community "凌子卿")
+                    , Route.path (Route.MultiCommunity "凌子卿")
+                    ]
+        , test "encodes the decoded profile handle once for a person query" <|
+            \_ ->
+                let
+                    personHandle path =
+                        case parse path of
+                            Route.Profile username ->
+                                Url.percentEncode username
+
+                            _ ->
+                                ""
+                in
+                Expect.equal
+                    [ "%E5%87%8C%E5%AD%90%E5%8D%BF"
+                    , "%25E5%2587%258C"
+                    ]
+                    [ personHandle "/u/%E5%87%8C%E5%AD%90%E5%8D%BF"
+                    , personHandle "/u/%25E5%2587%258C"
+                    ]
         , test "reads cursor, sort, and listing state" <|
             \_ ->
                 Url.fromString "https://forum.test/c/news?type=local&sort=top&page_cursor=abc"

@@ -72,14 +72,19 @@ type Route
     | NotFound
 
 
+decodedString : Parser (String -> a) a
+decodedString =
+    Parser.custom "DECODED_STRING" Url.percentDecode
+
+
 parser : Parser (Route -> a) a
 parser =
     Parser.oneOf
         [ Parser.map Home top
-        , Parser.map CommunitySettings (s "c" </> string </> s "settings")
-        , Parser.map Community (s "c" </> string)
-        , Parser.map MultiCommunitySettings (s "m" </> string </> s "settings")
-        , Parser.map MultiCommunity (s "m" </> string)
+        , Parser.map CommunitySettings (s "c" </> decodedString </> s "settings")
+        , Parser.map Community (s "c" </> decodedString)
+        , Parser.map MultiCommunitySettings (s "m" </> decodedString </> s "settings")
+        , Parser.map MultiCommunity (s "m" </> decodedString)
         , Parser.map MultiCommunities (s "multi_communities")
         , Parser.map Communities (s "communities")
         , Parser.map (\postId commentId -> Post postId (Just commentId)) (s "post" </> int </> int)
@@ -90,7 +95,7 @@ parser =
         , Parser.map CreateCommunity (s "create_community")
         , Parser.map CreateMultiCommunity (s "create_multi_community")
         , Parser.map CreatePrivateMessage (s "create_private_message" </> int)
-        , Parser.map Profile (s "u" </> string)
+        , Parser.map Profile (s "u" </> decodedString)
         , Parser.map Search (s "search")
         , Parser.map Notifications (s "notifications")
         , Parser.map PasswordSettings (s "settings" </> s "password")
@@ -165,10 +170,10 @@ path route =
             "/communities"
 
         Community name ->
-            Builder.absolute [ "c", name ] []
+            Builder.absolute [ "c", Url.percentEncode name ] []
 
         CommunitySettings name ->
-            Builder.absolute [ "c", name, "settings" ] []
+            Builder.absolute [ "c", Url.percentEncode name, "settings" ] []
 
         Post postId Nothing ->
             Builder.absolute [ "post", String.fromInt postId ] []
@@ -204,13 +209,13 @@ path route =
             "/create_multi_community"
 
         MultiCommunity name ->
-            Builder.absolute [ "m", name ] []
+            Builder.absolute [ "m", Url.percentEncode name ] []
 
         MultiCommunitySettings name ->
-            Builder.absolute [ "m", name, "settings" ] []
+            Builder.absolute [ "m", Url.percentEncode name, "settings" ] []
 
         Profile username ->
-            Builder.absolute [ "u", username ] []
+            Builder.absolute [ "u", Url.percentEncode username ] []
 
         Search ->
             "/search"
