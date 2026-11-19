@@ -97,6 +97,25 @@ The application SHALL display Lemmy posts and their comments, allow authorized c
 - **WHEN** two tabs save the same post and the later save overwrites the earlier one
 - **THEN** the application does not claim optimistic-lock protection that v4 does not provide; it preserves the draft on failure and reloads the current content after success or conflict
 
+### Requirement: Reply cards follow the topic post card visual hierarchy
+The application SHALL present reply cards with the same card surface, spacing, metadata hierarchy, content spacing, and action-row treatment used for topic post cards. Reply cards SHALL show author identity, community, and publication time in metadata, without using a large author heading; comment content SHALL remain in the regular body text.
+
+#### Scenario: View a reply in a discussion
+- **WHEN** a reader views a reply card in a discussion
+- **THEN** its metadata identifies the author, community, and publication time, and the reply content appears in regular body text without a large author heading
+
+#### Scenario: Use reply actions
+- **WHEN** a reader views a reply card with available reply, vote, save, edit, delete, or moderation actions
+- **THEN** those actions remain available according to the existing permissions and retain their current behavior
+
+#### Scenario: View nested replies
+- **WHEN** a reply has loaded child replies
+- **THEN** the card preserves the existing nested reply hierarchy and expand or collapse behavior
+
+#### Scenario: View comments on a profile
+- **WHEN** a reader views a person's comments tab
+- **THEN** each comment uses the reply metadata hierarchy without a large author heading, and activating its author link continues to open that comment in its discussion
+
 ### Requirement: Markdown content and media
 The application SHALL treat post `body`, comment `content`, person `bio`, community `sidebar`, and site text as Markdown source. It SHALL render that source through the shared sanitized Markdown renderer and SHALL NOT expect a `body_html` field. Images SHALL be uploaded through the v4 Pictrs image endpoint, and the returned `image_url` and `filename` SHALL be retained. Documents SHALL be uploaded through the v4 file endpoint and inserted into the Markdown source as links using the returned filename and URL. The editor SHALL show uploaded documents in a separate attachment list. Post detail pages SHALL identify links to v4 file download routes in the Markdown source and show those files in a separate attachment list while preserving the inline Markdown links. Remote images SHALL use no-referrer behavior. Editor source SHALL never be injected as trusted HTML.
 
